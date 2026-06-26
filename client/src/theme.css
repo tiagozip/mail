@@ -813,6 +813,11 @@ html[data-theme="sakura"] {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset;
 }
 
+.em-avatar-img {
+  object-fit: cover;
+  box-shadow: none;
+}
+
 .em-msg.is-collapsed .em-avatar {
   width: 28px;
   height: 28px;
@@ -922,21 +927,129 @@ html[data-theme="sakura"] {
   line-height: 1.55;
 }
 
-.em-paper {
-  background: #faf8f5;
-  border: 1px solid var(--color-kumo-line);
-  border-radius: var(--em-radius);
-  padding: var(--em-2);
+.em-letter {
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  border-radius: var(--em-radius-sm);
+  color: var(--text-color-kumo-default);
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 
-.em-iframe {
-  display: block;
-  width: 100%;
-  border: none;
-  background: #faf8f5;
+.em-letter-inner {
+  color: var(--text-color-kumo-default);
+}
+
+.em-letter-inner a {
+  color: var(--text-color-kumo-link);
+}
+
+.em-letter-inner img {
+  max-width: 100%;
+  height: auto;
+}
+
+.em-letter-inner table {
+  max-width: 100%;
+}
+
+.em-pgp-note {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  padding: var(--em-3) var(--em-4);
+  border: 1px solid var(--color-kumo-line);
+  border-radius: var(--em-radius);
+  background: var(--color-kumo-tint);
+  color: var(--text-color-kumo-subtle);
+  font-size: 0.84rem;
+}
+
+.em-pgp-lock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-3);
+  padding: var(--em-4);
+  border: 1px solid var(--em-brand-soft-border);
+  border-radius: var(--em-radius);
+  background: var(--em-brand-soft);
+}
+
+.em-pgp-lock-head {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  font-size: 0.86rem;
+  color: var(--text-color-kumo-default);
+}
+
+.em-pgp-lock-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--em-2);
+}
+
+.em-pgp-lock-row > div:first-child {
+  flex: 1;
+}
+
+.em-pgp-decrypted-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-color-kumo-brand);
+  margin-bottom: var(--em-3);
+}
+
+.em-pgp-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-4);
+}
+
+.em-pgp-form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+}
+
+.em-pgp-status {
+  display: flex;
+  align-items: center;
+  gap: var(--em-3);
+}
+
+.em-pgp-status-icon {
+  width: 34px;
+  height: 34px;
   border-radius: var(--em-radius-sm);
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-color-kumo-brand);
+  background: var(--em-brand-soft);
+  border: 1px solid var(--em-brand-soft-border);
+}
+
+.em-pgp-status-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.em-pgp-status-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-color-kumo-strong);
+}
+
+.em-pgp-status-sub {
+  font-size: 0.78rem;
+  color: var(--text-color-kumo-subtle);
+  line-height: 1.45;
+  margin-top: 2px;
 }
 
 .em-images-bar {
@@ -1167,6 +1280,39 @@ html[data-theme="sakura"] {
   line-height: 1.55;
   margin: 0 0 var(--em-7);
   max-width: 56ch;
+}
+
+.em-settings-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+}
+
+.em-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--em-4);
+  padding: var(--em-5) var(--em-6);
+  border-bottom: 1px solid var(--color-kumo-line);
+  flex: none;
+}
+
+.em-settings-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-color-kumo-strong);
+  font-size: 1.25rem;
+}
+
+.em-settings-body {
+  overflow-y: auto;
+  padding: var(--em-6);
+}
+
+.em-settings-body .em-card:last-of-type {
+  margin-bottom: var(--em-5);
 }
 
 .em-card {
@@ -1428,18 +1574,128 @@ html[data-theme="sakura"] {
   font-size: 0.92rem !important;
 }
 
-.em-compose-body {
-  width: 100%;
-  min-height: 240px;
-  resize: vertical;
-  background: transparent;
-  color: var(--text-color-kumo-default);
-  border: none;
-  outline: none;
+.em-rt {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--em-3);
+}
+
+.em-rt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  padding-bottom: var(--em-2);
+  border-bottom: 1px solid var(--color-kumo-hairline);
+}
+
+.em-rt-tool.is-active {
+  color: var(--text-color-kumo-brand);
+  background: var(--em-brand-soft);
+}
+
+.em-rt-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px var(--em-1);
+  background: var(--color-kumo-hairline);
+}
+
+.em-rt-content {
+  min-height: 220px;
+  max-height: 46vh;
+  overflow-y: auto;
   padding: var(--em-4) 0 0;
+}
+
+.em-rt-content .ProseMirror {
+  outline: none;
+  min-height: 200px;
   font-family: var(--font-sans);
   font-size: 0.9rem;
   line-height: 1.6;
+  color: var(--text-color-kumo-default);
+}
+
+.em-rt-content .ProseMirror p {
+  margin: 0 0 var(--em-3);
+}
+
+.em-rt-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--text-color-kumo-placeholder);
+}
+
+.em-rt-content .ProseMirror h1 {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: var(--em-3) 0 var(--em-2);
+  color: var(--text-color-kumo-strong);
+}
+
+.em-rt-content .ProseMirror h2 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: var(--em-3) 0 var(--em-2);
+  color: var(--text-color-kumo-strong);
+}
+
+.em-rt-content .ProseMirror ul,
+.em-rt-content .ProseMirror ol {
+  margin: 0 0 var(--em-3);
+  padding-left: var(--em-5);
+}
+
+.em-rt-content .ProseMirror li {
+  margin: 2px 0;
+}
+
+.em-rt-content .ProseMirror li > p {
+  margin: 0;
+}
+
+.em-rt-content .ProseMirror blockquote {
+  margin: 0 0 var(--em-3);
+  padding-left: var(--em-3);
+  border-left: 2px solid var(--em-brand-soft-border);
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-rt-content .ProseMirror a {
+  color: var(--text-color-kumo-link);
+  text-decoration: underline;
+}
+
+.em-rt-content .ProseMirror code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: var(--color-kumo-control);
+  border: 1px solid var(--color-kumo-line);
+  border-radius: var(--em-radius-sm);
+  padding: 1px 5px;
+}
+
+.em-rt-content .ProseMirror pre {
+  background: var(--color-kumo-control);
+  border: 1px solid var(--color-kumo-line);
+  border-radius: var(--em-radius);
+  padding: var(--em-3);
+  margin: 0 0 var(--em-3);
+  overflow-x: auto;
+}
+
+.em-rt-content .ProseMirror pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.82rem;
 }
 
 .em-textarea {
@@ -1548,6 +1804,22 @@ html[data-theme="sakura"] {
   flex-direction: column;
   gap: var(--em-3);
   padding: var(--em-2) var(--em-2) 0;
+}
+
+.em-sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--em-2);
+  width: 100%;
+  padding: var(--em-3) 0;
+}
+
+.em-sidebar-wrap [data-slot="sidebar-footer"]:has(.em-sidebar-foot),
+.em-sidebar-wrap div:has(> .em-sidebar-foot) {
+  height: auto !important;
+  overflow: visible !important;
+  align-items: stretch !important;
 }
 
 .em-compose-btn {

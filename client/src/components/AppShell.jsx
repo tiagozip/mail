@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
+import * as pgp from "../pgp.js";
 import { useMailStore } from "../store.js";
 import { notify } from "../toast.js";
 import { recipientLine } from "../util.js";
@@ -27,6 +28,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeInitial, setComposeInitial] = useState(null);
   const [screen, setScreen] = useState("mail");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [cursor, setCursor] = useState(-1);
@@ -151,6 +153,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
   });
 
   async function signOut() {
+    pgp.clearUnlocked();
     const res = await api.logout().catch(() => null);
     if (res?.logoutUrl) {
       window.location.href = res.logoutUrl;
@@ -181,7 +184,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
           }}
           onOpenSettings={() => {
             setSidebarOpen(false);
-            setScreen("settings");
+            setSettingsOpen(true);
           }}
           onOpenAdmin={() => {
             setSidebarOpen(false);
@@ -192,17 +195,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
         />
       </div>
 
-      {screen === "settings" ? (
-        <Settings
-          user={user}
-          setUser={setUser}
-          mode={mode}
-          onSetMode={onSetMode}
-          palette={palette}
-          onSetPalette={onSetPalette}
-          onBack={() => setScreen("mail")}
-        />
-      ) : screen === "admin" ? (
+      {screen === "admin" ? (
         <Admin onBack={() => setScreen("mail")} />
       ) : (
         <div className="em-main">
@@ -226,6 +219,17 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
           </div>
         </div>
       )}
+
+      <Settings
+        open={settingsOpen}
+        user={user}
+        setUser={setUser}
+        mode={mode}
+        onSetMode={onSetMode}
+        palette={palette}
+        onSetPalette={onSetPalette}
+        onClose={() => setSettingsOpen(false)}
+      />
 
       <Compose
         open={composeOpen}

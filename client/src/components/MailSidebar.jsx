@@ -103,14 +103,6 @@ export function MailSidebar({
               <span className="em-wordmark-glyph">e</span>
               estrogen.delivery
             </div>
-            <Button
-              className="em-compose-btn"
-              variant="primary"
-              icon={PencilSimpleLine}
-              onClick={onCompose}
-            >
-              Compose
-            </Button>
           </div>
         </SidebarHeader>
         <SidebarContent>
@@ -178,7 +170,16 @@ export function MailSidebar({
         </SidebarContent>
 
         <SidebarFooter>
-          <DropdownMenu>
+          <div className="em-sidebar-foot">
+            <Button
+              className="em-compose-btn"
+              variant="primary"
+              icon={PencilSimpleLine}
+              onClick={onCompose}
+            >
+              Compose
+            </Button>
+            <DropdownMenu>
             <DropdownMenu.Trigger
               render={(p) => (
                 <button {...p} className="em-account-chip" type="button">
@@ -218,6 +219,7 @@ export function MailSidebar({
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
+          </div>
         </SidebarFooter>
       </SidebarRoot>
     </SidebarProvider>

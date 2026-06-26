@@ -1,7 +1,8 @@
-import { Badge, Button, ClipboardText, Input, Loader, Switch } from "@cloudflare/kumo";
-import { ArrowLeft, Camera, Check, Plus, Star, Trash } from "@phosphor-icons/react";
+import { Badge, Button, ClipboardText, Dialog, DialogRoot, Input, Loader, Switch } from "@cloudflare/kumo";
+import { Camera, Check, Lock, LockKey, Plus, Star, Trash, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
+import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
 import { humanSize, initials, monoColor, relativeTime } from "../util.js";
 
@@ -259,7 +260,155 @@ function Addresses({ user, setUser }) {
   );
 }
 
-export function Settings({ user, setUser, mode, onSetMode, palette, onSetPalette, onBack }) {
+function Encryption({ user, setUser }) {
+  const [showForm, setShowForm] = useState(false);
+  const [pass, setPass] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
+
+  async function refreshUser() {
+    const d = await api.me();
+    if (d.user) setUser(d.user);
+    return d.user;
+  }
+
+  async function enable(e) {
+    e.preventDefault();
+    setError("");
+    if (pass.length < 8) {
+      setError("Use at least 8 characters.");
+      return;
+    }
+    if (pass !== confirm) {
+      setError("Passphrases do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { publicKey, privateKeyEnc } = await pgp.generateIdentity(
+        user.displayName || user.address,
+        user.address,
+        pass,
+      );
+      await api.enablePgp(publicKey, privateKeyEnc);
+      await pgp.unlock(privateKeyEnc, pass);
+      await refreshUser();
+      setShowForm(false);
+      setPass("");
+      setConfirm("");
+      notify("Encryption on", "Incoming mail is now encrypted to your key.", "success");
+    } catch (err) {
+      setError(err.message || "Could not enable encryption.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disable() {
+    setBusy(true);
+    try {
+      await api.disablePgp();
+      pgp.clearUnlocked();
+      await refreshUser();
+      setConfirmDisable(false);
+      notify("Encryption off", "New mail will arrive unencrypted.", "success");
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="em-card">
+      <div className="em-card-head">
+        <h2 className="em-card-title">Encryption</h2>
+        <p className="em-card-sub">
+          End-to-end encryption: incoming mail is encrypted to your key and can only be read with
+          your passphrase. The passphrase never leaves this device, if you lose it your encrypted
+          mail is unrecoverable.
+        </p>
+      </div>
+
+      {user.pgpEnabled ? (
+        <>
+          <div className="em-pgp-status">
+            <span className="em-pgp-status-icon">
+              <LockKey size={16} weight="fill" />
+            </span>
+            <div className="em-pgp-status-copy">
+              <div className="em-pgp-status-title">Encryption is on</div>
+              <div className="em-pgp-status-sub">
+                Disabling does not decrypt mail that is already stored encrypted.
+              </div>
+            </div>
+            {confirmDisable ? (
+              <div className="em-keys-revoke">
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDisable(false)}>
+                  Cancel
+                </Button>
+                <Button size="sm" variant="outline" loading={busy} onClick={disable}>
+                  Disable
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setConfirmDisable(true)}>
+                Disable
+              </Button>
+            )}
+          </div>
+        </>
+      ) : showForm ? (
+        <form className="em-pgp-form" onSubmit={enable}>
+          <Input
+            type="password"
+            label="Passphrase"
+            value={pass}
+            onChange={(e) => {
+              setPass(e.target.value);
+              setError("");
+            }}
+          />
+          <Input
+            type="password"
+            label="Confirm passphrase"
+            value={confirm}
+            onChange={(e) => {
+              setConfirm(e.target.value);
+              setError("");
+            }}
+          />
+          {error && <div className="em-form-error">{error}</div>}
+          <div className="em-pgp-form-actions">
+            <Button type="submit" variant="primary" icon={Lock} loading={busy}>
+              Enable encryption
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setShowForm(false);
+                setError("");
+                setPass("");
+                setConfirm("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <Button variant="outline" icon={Lock} onClick={() => setShowForm(true)}>
+          Enable encryption
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetPalette, onClose }) {
   const [displayName, setDisplayName] = useState(user.displayName || "");
   const [signature, setSignature] = useState(user.signature || "");
   const [imagesDefault, setImagesDefault] = useState(!!user.settings?.imagesDefault);
@@ -346,18 +495,20 @@ export function Settings({ user, setUser, mode, onSetMode, palette, onSetPalette
   }
 
   return (
-    <div className="em-read-pane">
-      <div className="em-topbar">
-        <Button size="sm" variant="ghost" icon={ArrowLeft} onClick={onBack}>
-          Back
-        </Button>
-        <span className="em-topbar-title">Settings</span>
-      </div>
-      <div className="em-section">
-        <div className="em-section-inner">
-          <h1 className="em-display">Settings</h1>
-          <p className="em-section-lede">Tune how your mailbox looks and behaves.</p>
-
+    <DialogRoot open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="em-settings-dialog" style={{ width: 600, maxWidth: "94vw", padding: 0 }}>
+        <div className="em-settings-head">
+          <Dialog.Title className="em-settings-title">Settings</Dialog.Title>
+          <Button
+            size="sm"
+            variant="ghost"
+            shape="square"
+            aria-label="Close settings"
+            icon={X}
+            onClick={onClose}
+          />
+        </div>
+        <div className="em-settings-body">
           <div className="em-card">
             <div className="em-card-head">
               <h2 className="em-card-title">Identity</h2>
@@ -493,13 +644,15 @@ export function Settings({ user, setUser, mode, onSetMode, palette, onSetPalette
             </div>
           </div>
 
+          <Encryption user={user} setUser={setUser} />
+
           <ApiKeys />
 
           <Button variant="primary" loading={busy} onClick={save}>
             Save changes
           </Button>
         </div>
-      </div>
-    </div>
+      </Dialog>
+    </DialogRoot>
   );
 }

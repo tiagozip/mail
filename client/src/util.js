@@ -177,6 +177,27 @@ export function splitQuoted(text) {
   };
 }
 
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function plainBodyToHtml(text) {
+  const str = String(text || "");
+  if (!str.trim()) return "";
+  const lines = str.replace(/^\n+/, "").split("\n");
+  const out = ['<p></p>'];
+  const block = [];
+  for (const line of lines) {
+    block.push(escapeHtml(line.replace(/^>\s?/, "")));
+  }
+  const joined = block.join("<br>");
+  out.push(`<blockquote>${joined || "<br>"}</blockquote>`);
+  return out.join("");
+}
+
 export function htmlHasBlockedImages(html) {
   if (!html) return false;
   return html.includes("data-blocked-src") || html.includes("blocked-img");

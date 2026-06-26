@@ -3,7 +3,8 @@ import { PaperPlaneTilt, Paperclip, Trash, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { notify, notifyError } from "../toast.js";
-import { humanSize, parseRecipients } from "../util.js";
+import { humanSize, parseRecipients, plainBodyToHtml } from "../util.js";
+import { RichEditor } from "./RichEditor.jsx";
 
 function RecipientField({ label, value, onChange, autoFocus }) {
   const [suggestions, setSuggestions] = useState([]);
@@ -75,7 +76,9 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [bodyHtml, setBodyHtml] = useState("");
+  const [bodyText, setBodyText] = useState("");
+  const editorRef = useRef(null);
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
   const [atts, setAtts] = useState([]);
@@ -89,12 +92,15 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   useEffect(() => {
     if (!open) return;
     const init = initial || {};
+    const html = plainBodyToHtml(init.body || "");
     setFrom(primary);
     setTo(init.to || "");
     setCc(init.cc || "");
     setBcc(init.bcc || "");
     setSubject(init.subject || "");
-    setBody(init.body || "");
+    setBodyHtml(html);
+    setBodyText(init.body || "");
+    if (editorRef.current) editorRef.current.commands.setContent(html || "<p></p>");
     setShowCc(!!init.cc);
     setShowBcc(false);
     setAtts([]);
@@ -106,10 +112,10 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   useEffect(() => {
     if (!open) return;
     clearTimeout(saveTimer.current);
-    if (!to && !subject && !body) return;
+    if (!to && !subject && !bodyText.trim()) return;
     saveTimer.current = setTimeout(saveDraft, 3000);
     return () => clearTimeout(saveTimer.current);
-  }, [to, cc, bcc, subject, body, open]);
+  }, [to, cc, bcc, subject, bodyText, open]);
 
   async function saveDraft() {
     const payload = {
@@ -117,7 +123,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
       cc: parseRecipients(cc),
       bcc: parseRecipients(bcc),
       subject,
-      text: body,
+      text: bodyText,
     };
     try {
       if (draftIdRef.current) {
@@ -159,13 +165,15 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     }
     setBusy(true);
     try {
+      const html = bodyText.trim() ? bodyHtml : "";
       await api.send({
         from,
         to: recipients,
         cc: parseRecipients(cc),
         bcc: parseRecipients(bcc),
         subject,
-        text: body,
+        text: bodyText,
+        html,
         inReplyTo: meta.inReplyTo,
         references: meta.references || [],
         attachmentIds: atts.filter((a) => !a.pending).map((a) => a.id),
@@ -242,11 +250,16 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
           />
-          <textarea
-            className="em-compose-body"
+          <RichEditor
             placeholder="Write your message"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
+            value={bodyHtml}
+            onEditorReady={(ed) => {
+              editorRef.current = ed;
+            }}
+            onUpdate={({ html, text }) => {
+              setBodyHtml(html);
+              setBodyText(text);
+            }}
           />
           {atts.length > 0 && (
             <div className="em-pending-atts">

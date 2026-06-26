@@ -1,4 +1,4 @@
-import { Button, DropdownMenu, Loader, Tooltip } from "@cloudflare/kumo";
+import { Button, DropdownMenu, Input, Loader, Tooltip } from "@cloudflare/kumo";
 import {
   Archive,
   ArrowBendUpLeft,
@@ -9,14 +9,18 @@ import {
   DownloadSimple,
   Envelope,
   Image,
+  Lock,
+  LockKeyOpen,
   PaperPlaneTilt,
   Star,
   Trash,
   Tray,
   Warning,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Letter } from "react-letter";
 import { api } from "../api.js";
+import * as pgp from "../pgp.js";
 import { notifyError } from "../toast.js";
 import {
   FOLDER_LABELS,
@@ -32,48 +36,141 @@ import {
   splitQuoted,
 } from "../util.js";
 
-const CSP_STRICT =
-  "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; font-src data:";
-const CSP_LOOSE = "default-src 'none'; img-src * data:; style-src 'unsafe-inline'; font-src data:";
-const PAPER_STYLE =
-  "html,body{background:#faf8f5;color:#222;margin:0;padding:14px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.5;word-break:break-word;}img{max-width:100%;height:auto;}a{color:#bf3264;}";
+const ALLOWED_SCHEMAS = ["http", "https", "mailto", "cid", "tel", "data"];
 
-function buildSrcdoc(html, allowRemote) {
-  const csp = allowRemote ? CSP_LOOSE : CSP_STRICT;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>${PAPER_STYLE}</style></head><body>${html}</body></html>`;
+function blockResource() {
+  return "";
 }
 
-function HtmlBody({ html, allowRemote }) {
-  const ref = useRef(null);
-  const [height, setHeight] = useState(240);
+function passResource(url) {
+  return url;
+}
 
-  function resize() {
-    const f = ref.current;
-    if (!f?.contentDocument) return;
-    const h = f.contentDocument.documentElement.scrollHeight;
-    if (h) setHeight(h + 8);
-  }
-
-  useEffect(() => {
-    function onResize() {
-      resize();
-    }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
+function LetterBody({ html, allowRemote }) {
   return (
-    <div className="em-paper">
-      <iframe
-        ref={ref}
-        className="em-iframe"
-        title="message"
-        sandbox="allow-popups allow-popups-to-escape-sandbox"
-        srcDoc={buildSrcdoc(html, allowRemote)}
-        style={{ height }}
-        onLoad={resize}
+    <div className="em-letter">
+      <Letter
+        html={html || ""}
+        allowedSchemas={ALLOWED_SCHEMAS}
+        rewriteExternalResources={allowRemote ? passResource : blockResource}
+        className="em-letter-inner"
       />
     </div>
+  );
+}
+
+function PgpLock({ onUnlocked }) {
+  const [pass, setPass] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!pass) return;
+    setBusy(true);
+    setError("");
+    try {
+      let privateKeyEnc = null;
+      try {
+        const d = await api.getPgp();
+        privateKeyEnc = d.privateKeyEnc;
+      } catch {
+        privateKeyEnc = null;
+      }
+      if (!privateKeyEnc) {
+        setError("No encryption key found for this account.");
+        return;
+      }
+      await pgp.unlock(privateKeyEnc, pass);
+      setPass("");
+      onUnlocked();
+    } catch {
+      setError("Wrong passphrase, try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="em-pgp-lock" onSubmit={submit}>
+      <div className="em-pgp-lock-head">
+        <Lock size={16} weight="fill" />
+        <span>This message is encrypted. Enter your passphrase to read it.</span>
+      </div>
+      <div className="em-pgp-lock-row">
+        <Input
+          type="password"
+          aria-label="Passphrase"
+          placeholder="Passphrase"
+          value={pass}
+          onChange={(e) => {
+            setPass(e.target.value);
+            setError("");
+          }}
+        />
+        <Button type="submit" variant="primary" icon={LockKeyOpen} loading={busy} disabled={!pass}>
+          Unlock
+        </Button>
+      </div>
+      {error && <div className="em-form-error">{error}</div>}
+    </form>
+  );
+}
+
+function PgpBody({ message, onUnlocked }) {
+  const [error, setError] = useState(false);
+  const [decrypted, setDecrypted] = useState(null);
+  const unlocked = !!pgp.getUnlocked();
+
+  useEffect(() => {
+    if (!unlocked) return;
+    let cancelled = false;
+    setError(false);
+    pgp
+      .decryptArmored(message.bodyText || "")
+      .then((data) => {
+        if (!cancelled) setDecrypted(data);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [unlocked, message.bodyText]);
+
+  if (!unlocked) return <PgpLock onUnlocked={onUnlocked} />;
+
+  if (error) {
+    return (
+      <div className="em-pgp-note">
+        <Lock size={15} weight="fill" />
+        <span>Could not decrypt this message.</span>
+      </div>
+    );
+  }
+
+  if (decrypted === null) {
+    return (
+      <div className="em-pgp-note">
+        <Lock size={15} weight="fill" />
+        <span>Decrypting...</span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="em-pgp-decrypted-bar">
+        <Lock size={13} weight="fill" />
+        <span>Encrypted, decrypted locally</span>
+      </div>
+      {message.hasHtml ? (
+        <LetterBody html={decrypted} allowRemote={false} />
+      ) : (
+        <PlainBody text={decrypted} />
+      )}
+    </>
   );
 }
 
@@ -111,16 +208,20 @@ function PlainBody({ text }) {
   );
 }
 
-function MessageCard({ message, expanded, onToggle, onShowImages }) {
+function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) {
   const remoteShown = message._imagesShown;
-  const hasBlocked = !remoteShown && htmlHasBlockedImages(message.bodyHtml);
+  const hasBlocked = !message.pgp && !remoteShown && htmlHasBlockedImages(message.bodyHtml);
   const seed = message.from?.address || message.from?.name;
   return (
     <div className={`em-msg${expanded ? "" : " is-collapsed"}`}>
       <div className="em-msg-head" onClick={onToggle}>
-        <span className="em-avatar" style={{ background: monoColor(seed) }}>
-          {initials(message.from)}
-        </span>
+        {message.from?.avatar ? (
+          <img className="em-avatar em-avatar-img" src={message.from.avatar} alt="" />
+        ) : (
+          <span className="em-avatar" style={{ background: monoColor(seed) }}>
+            {initials(message.from)}
+          </span>
+        )}
         <div className="em-msg-head-main">
           <div className="em-msg-from">
             {message.from?.name || message.from?.address}
@@ -153,8 +254,10 @@ function MessageCard({ message, expanded, onToggle, onShowImages }) {
               </button>
             </div>
           )}
-          {message.bodyHtml ? (
-            <HtmlBody html={message.bodyHtml} allowRemote={!!remoteShown} />
+          {message.pgp ? (
+            <PgpBody message={message} onUnlocked={onUnlocked} />
+          ) : message.bodyHtml ? (
+            <LetterBody html={message.bodyHtml} allowRemote={!!remoteShown} />
           ) : (
             <PlainBody text={message.bodyText} />
           )}
@@ -267,6 +370,7 @@ export function ThreadView({ store, onReply, onForward, onBack }) {
   const { user, thread, threadLoading, openId, view, messages, toggleStar, moveMessage, setReadState, deleteForever, setThread } =
     store;
   const [expandedIds, setExpandedIds] = useState(() => new Set());
+  const [, setPgpTick] = useState(0);
 
   const listItem = messages.find((m) => m.id === openId);
   const backLabel = FOLDER_LABELS[view?.folder] || (view?.kind === "starred" ? "Starred" : view?.name) || "Back";
@@ -447,6 +551,7 @@ export function ThreadView({ store, onReply, onForward, onBack }) {
               expanded={expandedIds.has(m.id)}
               onToggle={() => toggle(m.id)}
               onShowImages={() => showImages(m)}
+              onUnlocked={() => setPgpTick((t) => t + 1)}
             />
           ))}
           {headerItem.folder !== "drafts" && (

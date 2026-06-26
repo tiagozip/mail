@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "estrogen-mail",
+  "main": "src/index.js",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "13a96e2d5616f55e42d657439949f175",
+  "workers_dev": true,
+  "routes": [{ "pattern": "mail.estrogen.delivery", "custom_domain": true }],
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "send_email": [{ "name": "EMAIL" }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "estrogen-mail",
+      "database_id": "df372509-9300-4e2e-98a4-bf2eb7dc2296"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "KV", "id": "1396ec9f191b4658bf9793876147f06c" }],
+  "r2_buckets": [{ "binding": "R2", "bucket_name": "estrogen-mail" }],
+  "vars": {
+    "MAIL_DOMAIN": "estrogen.delivery",
+    "USER_STORAGE_QUOTA": "524288000",
+    "MAX_ATTACHMENT_BYTES": "26214400",
+    "DAILY_SEND_LIMIT": "200",
+    "OIDC_ISSUER": "https://id.estrogen.delivery",
+    "OIDC_CLIENT_ID": "B8tyYp6lRL6jU671t7iaEw",
+    "ADMIN_GROUP": "mail-admins"
+  }
+}
