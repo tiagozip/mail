@@ -10,8 +10,8 @@ import {
   Tray,
   Trash,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
-import { displayName, FOLDER_LABELS, relativeTime } from "../util.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FOLDER_LABELS, groupThreads, relativeTime, senderLabel } from "../util.js";
 
 function StarToggle({ on, onClick }) {
   return (
@@ -29,11 +29,8 @@ function StarToggle({ on, onClick }) {
   );
 }
 
-function Row({ item, active, selected, onOpen, onToggleSelect, onToggleStar }) {
-  const outgoing = item.folder === "sent" || item.folder === "drafts";
-  const sender = outgoing
-    ? `To ${item.to?.map((t) => t.name || t.address).join(", ") || "(no recipient)"}`
-    : displayName(item.from) || item.from?.address || "(unknown)";
+function Row({ item, active, selected, selfAddresses, onOpen, onToggleSelect, onToggleStar }) {
+  const sender = senderLabel(item, selfAddresses);
   return (
     <div
       className={`em-row${active ? " is-active" : ""}${selected ? " is-selected" : ""}${item.isRead ? "" : " is-unread"}`}
@@ -52,6 +49,7 @@ function Row({ item, active, selected, onOpen, onToggleSelect, onToggleStar }) {
       <div className="em-row-body">
         <div className="em-row-line">
           <span className="em-row-sender">{sender}</span>
+          {item._count > 1 && <span className="em-row-count">{item._count}</span>}
           <span className="em-row-meta">
             {item.hasAttachments && <Paperclip size={13} weight="bold" />}
           </span>
@@ -130,6 +128,12 @@ export function MessageList({ store, searchRef, onMenu }) {
   const [query, setQuery] = useState("");
   const scrollRef = useRef(null);
 
+  const threads = useMemo(() => groupThreads(messages), [messages]);
+  const selfAddresses = useMemo(
+    () => (store.user?.addresses?.map((a) => a.address) || [store.user?.address]).filter(Boolean),
+    [store.user],
+  );
+
   useEffect(() => {
     if (view.kind !== "search") setQuery("");
   }, [view]);
@@ -148,8 +152,18 @@ export function MessageList({ store, searchRef, onMenu }) {
   }
 
   const selecting = selectedIds.size > 0;
-  const allSelected = messages.length > 0 && selectedIds.size === messages.length;
-  const unread = messages.filter((m) => !m.isRead).length;
+  const allSelected = threads.length > 0 && threads.every((t) => selectedIds.has(t.id));
+  const unread = threads.filter((t) => !t.isRead).length;
+
+  function toggleSelectAll(on) {
+    if (!on) {
+      selectAll(false);
+      return;
+    }
+    for (const t of threads) {
+      if (!selectedIds.has(t.id)) toggleSelect(t.id);
+    }
+  }
 
   return (
     <div className="em-pane em-pane-list">
@@ -190,13 +204,13 @@ export function MessageList({ store, searchRef, onMenu }) {
           <span className={`em-listhead-check${allSelected ? " is-shown" : ""}`}>
             <Checkbox
               checked={allSelected}
-              onCheckedChange={() => selectAll(!allSelected)}
+              onCheckedChange={() => toggleSelectAll(!allSelected)}
               aria-label="Select all"
             />
           </span>
           <span className="em-listhead-title">
             Select all
-            {messages.length > 0 && <span className="em-listhead-count">{messages.length}</span>}
+            {threads.length > 0 && <span className="em-listhead-count">{threads.length}</span>}
           </span>
         </div>
       )}
@@ -211,7 +225,7 @@ export function MessageList({ store, searchRef, onMenu }) {
               </div>
             ))}
           </div>
-        ) : messages.length === 0 ? (
+        ) : threads.length === 0 ? (
           <div className="em-empty">
             <Tray className="em-empty-icon" size={34} weight="thin" />
             <div className="em-empty-title">Nothing here</div>
@@ -221,12 +235,13 @@ export function MessageList({ store, searchRef, onMenu }) {
           </div>
         ) : (
           <>
-            {messages.map((item) => (
+            {threads.map((item) => (
               <Row
                 key={item.id}
                 item={item}
-                active={openId === item.id}
+                active={item._members?.some((m) => m.id === openId)}
                 selected={selectedIds.has(item.id)}
+                selfAddresses={selfAddresses}
                 onOpen={openMessage}
                 onToggleSelect={toggleSelect}
                 onToggleStar={toggleStar}

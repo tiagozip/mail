@@ -9,6 +9,7 @@ import {
   DownloadSimple,
   Envelope,
   Image,
+  PaperPlaneTilt,
   Star,
   Trash,
   Tray,
@@ -17,15 +18,29 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { notifyError } from "../toast.js";
-import { FOLDER_LABELS, fullDate, humanSize, initials, linkifyParts, monoColor, recipientLine, relativeTime } from "../util.js";
+import {
+  FOLDER_LABELS,
+  fullDate,
+  htmlHasBlockedImages,
+  humanSize,
+  imagesDefaultOn,
+  initials,
+  linkifyParts,
+  monoColor,
+  recipientLine,
+  relativeTime,
+  splitQuoted,
+} from "../util.js";
 
 const CSP_STRICT =
   "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; font-src data:";
 const CSP_LOOSE = "default-src 'none'; img-src * data:; style-src 'unsafe-inline'; font-src data:";
+const PAPER_STYLE =
+  "html,body{background:#faf8f5;color:#222;margin:0;padding:14px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.5;word-break:break-word;}img{max-width:100%;height:auto;}a{color:#bf3264;}";
 
 function buildSrcdoc(html, allowRemote) {
   const csp = allowRemote ? CSP_LOOSE : CSP_STRICT;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>html,body{margin:0;padding:0;color:#1c0f16;font-family:system-ui,sans-serif;font-size:14px;line-height:1.5;word-break:break-word;}img{max-width:100%;height:auto;}a{color:#bf3264;}</style></head><body>${html}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>${PAPER_STYLE}</style></head><body>${html}</body></html>`;
 }
 
 function HtmlBody({ html, allowRemote }) {
@@ -48,29 +63,49 @@ function HtmlBody({ html, allowRemote }) {
   }, []);
 
   return (
-    <iframe
-      ref={ref}
-      className="em-iframe"
-      title="message"
-      sandbox="allow-popups allow-popups-to-escape-sandbox"
-      srcDoc={buildSrcdoc(html, allowRemote)}
-      style={{ height }}
-      onLoad={resize}
-    />
+    <div className="em-paper">
+      <iframe
+        ref={ref}
+        className="em-iframe"
+        title="message"
+        sandbox="allow-popups allow-popups-to-escape-sandbox"
+        srcDoc={buildSrcdoc(html, allowRemote)}
+        style={{ height }}
+        onLoad={resize}
+      />
+    </div>
+  );
+}
+
+function Linkified({ text }) {
+  return linkifyParts(text).map((p, i) =>
+    p.t === "link" ? (
+      <a key={i} href={p.v} target="_blank" rel="noopener noreferrer">
+        {p.v}
+      </a>
+    ) : (
+      <span key={i}>{p.v}</span>
+    ),
   );
 }
 
 function PlainBody({ text }) {
+  const { main, quoted } = splitQuoted(text);
+  const [showQuoted, setShowQuoted] = useState(false);
   return (
     <div className="em-text-body">
-      {linkifyParts(text).map((p, i) =>
-        p.t === "link" ? (
-          <a key={i} href={p.v} target="_blank" rel="noopener noreferrer">
-            {p.v}
-          </a>
-        ) : (
-          <span key={i}>{p.v}</span>
-        ),
+      <Linkified text={main} />
+      {quoted && (
+        <div className="em-quoted">
+          <button type="button" className="em-quote-toggle" onClick={() => setShowQuoted((s) => !s)}>
+            {showQuoted ? "Hide quoted text" : "Show quoted text"}
+          </button>
+          {showQuoted && (
+            <div className="em-quoted-body">
+              <Linkified text={quoted} />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -78,7 +113,7 @@ function PlainBody({ text }) {
 
 function MessageCard({ message, expanded, onToggle, onShowImages }) {
   const remoteShown = message._imagesShown;
-  const hasRemoteRisk = message.hasHtml && message.bodyHtml;
+  const hasBlocked = !remoteShown && htmlHasBlockedImages(message.bodyHtml);
   const seed = message.from?.address || message.from?.name;
   return (
     <div className={`em-msg${expanded ? "" : " is-collapsed"}`}>
@@ -109,13 +144,13 @@ function MessageCard({ message, expanded, onToggle, onShowImages }) {
 
       {expanded && (
         <div className="em-msg-body">
-          {hasRemoteRisk && !remoteShown && (
+          {hasBlocked && (
             <div className="em-images-bar">
-              <Image size={16} />
-              <span style={{ flex: 1 }}>Remote images are blocked.</span>
-              <Button size="sm" variant="outline" onClick={onShowImages}>
+              <Image size={15} />
+              <span style={{ flex: 1 }}>Remote images blocked</span>
+              <button type="button" className="em-quote-toggle" onClick={onShowImages}>
                 Show images
-              </Button>
+              </button>
             </div>
           )}
           {message.bodyHtml ? (
@@ -146,6 +181,78 @@ function MessageCard({ message, expanded, onToggle, onShowImages }) {
   );
 }
 
+function pickFromAddress(message, user) {
+  const selves = new Set((user?.addresses?.map((a) => a.address) || []).map((a) => a.toLowerCase()));
+  const candidates = [...(message.to || []), ...(message.cc || [])];
+  const match = candidates.find((p) => p.address && selves.has(p.address.toLowerCase()));
+  return match?.address || user?.address;
+}
+
+function QuickReply({ store, last, onReply, onForward }) {
+  const { user, thread, reloadThread, openMessage } = store;
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const selves = new Set((user?.addresses?.map((a) => a.address) || [user?.address]).filter(Boolean).map((a) => a.toLowerCase()));
+  const lastExternalSender =
+    [...thread.messages].reverse().find((m) => m.from?.address && !selves.has(m.from.address.toLowerCase())) || last;
+  const replyTo = lastExternalSender.from?.address;
+  const replyName = lastExternalSender.from?.name || replyTo || "sender";
+
+  async function send() {
+    const body = text.trim();
+    if (!body || !replyTo) return;
+    setSending(true);
+    const subj = lastExternalSender.subject || "";
+    try {
+      await api.send({
+        from: pickFromAddress(lastExternalSender, user),
+        to: [replyTo],
+        subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`,
+        text: body,
+        inReplyTo: last.rfcMessageId,
+        references: [...(last.references || []), last.rfcMessageId].filter(Boolean),
+      });
+      setText("");
+      if (reloadThread) reloadThread(thread.threadId);
+      else openMessage({ id: store.openId, threadId: thread.threadId });
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="em-quickreply">
+      <textarea
+        className="em-quickreply-input"
+        placeholder={`Reply to ${replyName}`}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <div className="em-quickreply-actions">
+        <Button
+          size="sm"
+          variant="primary"
+          icon={PaperPlaneTilt}
+          loading={sending}
+          disabled={!text.trim() || !replyTo}
+          onClick={send}
+        >
+          Send
+        </Button>
+        <button type="button" className="em-quote-toggle" onClick={() => onReply(last, "replyAll")}>
+          Reply all
+        </button>
+        <button type="button" className="em-quote-toggle" onClick={() => onForward(last)}>
+          Forward
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BackBar({ onBack, label }) {
   return (
     <div className="em-reader-topbar">
@@ -157,7 +264,7 @@ function BackBar({ onBack, label }) {
 }
 
 export function ThreadView({ store, onReply, onForward, onBack }) {
-  const { thread, threadLoading, openId, view, messages, toggleStar, moveMessage, setReadState, deleteForever, setThread } =
+  const { user, thread, threadLoading, openId, view, messages, toggleStar, moveMessage, setReadState, deleteForever, setThread } =
     store;
   const [expandedIds, setExpandedIds] = useState(() => new Set());
 
@@ -166,10 +273,37 @@ export function ThreadView({ store, onReply, onForward, onBack }) {
 
   useEffect(() => {
     if (thread?.messages?.length) {
-      const last = thread.messages[thread.messages.length - 1];
-      setExpandedIds(new Set([last.id]));
+      const list = thread.messages;
+      const last = list[list.length - 1];
+      const next = new Set([last.id]);
+      for (const m of list) {
+        if (!m.isRead) next.add(m.id);
+      }
+      setExpandedIds(next);
     }
   }, [thread]);
+
+  useEffect(() => {
+    if (!thread?.messages?.length || !imagesDefaultOn(user)) return;
+    const targets = thread.messages.filter((m) => !m._imagesShown && htmlHasBlockedImages(m.bodyHtml));
+    if (!targets.length) return;
+    let cancelled = false;
+    Promise.all(targets.map((m) => api.message(m.id, true).catch(() => null))).then((results) => {
+      if (cancelled) return;
+      const byId = new Map();
+      for (const r of results) {
+        if (r?.message) byId.set(r.message.id, r.message);
+      }
+      if (!byId.size) return;
+      setThread({
+        threadId: thread.threadId,
+        messages: thread.messages.map((x) => (byId.has(x.id) ? { ...byId.get(x.id), _imagesShown: true } : x)),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [thread, user, setThread]);
 
   if (!openId) {
     return (
@@ -315,6 +449,9 @@ export function ThreadView({ store, onReply, onForward, onBack }) {
               onShowImages={() => showImages(m)}
             />
           ))}
+          {headerItem.folder !== "drafts" && (
+            <QuickReply store={store} last={last} onReply={onReply} onForward={onForward} />
+          )}
         </div>
       </div>
     </div>

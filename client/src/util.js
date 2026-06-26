@@ -80,6 +80,56 @@ export function recipientLine(list) {
   return list.map((p) => p.name || p.address).join(", ");
 }
 
+export function senderLabel(item, selfAddresses) {
+  const selves = new Set((selfAddresses || []).map((a) => a.toLowerCase()));
+  const outgoing = item.folder === "sent" || item.folder === "drafts";
+  if (outgoing) {
+    const names = (item.to || []).map((t) => t.name || t.address);
+    return `To ${names.join(", ") || "(no recipient)"}`;
+  }
+  const names = [];
+  for (const m of item._members || [item]) {
+    const out = m.folder === "sent" || m.folder === "drafts";
+    const isSelf = out || (m.from?.address && selves.has(m.from.address.toLowerCase()));
+    const label = isSelf ? "you" : displayName(m.from) || m.from?.address || "(unknown)";
+    if (!names.includes(label)) names.push(label);
+  }
+  if (!names.length) return displayName(item.from) || item.from?.address || "(unknown)";
+  if (names.length <= 2) return names.join(", ");
+  return `${names[0]}, ${names[names.length - 1]}`;
+}
+
+export function groupThreads(messages) {
+  const order = [];
+  const byThread = new Map();
+  for (const m of messages) {
+    const key = m.threadId || m.id;
+    const bucket = byThread.get(key);
+    if (bucket) {
+      bucket.members.push(m);
+      if ((m.date || 0) >= (bucket.rep.date || 0)) bucket.rep = m;
+    } else {
+      byThread.set(key, { rep: m, members: [m] });
+      order.push(key);
+    }
+  }
+  return order.map((key) => {
+    const { rep, members } = byThread.get(key);
+    const sorted = [...members].sort((a, b) => (a.date || 0) - (b.date || 0));
+    const anyUnread = members.some((m) => !m.isRead);
+    const anyStarred = members.some((m) => m.isStarred);
+    const anyAttachments = members.some((m) => m.hasAttachments);
+    return {
+      ...rep,
+      _members: sorted,
+      _count: members.length,
+      isRead: !anyUnread,
+      isStarred: anyStarred,
+      hasAttachments: anyAttachments,
+    };
+  });
+}
+
 export function parseRecipients(raw) {
   return String(raw || "")
     .split(/[,\s]+/)
@@ -101,6 +151,44 @@ export function linkifyParts(text) {
   });
   if (last < str.length) out.push({ t: "text", v: str.slice(last) });
   return out;
+}
+
+export function splitQuoted(text) {
+  const str = String(text || "");
+  const lines = str.split("\n");
+  let cut = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (/^\s*>/.test(line)) {
+      cut = i;
+      break;
+    }
+    if (/^\s*On .+wrote:\s*$/.test(line) || /^\s*-{2,}\s*(Original Message|Forwarded message)/i.test(line)) {
+      cut = i;
+      break;
+    }
+  }
+  if (cut < 0) return { main: str, quoted: "" };
+  let start = cut;
+  while (start > 0 && lines[start - 1].trim() === "") start -= 1;
+  return {
+    main: lines.slice(0, start).join("\n"),
+    quoted: lines.slice(start).join("\n"),
+  };
+}
+
+export function htmlHasBlockedImages(html) {
+  if (!html) return false;
+  return html.includes("data-blocked-src") || html.includes("blocked-img");
+}
+
+export function imagesDefaultOn(user) {
+  if (user?.settings?.imagesDefault) return true;
+  try {
+    return localStorage.getItem("em-images-default") === "1";
+  } catch {
+    return false;
+  }
 }
 
 export const FOLDER_LABELS = {
