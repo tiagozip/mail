@@ -1841,7 +1841,7 @@ html[data-theme="sakura"] {
 
 .em-recip-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--em-3);
   position: relative;
   border-bottom: 1px solid var(--color-kumo-hairline);
@@ -1853,21 +1853,67 @@ html[data-theme="sakura"] {
   font-weight: 500;
   color: var(--text-color-kumo-subtle);
   flex: none;
+  padding-top: 14px;
+}
+
+.em-recip-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 0;
+  cursor: text;
+}
+
+.em-recip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 9px;
+  border-radius: 6px;
+  background: var(--color-kumo-tint);
+  font-size: 0.85rem;
+  color: var(--text-color-kumo-default);
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.em-recip-chip button {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-color-kumo-subtle);
+  transition: background var(--em-fast), color var(--em-fast);
+}
+
+.em-recip-chip button:hover {
+  background: var(--color-kumo-fill);
+  color: var(--text-color-kumo-default);
 }
 
 .em-recip-input {
   flex: 1;
-  min-width: 0;
+  min-width: 140px;
   position: relative;
 }
 
-.em-recip-input .kumo-input,
 .em-recip-input input {
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 0;
+  font-size: 0.9rem;
+  color: var(--text-color-kumo-default);
 }
 
 .em-recip-extra {
