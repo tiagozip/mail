@@ -15,6 +15,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { FOLDER_LABELS, groupThreads, initials, monoColor, relativeTime, senderLabel } from "../util.js";
 
@@ -146,12 +147,22 @@ export function MessageList({ store, searchRef, onMenu, onCompose }) {
         if (tries++ < 6) setTimeout(run, 700);
         return;
       }
-      const pending = messages.filter((m) => m.pgp && m.snippetEnc && decSnippets[m.id] === undefined);
+      const pending = messages.filter((m) => m.pgp && decSnippets[m.id] === undefined);
       if (!pending.length) return;
       const updates = {};
       for (const m of pending) {
         try {
-          updates[m.id] = await pgp.decryptArmored(m.snippetEnc);
+          if (m.snippetEnc) {
+            updates[m.id] = await pgp.decryptArmored(m.snippetEnc);
+          } else {
+            const full = await api.message(m.id);
+            const dec = await pgp.decryptArmored(full.message?.bodyText || "");
+            updates[m.id] = dec
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 140);
+          }
         } catch {
           updates[m.id] = null;
         }
