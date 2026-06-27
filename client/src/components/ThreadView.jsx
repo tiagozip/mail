@@ -265,6 +265,29 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
   const remoteShown = message._imagesShown;
   const hasBlocked = !message.pgp && !remoteShown && htmlHasBlockedImages(message.bodyHtml);
   const seed = message.from?.address || message.from?.name;
+  const [decSnip, setDecSnip] = useState(null);
+  useEffect(() => {
+    if (!message.pgp || expanded || !pgp.getUnlocked()) return;
+    let cancelled = false;
+    pgp
+      .decryptArmored(message.bodyText || "")
+      .then((t) => {
+        if (!cancelled) {
+          setDecSnip(
+            t
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 160),
+          );
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [message.pgp, message.bodyText, expanded]);
+  const collapsedSnip = message.pgp ? decSnip || message.snippet : message.snippet;
   return (
     <div className={`em-msg${expanded ? "" : " is-collapsed"}`}>
       <div className="em-msg-head" onClick={onToggle}>
@@ -288,7 +311,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
               {message.cc?.length > 0 && `, cc ${recipientLine(message.cc)}`}
             </div>
           ) : (
-            <div className="em-msg-collapsed-snip">{message.snippet}</div>
+            <div className="em-msg-collapsed-snip">{collapsedSnip}</div>
           )}
         </div>
         <div className="em-msg-meta">
