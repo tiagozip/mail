@@ -925,6 +925,7 @@ export async function handleApi(request, env, ctx) {
   }
 
   if (path === "/api/pgp" && method === "GET") {
+    if (!auth?.session) return error(403, "use the web app to manage pgp keys");
     const row = await env.DB.prepare(
       "SELECT pgp_enabled, pgp_public_key, pgp_private_key_enc FROM users WHERE id = ?",
     )
@@ -1024,6 +1025,54 @@ export async function handleApi(request, env, ctx) {
       }
     }
     return json({ contacts });
+  }
+
+  if (path === "/api/push/key" && method === "GET") {
+    return json({ key: env.VAPID_PUBLIC_KEY || null });
+  }
+  if (path === "/api/push/subscribe" && method === "POST") {
+    const b = await readJson(request);
+    const endpoint = String(b.endpoint || "");
+    const p256dh = String(b.keys?.p256dh || "");
+    const authKey = String(b.keys?.auth || "");
+    if (!endpoint || !p256dh || !authKey) return error(400, "endpoint and keys required");
+    await env.DB.prepare(
+      `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?,?,?,?,?,?)
+       ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`,
+    )
+      .bind(uuid(), user.id, endpoint, p256dh, authKey, now())
+      .run();
+    return json({ ok: true });
+  }
+  if (path === "/api/push/unsubscribe" && method === "POST") {
+    const b = await readJson(request);
+    const endpoint = String(b.endpoint || "");
+    if (endpoint) {
+      await env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+        .bind(endpoint, user.id)
+        .run();
+    }
+    return json({ ok: true });
+  }
+  if (path === "/api/push/latest" && method === "GET") {
+    const unread = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM messages WHERE user_id = ? AND folder = 'inbox' AND is_read = 0",
+    )
+      .bind(user.id)
+      .first();
+    const count = unread?.n || 0;
+    const latest = await env.DB.prepare(
+      "SELECT from_name, from_addr, subject FROM messages WHERE user_id = ? AND folder = 'inbox' AND is_read = 0 ORDER BY date DESC LIMIT 1",
+    )
+      .bind(user.id)
+      .first();
+    if (!latest) return json({ count: 0, title: "New mail", body: "" });
+    const sender = latest.from_name || latest.from_addr || "New mail";
+    return json({
+      count,
+      title: count > 1 ? `${sender} and ${count - 1} more` : sender,
+      body: latest.subject || "(no subject)",
+    });
   }
 
   if (path === "/api/settings" && method === "PUT") {
