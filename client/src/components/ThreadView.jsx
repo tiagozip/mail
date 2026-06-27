@@ -27,6 +27,7 @@ import {
   Warning,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { sanitize } from "lettersanitizer";
 import { Letter } from "react-letter";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
@@ -574,6 +575,9 @@ export function ThreadView({ store, onReply, onForward, onBack }) {
     } else {
       bodyMarkup = `<pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(m.bodyText || "")}</pre>`;
     }
+    const safeBody = sanitize(bodyMarkup, undefined, {
+      allowedSchemas: ["http", "https", "mailto", "tel", "cid", "data"],
+    });
     const win = window.open("", "_blank", "width=820,height=900");
     if (!win) return;
     const head = [
@@ -585,13 +589,15 @@ export function ThreadView({ store, onReply, onForward, onBack }) {
       .filter(Boolean)
       .join("<br>");
     win.document.write(
-      `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(m.subject || "(no subject)")}</title>` +
+      `<!doctype html><html><head><meta charset="utf-8">` +
+        `<meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'">` +
+        `<title>${escapeHtml(m.subject || "(no subject)")}</title>` +
         `<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111;margin:32px;line-height:1.5}` +
         `h1{font-size:18px;margin:0 0 12px}.em-print-meta{font-size:13px;color:#444;border-bottom:1px solid #ddd;padding-bottom:12px;margin-bottom:16px}` +
         `img{max-width:100%}a{color:#1257b8}</style></head><body>` +
         `<h1>${escapeHtml(m.subject || "(no subject)")}</h1>` +
         `<div class="em-print-meta">${head}</div>` +
-        `<div class="em-print-body">${bodyMarkup}</div>` +
+        `<div class="em-print-body">${safeBody}</div>` +
         `</body></html>`,
     );
     win.document.close();

@@ -52,6 +52,23 @@ function isSecure(request) {
   return new URL(request.url).protocol === "https:";
 }
 
+const AVATAR_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+]);
+
+const INLINE_SAFE_TYPES = new Set([
+  ...AVATAR_TYPES,
+  "image/bmp",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+  "application/pdf",
+]);
+
 function listItem(row) {
   return {
     id: row.id,
@@ -414,11 +431,13 @@ async function downloadAttachment(env, user, id, inline) {
   const obj = await env.R2.get(row.r2_key);
   if (!obj) return error(404, "not found");
   const bytes = await tryDecryptBytes(env, await obj.arrayBuffer());
+  const mime = (row.mime || "application/octet-stream").toLowerCase().split(";")[0].trim();
+  const inlineOk = inline && INLINE_SAFE_TYPES.has(mime);
   const headers = new Headers();
-  headers.set("content-type", row.mime || "application/octet-stream");
+  headers.set("content-type", inlineOk ? mime : inline ? "application/octet-stream" : row.mime || "application/octet-stream");
   headers.set("content-length", String(bytes.byteLength));
   headers.set("cache-control", "private, max-age=3600");
-  const dispo = inline ? "inline" : "attachment";
+  const dispo = inlineOk ? "inline" : "attachment";
   const safeName = String(row.filename || "file")
     .replace(/[\r\n";\\]+/g, "_")
     .slice(0, 200);
@@ -674,7 +693,8 @@ export async function handleApi(request, env, ctx) {
     const form = await request.formData();
     const file = form.get("file");
     if (!file || typeof file === "string") return error(400, "no file");
-    if (!String(file.type || "").startsWith("image/")) return error(400, "must be an image");
+    if (!AVATAR_TYPES.has(String(file.type || "").toLowerCase()))
+      return error(400, "use a PNG, JPEG, GIF, WebP, or AVIF image");
     if (file.size > 3 * 1024 * 1024) return error(413, "image too large (max 3 MiB)");
     const key = `avatar/${user.id}`;
     await env.R2.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
@@ -692,8 +712,9 @@ export async function handleApi(request, env, ctx) {
   if ((m = path.match(/^\/api\/avatar\/([\w-]+)$/)) && method === "GET") {
     const obj = await env.R2.get(`avatar/${m[1]}`);
     if (!obj) return error(404, "not found");
+    const ct = (obj.httpMetadata?.contentType || "image/png").toLowerCase();
     const headers = new Headers();
-    headers.set("content-type", obj.httpMetadata?.contentType || "image/png");
+    headers.set("content-type", AVATAR_TYPES.has(ct) ? ct : "application/octet-stream");
     headers.set("cache-control", "private, max-age=86400");
     return new Response(obj.body, { headers });
   }
