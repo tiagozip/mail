@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { AppShell } from "./components/AppShell.jsx";
 import { AuthView } from "./components/AuthView.jsx";
+import * as pgp from "./pgp.js";
 import { toastManager } from "./toast.js";
 
 const THEMES = ["gold", "midnight", "sakura"];
@@ -43,6 +44,13 @@ export function App() {
           if (p) setPalette(THEMES.includes(p) ? p : "plum");
           if (d.user.settings?.imagesDefault !== undefined) {
             localStorage.setItem("em-images-default", d.user.settings.imagesDefault ? "1" : "0");
+          }
+          const savedPass = pgp.getRememberedPass();
+          if (d.user.pgpEnabled && savedPass && !pgp.getUnlocked()) {
+            api
+              .getPgp()
+              .then((p) => p.privateKeyEnc && pgp.unlock(p.privateKeyEnc, savedPass))
+              .catch(() => pgp.forgetPass());
           }
         }
       })

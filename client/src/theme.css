@@ -2493,3 +2493,16 @@ html[data-theme="sakura"] {
   background: var(--color-kumo-fill-hover);
   color: var(--text-color-kumo-default);
 }
+
+.em-pgp-remember {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  margin-top: var(--em-2);
+  font-size: 0.8rem;
+  color: var(--text-color-kumo-subtle);
+  cursor: pointer;
+}
+.em-pgp-remember input {
+  accent-color: var(--color-kumo-brand);
+}

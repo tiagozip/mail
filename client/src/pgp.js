@@ -1,6 +1,27 @@
 import * as openpgp from "openpgp";
 
 let unlockedKey = null;
+const PASS_KEY = "em-pgp-pass";
+
+export function rememberPass(pass) {
+  try {
+    localStorage.setItem(PASS_KEY, pass);
+  } catch {}
+}
+
+export function getRememberedPass() {
+  try {
+    return localStorage.getItem(PASS_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function forgetPass() {
+  try {
+    localStorage.removeItem(PASS_KEY);
+  } catch {}
+}
 
 export async function generateIdentity(name, email, passphrase) {
   const { publicKey, privateKey } = await openpgp.generateKey({

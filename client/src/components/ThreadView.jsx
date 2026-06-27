@@ -69,6 +69,7 @@ function PgpLock({ onUnlocked }) {
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [remember, setRemember] = useState(true);
 
   async function submit(e) {
     e.preventDefault();
@@ -88,6 +89,8 @@ function PgpLock({ onUnlocked }) {
         return;
       }
       await pgp.unlock(privateKeyEnc, pass);
+      if (remember) pgp.rememberPass(pass);
+      else pgp.forgetPass();
       setPass("");
       onUnlocked();
     } catch {
@@ -118,6 +121,10 @@ function PgpLock({ onUnlocked }) {
           Unlock
         </Button>
       </div>
+      <label className="em-pgp-remember">
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+        <span>Remember on this device (auto-decrypt, less secure)</span>
+      </label>
       {error && <div className="em-form-error">{error}</div>}
     </form>
   );

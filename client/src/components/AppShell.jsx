@@ -156,6 +156,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
 
   async function signOut() {
     pgp.clearUnlocked();
+    pgp.forgetPass();
     const res = await api.logout().catch(() => null);
     if (res?.logoutUrl) {
       window.location.href = res.logoutUrl;
