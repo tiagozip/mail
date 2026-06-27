@@ -1902,6 +1902,26 @@ html[data-theme="sakura"] {
   flex: 1;
 }
 
+.em-e2e-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: var(--em-radius-sm);
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--text-color-kumo-subtle);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.em-e2e-chip.is-on {
+  font-weight: 600;
+  color: var(--text-color-kumo-brand);
+  background: var(--em-brand-soft);
+  border: 1px solid var(--em-brand-soft-border);
+}
+
 .em-label-dot {
   width: 9px;
   height: 9px;

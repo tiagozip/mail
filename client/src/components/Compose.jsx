@@ -6,13 +6,15 @@ import {
   FilePdf,
   FileText,
   FileZip,
+  Lock,
   PaperPlaneTilt,
   Paperclip,
   Trash,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
+import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
 import { humanSize, parseRecipients, plainBodyToHtml } from "../util.js";
 import { RichEditor } from "./RichEditor.jsx";
@@ -112,6 +114,10 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   const draftIdRef = useRef(null);
   const dragDepth = useRef(0);
   const previews = useRef(new Map());
+  const keyCache = useRef(new Map());
+  const ownKeyRef = useRef(null);
+  const [keyMap, setKeyMap] = useState({});
+  const keyTimer = useRef(null);
 
   function previewUrl(id, file) {
     if (!file || !file.type?.startsWith("image/")) return null;
@@ -159,6 +165,8 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     setDraftId(null);
     draftIdRef.current = null;
     setMeta({ inReplyTo: init.inReplyTo, references: init.references || [] });
+    keyCache.current.clear();
+    setKeyMap({});
   }, [open, initial, primary]);
 
   useEffect(() => {
@@ -168,6 +176,59 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     saveTimer.current = setTimeout(saveDraft, 3000);
     return () => clearTimeout(saveTimer.current);
   }, [to, cc, bcc, subject, bodyText, open]);
+
+  const recipientAddrs = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const addr of [...parseRecipients(to), ...parseRecipients(cc)]) {
+      const lower = addr.toLowerCase();
+      if (seen.has(lower)) continue;
+      seen.add(lower);
+      out.push(lower);
+    }
+    return out;
+  }, [to, cc]);
+
+  async function lookupKeys(addrs) {
+    const pending = addrs.filter((addr) => !keyCache.current.has(addr));
+    if (!pending.length) return;
+    await Promise.all(
+      pending.map(async (addr) => {
+        try {
+          const d = await api.pgpPubkey(addr);
+          keyCache.current.set(addr, d?.publicKey || null);
+        } catch {
+          keyCache.current.set(addr, null);
+        }
+      }),
+    );
+    const next = {};
+    for (const [addr, key] of keyCache.current.entries()) next[addr] = key;
+    setKeyMap(next);
+  }
+
+  useEffect(() => {
+    if (!open || !user.pgpEnabled) return;
+    clearTimeout(keyTimer.current);
+    if (!recipientAddrs.length) return;
+    keyTimer.current = setTimeout(() => lookupKeys(recipientAddrs), 350);
+    return () => clearTimeout(keyTimer.current);
+  }, [open, user.pgpEnabled, recipientAddrs]);
+
+  const pendingAtts = atts.length > 0;
+  const bccFilled = parseRecipients(bcc).length > 0;
+  const keysReady =
+    recipientAddrs.length > 0 && recipientAddrs.every((addr) => !!keyMap[addr]);
+  const canE2E =
+    user.pgpEnabled === true && keysReady && !bccFilled && !pendingAtts;
+
+  function e2eReason() {
+    if (recipientAddrs.length === 0) return "add a recipient to encrypt";
+    if (bccFilled) return "bcc not supported with encryption";
+    if (pendingAtts) return "remove attachments to encrypt";
+    if (!keysReady) return "recipient has no encryption key";
+    return "";
+  }
 
   async function saveDraft() {
     const payload = {
@@ -276,6 +337,47 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     }
     setBusy(true);
     try {
+      if (canE2E) {
+        await lookupKeys(recipientAddrs);
+        const recipientKeys = recipientAddrs.map((addr) => keyCache.current.get(addr));
+        if (recipientKeys.some((k) => !k)) {
+          notify(
+            "Cannot encrypt",
+            "A recipient is missing an encryption key. Message not sent.",
+            "warning",
+          );
+          return;
+        }
+        if (!ownKeyRef.current) {
+          const own = await api.getPgp();
+          ownKeyRef.current = own?.publicKey || null;
+        }
+        if (!ownKeyRef.current) {
+          notify("Cannot encrypt", "Your own encryption key is unavailable. Message not sent.", "warning");
+          return;
+        }
+        const editorText = editorRef.current?.getText?.() ?? bodyText;
+        const armored = await pgp.encryptFor([...recipientKeys, ownKeyRef.current], editorText);
+        await api.send({
+          from,
+          to: recipients,
+          cc: parseRecipients(cc),
+          subject,
+          pgp: true,
+          text: armored,
+          inReplyTo: meta.inReplyTo,
+          references: meta.references || [],
+          draftId: draftIdRef.current || undefined,
+        });
+        notify(
+          "Sent",
+          `Encrypted message to ${recipients[0]}${recipients.length > 1 ? ` +${recipients.length - 1}` : ""} sent.`,
+          "success",
+        );
+        onSent?.();
+        onClose();
+        return;
+      }
       const html = bodyText.trim() ? bodyHtml : "";
       await api.send({
         from,
@@ -428,6 +530,21 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             Save draft
           </Button>
           <div className="em-spacer" />
+          {user.pgpEnabled === true &&
+            (canE2E ? (
+              <span
+                className="em-e2e-chip is-on"
+                title="Only the recipients can read this. The server never sees it."
+              >
+                <Lock size={13} weight="fill" />
+                End-to-end encrypted
+              </span>
+            ) : (
+              <span className="em-e2e-chip" title={e2eReason()}>
+                <Lock size={13} />
+                Not end-to-end encrypted
+              </span>
+            ))}
           <Button variant="secondary-destructive" icon={Trash} onClick={onDiscard}>
             Discard
           </Button>

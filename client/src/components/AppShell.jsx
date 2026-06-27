@@ -71,8 +71,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
   }
 
   function closeReader() {
-    store.closeMessage();
-    setCursor(-1);
+    window.history.back();
   }
 
   useEffect(() => {
@@ -84,7 +83,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (composeOpen) return;
+      if (composeOpen || settingsOpen) return;
 
       if (e.key === "?") {
         setShowHelp((s) => !s);
@@ -171,6 +170,40 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
     store.refreshCounts();
   }
 
+  const goBack = useCallback(() => window.history.back(), []);
+
+  const pushed = useRef({});
+  const navState = {
+    reader: !!store.openId,
+    compose: composeOpen,
+    settings: settingsOpen,
+    admin: screen === "admin",
+  };
+  useEffect(() => {
+    for (const k of Object.keys(navState)) {
+      if (navState[k] && !pushed.current[k]) {
+        window.history.pushState({ em: k }, "");
+        pushed.current[k] = true;
+      } else if (!navState[k] && pushed.current[k]) {
+        pushed.current[k] = false;
+      }
+    }
+  });
+
+  useEffect(() => {
+    function onPop() {
+      if (composeOpen) return setComposeOpen(false);
+      if (settingsOpen) return setSettingsOpen(false);
+      if (screen === "admin") return setScreen("mail");
+      if (store.openId) {
+        store.closeMessage();
+        setCursor(-1);
+      }
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  });
+
   const readerOpen = !!store.openId;
 
   return (
@@ -199,7 +232,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
       </div>
 
       {screen === "admin" ? (
-        <Admin onBack={() => setScreen("mail")} />
+        <Admin onBack={goBack} />
       ) : (
         <div className="em-main">
           <div className="em-column">
@@ -253,14 +286,14 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
         onSetMode={onSetMode}
         palette={palette}
         onSetPalette={onSetPalette}
-        onClose={() => setSettingsOpen(false)}
+        onClose={goBack}
       />
 
       <Compose
         open={composeOpen}
         initial={composeInitial}
         user={user}
-        onClose={() => setComposeOpen(false)}
+        onClose={goBack}
         onSent={afterMutation}
       />
       {showHelp && <Shortcuts onClose={() => setShowHelp(false)} />}

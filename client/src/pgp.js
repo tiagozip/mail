@@ -34,6 +34,16 @@ export async function unlock(privateKeyEnc, passphrase) {
   return true;
 }
 
+export async function encryptFor(armoredPublicKeys, text) {
+  const keys = await Promise.all(
+    armoredPublicKeys.map((armored) => openpgp.readKey({ armoredKey: armored })),
+  );
+  return openpgp.encrypt({
+    message: await openpgp.createMessage({ text }),
+    encryptionKeys: keys,
+  });
+}
+
 export async function decryptArmored(armored) {
   if (!unlockedKey) throw new Error("PGP key is locked");
   const { data } = await openpgp.decrypt({
