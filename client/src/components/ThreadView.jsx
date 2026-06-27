@@ -18,6 +18,7 @@ import {
   Lock,
   LockKeyOpen,
   PaperPlaneTilt,
+  ShieldCheck,
   Star,
   Trash,
   Tray,
@@ -172,18 +173,10 @@ function PgpBody({ message, onUnlocked }) {
     );
   }
 
-  return (
-    <>
-      <div className="em-pgp-decrypted-bar">
-        <Lock size={13} weight="fill" />
-        <span>Encrypted, decrypted locally</span>
-      </div>
-      {message.hasHtml ? (
-        <LetterBody html={decrypted} allowRemote={false} />
-      ) : (
-        <PlainBody text={decrypted} />
-      )}
-    </>
+  return message.hasHtml ? (
+    <LetterBody html={decrypted} allowRemote={false} />
+  ) : (
+    <PlainBody text={decrypted} />
   );
 }
 
@@ -293,9 +286,18 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
             <div className="em-msg-collapsed-snip">{message.snippet}</div>
           )}
         </div>
-        <Tooltip content={fullDate(message.date)}>
-          <span className="em-msg-date">{relativeTime(message.date)}</span>
-        </Tooltip>
+        <div className="em-msg-meta">
+          {message.pgp && (
+            <Tooltip content="End-to-end encrypted, decrypted on this device">
+              <span className="em-msg-enc" aria-label="End-to-end encrypted">
+                <Lock size={13} weight="fill" />
+              </span>
+            </Tooltip>
+          )}
+          <Tooltip content={fullDate(message.date)}>
+            <span className="em-msg-date">{relativeTime(message.date)}</span>
+          </Tooltip>
+        </div>
       </div>
 
       {expanded && (
@@ -329,6 +331,17 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
                 Show images
               </button>
             </div>
+          )}
+          {message.trackersBlocked > 0 && (
+            <Tooltip content="Hidden images used to track when you open an email were removed and cannot load.">
+              <div className="em-tracker-bar">
+                <ShieldCheck size={15} weight="fill" />
+                <span>
+                  Blocked {message.trackersBlocked} tracking{" "}
+                  {message.trackersBlocked === 1 ? "pixel" : "pixels"}
+                </span>
+              </div>
+            </Tooltip>
           )}
           {message.pgp ? (
             <PgpBody message={message} onUnlocked={onUnlocked} />

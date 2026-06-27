@@ -993,15 +993,39 @@ html[data-theme="sakura"] {
   flex: 1;
 }
 
-.em-pgp-decrypted-bar {
-  display: inline-flex;
+.em-msg-meta {
+  display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.74rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  flex: none;
+  padding-top: 2px;
+}
+
+.em-msg-enc {
+  display: inline-flex;
+  align-items: center;
   color: var(--text-color-kumo-brand);
+  cursor: default;
+}
+
+.em-tracker-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--em-2);
+  padding: 7px var(--em-3);
+  background: var(--color-kumo-tint);
+  border: 1px solid var(--color-kumo-hairline);
+  border-radius: var(--em-radius-sm);
   margin-bottom: var(--em-3);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-color-kumo-subtle);
+  cursor: default;
+}
+
+.em-tracker-bar svg {
+  color: var(--text-color-kumo-brand);
+  flex: none;
 }
 
 .em-pgp-form {

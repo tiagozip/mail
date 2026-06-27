@@ -31,6 +31,40 @@ function escapeAttr(s) {
   return String(s).replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+const TRACKER_URL =
+  /(?:\/(?:open|wf\/open|track|tracking|beacon|pixel|piwik|matomo)(?:[/.?]|$))|(?:[?&](?:utm_medium=email|mc_eid|email_open|trk_msg|trk_contact|oseid))|(?:\b(?:1x1|spacer|clear|blank|pixel|trans|transparent)\.(?:gif|png|jpg))|list-manage\.com\/track|sendgrid\.net\/wf\/open|awstrack\.me|mailtrack\.io|sparkpostmail|hubspotemail|hs-analytics|getsidekick|bananatag|streak-track/i;
+
+function imgDimension(tag, name) {
+  const attr = tag.match(new RegExp(`\\b${name}\\s*=\\s*["']?\\s*(\\d+(?:\\.\\d+)?)`, "i"));
+  if (attr) return Number.parseFloat(attr[1]);
+  const style = tag.match(new RegExp(`[;"'\\s]${name}\\s*:\\s*(\\d+(?:\\.\\d+)?)\\s*px`, "i"));
+  if (style) return Number.parseFloat(style[1]);
+  return null;
+}
+
+function isTrackerImg(tag) {
+  const w = imgDimension(tag, "width");
+  const h = imgDimension(tag, "height");
+  if (w !== null && h !== null && w <= 2 && h <= 2) return true;
+  if (w === 0 || h === 0) return true;
+  if (/style\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0+)?\b)/i.test(tag)) {
+    return true;
+  }
+  const srcMatch = tag.match(/\bsrc\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  const src = srcMatch ? (srcMatch[2] ?? srcMatch[3] ?? srcMatch[4] ?? "") : "";
+  return !!src && TRACKER_URL.test(src);
+}
+
+export function stripTrackers(html) {
+  let count = 0;
+  const out = String(html || "").replace(/<img\b[^>]*>/gi, (tag) => {
+    if (!isTrackerImg(tag)) return tag;
+    count += 1;
+    return "";
+  });
+  return { html: out, count };
+}
+
 export function sanitizeEmailHtml(html, { cidMap = {}, allowRemote = false } = {}) {
   let out = String(html || "");
   out = out.replace(COMMENTS, "");

@@ -18,7 +18,7 @@ import {
   userInfo,
   verifyIdToken,
 } from "./oidc.js";
-import { sanitizeEmailHtml } from "./sanitize.js";
+import { sanitizeEmailHtml, stripTrackers } from "./sanitize.js";
 import { sendMessage } from "./send.js";
 import { attKey, deleteMessageRow, FOLDERS, insertMessage, updateStorage } from "./store.js";
 import {
@@ -336,11 +336,14 @@ async function getMessage(env, user, id, allowRemote) {
   }
 
   let bodyHtml = null;
+  let trackersBlocked = 0;
   if (row.html_key) {
     const obj = await env.R2.get(row.html_key);
     if (obj) {
       const html = await tryDecryptText(env, await obj.arrayBuffer());
-      bodyHtml = sanitizeEmailHtml(html, { allowRemote });
+      const tr = stripTrackers(html);
+      trackersBlocked = tr.count;
+      bodyHtml = sanitizeEmailHtml(tr.html, { allowRemote });
     }
   }
   return {
@@ -354,6 +357,7 @@ async function getMessage(env, user, id, allowRemote) {
     authDetail: row.auth_detail ? JSON.parse(row.auth_detail) : null,
     bodyText: row.body_text,
     bodyHtml,
+    trackersBlocked,
     hasHtml: !!row.has_html,
     attachments: (atts.results || [])
       .filter((a) => !a.is_inline && a.status === "stored")
