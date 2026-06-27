@@ -232,6 +232,8 @@ html[data-theme="sakura"] {
   gap: var(--em-7);
   height: 100%;
   width: 100%;
+  padding-top: var(--em-6);
+  box-sizing: border-box;
 }
 
 .em-wordmark {
@@ -322,9 +324,7 @@ html[data-theme="sakura"] {
   display: flex;
   align-items: center;
   gap: var(--em-3);
-  padding: var(--em-2) 0;
-  min-height: 40px;
-  margin-top: var(--em-7);
+  min-height: 0;
   flex: none;
 }
 
