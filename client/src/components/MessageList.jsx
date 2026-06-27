@@ -14,7 +14,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FOLDER_LABELS, groupThreads, relativeTime, senderLabel } from "../util.js";
+import { FOLDER_LABELS, groupThreads, initials, monoColor, relativeTime, senderLabel } from "../util.js";
 
 function StarToggle({ on, onClick }) {
   return (
@@ -34,35 +34,34 @@ function StarToggle({ on, onClick }) {
 
 function Row({ item, active, selected, selfAddresses, onOpen, onToggleSelect, onToggleStar }) {
   const sender = senderLabel(item, selfAddresses);
+  const addr = item.from?.address || "";
+  const handle = addr.includes("@") ? `@${addr.split("@")[1]}` : addr;
   return (
     <div
       className={`em-row${active ? " is-active" : ""}${selected ? " is-selected" : ""}${item.isRead ? "" : " is-unread"}`}
       onClick={() => onOpen(item)}
     >
-      <div className="em-row-lead">
-        <span className={`em-unread-dot${item.isRead ? " is-placeholder" : ""}`} />
-        <div className="em-row-check" onClick={(e) => e.stopPropagation()}>
-          <Checkbox
-            checked={selected}
-            onCheckedChange={() => onToggleSelect(item.id)}
-            aria-label="Select message"
-          />
-        </div>
+      <div className="em-row-avatar">
+        {item.from?.avatar ? (
+          <img className="em-avatar em-avatar-img" src={item.from.avatar} alt="" />
+        ) : (
+          <span className="em-avatar" style={{ background: monoColor(addr || sender) }}>
+            {initials({ name: sender, address: addr })}
+          </span>
+        )}
+        {!item.isRead && <span className="em-row-unread" />}
       </div>
       <div className="em-row-body">
         <div className="em-row-line">
           <span className="em-row-sender">{sender}</span>
-          {item._count > 1 && <span className="em-row-count">{item._count}</span>}
-          <span className="em-row-meta">
-            {item.hasAttachments && <Paperclip size={13} weight="bold" />}
-          </span>
+          {handle && <span className="em-row-handle">{handle}</span>}
+          <span className="em-row-sep">·</span>
           <span className="em-row-date">{relativeTime(item.date)}</span>
+          {item._count > 1 && <span className="em-row-count">{item._count}</span>}
+          {item.hasAttachments && <Paperclip className="em-row-clip" size={14} weight="bold" />}
         </div>
-        <div className="em-row-line">
-          <span className="em-row-subject">{item.subject || "(no subject)"}</span>
-          {item.snippet && <span className="em-row-snippet">{item.snippet}</span>}
-          <StarToggle on={item.isStarred} onClick={() => onToggleStar(item)} />
-        </div>
+        <div className="em-row-subject">{item.subject || "(no subject)"}</div>
+        {item.snippet && <div className="em-row-snippet">{item.snippet}</div>}
         {item.labels?.length > 0 && (
           <div className="em-row-labels">
             {item.labels.map((l) => (
@@ -73,6 +72,16 @@ function Row({ item, active, selected, selfAddresses, onOpen, onToggleSelect, on
             ))}
           </div>
         )}
+      </div>
+      <div className="em-row-actions" onClick={(e) => e.stopPropagation()}>
+        <StarToggle on={item.isStarred} onClick={() => onToggleStar(item)} />
+        <div className="em-row-check">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelect(item.id)}
+            aria-label="Select message"
+          />
+        </div>
       </div>
     </div>
   );
