@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import zip.estrogen.mail.ui.compose.ComposeScreen
 import zip.estrogen.mail.ui.compose.ComposePrefill
 import zip.estrogen.mail.ui.maillist.MailListScreen
+import zip.estrogen.mail.ui.settings.SettingsScreen
 import zip.estrogen.mail.ui.setup.SetupScreen
 import zip.estrogen.mail.ui.thread.ThreadScreen
 
@@ -18,6 +19,7 @@ object Routes {
     const val MAIL_LIST = "maillist"
     const val THREAD = "thread/{threadId}/{messageId}"
     const val COMPOSE = "compose"
+    const val SETTINGS = "settings"
 
     fun thread(threadId: String, messageId: String) =
         "thread/${Uri.encode(threadId)}/${Uri.encode(messageId)}"
@@ -49,6 +51,7 @@ fun AppNavHost(hasCredentials: Boolean) {
                     ComposePrefill.pending = null
                     navController.navigate(Routes.COMPOSE)
                 },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onSignedOut = {
                     navController.navigate(Routes.SETUP) {
                         popUpTo(0) { inclusive = true }
@@ -81,6 +84,17 @@ fun AppNavHost(hasCredentials: Boolean) {
             ComposeScreen(
                 onBack = { navController.popBackStack() },
                 onSent = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onSignedOut = {
+                    navController.navigate(Routes.SETUP) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
             )
         }
     }

@@ -10,6 +10,7 @@ import zip.estrogen.mail.MailApp
 import zip.estrogen.mail.data.MailRepository
 import zip.estrogen.mail.ui.compose.ComposeViewModel
 import zip.estrogen.mail.ui.maillist.MailListViewModel
+import zip.estrogen.mail.ui.settings.SettingsViewModel
 import zip.estrogen.mail.ui.setup.SetupViewModel
 import zip.estrogen.mail.ui.thread.ThreadViewModel
 
@@ -21,6 +22,7 @@ class AppViewModelFactory(private val repository: MailRepository) : ViewModelPro
             modelClass.isAssignableFrom(MailListViewModel::class.java) -> MailListViewModel(repository)
             modelClass.isAssignableFrom(ThreadViewModel::class.java) -> ThreadViewModel(repository)
             modelClass.isAssignableFrom(ComposeViewModel::class.java) -> ComposeViewModel(repository)
+            modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(repository)
             else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.name}")
         } as T
     }

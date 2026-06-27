@@ -14,7 +14,9 @@ import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.Report
 import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -49,6 +51,7 @@ fun FolderDrawer(
     counts: FolderCounts,
     selected: Folder,
     onSelect: (Folder) -> Unit,
+    onOpenSettings: () -> Unit,
     onSignOut: () -> Unit
 ) {
     ModalDrawerSheet(
@@ -102,6 +105,19 @@ fun FolderDrawer(
         }
 
         Spacer(Modifier.size(8.dp))
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+        )
+        Spacer(Modifier.size(8.dp))
+
+        NavigationDrawerItem(
+            label = { Text("Settings") },
+            selected = false,
+            onClick = onOpenSettings,
+            icon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
 
         NavigationDrawerItem(
             label = { Text("Sign out") },

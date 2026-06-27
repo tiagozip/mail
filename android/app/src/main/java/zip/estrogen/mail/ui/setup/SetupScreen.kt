@@ -109,7 +109,7 @@ fun SetupScreen(onConfigured: () -> Unit) {
         if (state.error != null) {
             Spacer(Modifier.height(14.dp))
             Text(
-                text = state.error!!,
+                text = state.error ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center

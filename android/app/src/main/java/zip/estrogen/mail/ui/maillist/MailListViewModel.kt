@@ -136,6 +136,19 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
         }
     }
 
+    fun moveMessage(message: MessageSummary, folder: Folder) {
+        val previous = _state.value.messages
+        _state.update { s -> s.copy(messages = s.messages.filterNot { it.id == message.id }) }
+        viewModelScope.launch {
+            repository.move(message.id, folder).fold(
+                onSuccess = { refreshFolders() },
+                onFailure = {
+                    _state.update { it.copy(messages = previous, error = "Could not move the message") }
+                }
+            )
+        }
+    }
+
     fun signOut() {
         viewModelScope.launch {
             repository.signOut()
