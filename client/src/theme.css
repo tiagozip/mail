@@ -2697,3 +2697,27 @@ html[data-theme="sakura"] {
 .em-pgp-remember input {
   accent-color: var(--color-kumo-brand);
 }
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+.em-row:focus-visible,
+.em-settings-nav:focus-visible,
+.em-star-btn:focus-visible,
+.em-quote-toggle:focus-visible,
+.em-theme-swatch:focus-visible {
+  outline: 2px solid var(--color-kumo-brand);
+  outline-offset: 2px;
+  border-radius: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

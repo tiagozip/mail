@@ -5,7 +5,10 @@ import {
   EnvelopeOpen,
   List,
   MagnifyingGlass,
+  NotePencil,
   Paperclip,
+  PaperPlaneTilt,
+  ShieldWarning,
   Star,
   Tray,
   Trash,
@@ -226,13 +229,31 @@ export function MessageList({ store, searchRef, onMenu }) {
             ))}
           </div>
         ) : threads.length === 0 ? (
-          <div className="em-empty">
-            <Tray className="em-empty-icon" size={34} weight="thin" />
-            <div className="em-empty-title">Nothing here</div>
-            <div className="em-empty-sub">
-              {view.kind === "search" ? "No messages match your search." : "This folder is empty."}
-            </div>
-          </div>
+          (() => {
+            const states = {
+              search: [MagnifyingGlass, "No results", "No messages match your search."],
+              starred: [Star, "No starred mail", "Star a message and it shows up here."],
+              label: [Tray, "No mail with this label", "Messages you label will appear here."],
+              inbox: [Tray, "Inbox zero", "Nothing new. Enjoy the quiet."],
+              sent: [PaperPlaneTilt, "No sent mail", "Messages you send will appear here."],
+              drafts: [NotePencil, "No drafts", "Start a message and your drafts save here."],
+              archive: [Archive, "Archive is empty", "Archived messages live here."],
+              spam: [ShieldWarning, "No spam", "Suspected spam and spoofed mail lands here."],
+              trash: [Trash, "Trash is empty", "Deleted messages stay here before removal."],
+            };
+            const [Icon, title, sub] = states[view.kind === "folder" ? view.folder : view.kind] || [
+              Tray,
+              "Nothing here",
+              "This folder is empty.",
+            ];
+            return (
+              <div className="em-empty">
+                <Icon className="em-empty-icon" size={34} weight="thin" />
+                <div className="em-empty-title">{title}</div>
+                <div className="em-empty-sub">{sub}</div>
+              </div>
+            );
+          })()
         ) : (
           <>
             {threads.map((item) => (
