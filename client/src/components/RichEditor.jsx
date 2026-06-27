@@ -27,6 +27,7 @@ function ToolButton({ icon, label, active, onClick, disabled }) {
         shape="square"
         aria-label={label}
         aria-pressed={active}
+        tabIndex={-1}
         className={`em-rt-tool${active ? " is-active" : ""}`}
         icon={icon}
         disabled={disabled}
@@ -131,7 +132,25 @@ export function RichEditor({ value, onUpdate, placeholder, onEditorReady }) {
         <span className="em-rt-sep" />
         <ToolButton icon={LinkSimple} label="Link" active={editor.isActive("link")} onClick={toggleLink} />
       </div>
-      <EditorContent className="em-rt-content" editor={editor} />
+      <EditorContent
+        className="em-rt-content"
+        editor={editor}
+        onKeyDown={(e) => {
+          if (e.key !== "Tab") return;
+          e.preventDefault();
+          if (e.shiftKey) {
+            if (editor.can().liftListItem("listItem")) {
+              editor.chain().focus().liftListItem("listItem").run();
+            }
+            return;
+          }
+          if (editor.can().sinkListItem("listItem")) {
+            editor.chain().focus().sinkListItem("listItem").run();
+            return;
+          }
+          editor.chain().focus().insertContent("\t").run();
+        }}
+      />
     </div>
   );
 }
