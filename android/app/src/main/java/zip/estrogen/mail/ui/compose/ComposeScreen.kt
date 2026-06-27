@@ -13,15 +13,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
@@ -30,6 +36,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,6 +53,7 @@ fun ComposeScreen(
 ) {
     val viewModel = appViewModel<ComposeViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
         viewModel.init(ComposePrefill.pending)
@@ -53,10 +61,18 @@ fun ComposeScreen(
     }
 
     LaunchedEffect(state.sent) {
-        if (state.sent) onSent()
+        if (state.sent) {
+            snackbarHostState.showSnackbar(if (state.encrypt) "Encrypted message sent" else "Message sent")
+            onSent()
+        }
+    }
+
+    LaunchedEffect(state.error) {
+        state.error?.let { snackbarHostState.showSnackbar(it) }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("New message", fontWeight = FontWeight.SemiBold) },
@@ -74,11 +90,12 @@ fun ComposeScreen(
                         )
                         Spacer(Modifier.size(12.dp))
                     } else {
-                        IconButton(onClick = viewModel::send) {
+                        IconButton(onClick = viewModel::send, enabled = state.to.isNotBlank()) {
                             Icon(
                                 Icons.Rounded.Send,
                                 contentDescription = "Send",
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = if (state.to.isNotBlank()) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -136,6 +153,38 @@ fun ComposeScreen(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
+            if (state.pgpAvailable) {
+                Spacer(Modifier.size(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(
+                        selected = state.encrypt,
+                        onClick = { viewModel.setEncrypt(!state.encrypt) },
+                        label = { Text(if (state.encrypt) "Encrypted" else "Encrypt") },
+                        leadingIcon = {
+                            Icon(
+                                if (state.encrypt) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                    if (state.encrypt && state.encryptionNote != null) {
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = state.encryptionNote ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (state.encryptionReady) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.size(8.dp))
 
             OutlinedTextField(
@@ -147,15 +196,6 @@ fun ComposeScreen(
                     .padding(vertical = 8.dp),
                 minLines = 8
             )
-
-            if (state.error != null) {
-                Text(
-                    text = state.error!!,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
 
             Spacer(Modifier.size(48.dp))
         }

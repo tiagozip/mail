@@ -19,8 +19,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val app = application as MailApp
         setContent {
-            EstrogenMailTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+            val dynamicColor by app.repository.dynamicColor.collectAsStateWithLifecycle(initialValue = true)
+            EstrogenMailTheme(dynamicColor = dynamicColor) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.background
+                ) {
                     Root(app)
                 }
             }
