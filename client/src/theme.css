@@ -264,7 +264,7 @@ html[data-theme="sakura"] {
   justify-content: center;
   height: 100%;
   overflow: hidden;
-  background: var(--color-kumo-recessed);
+  background: transparent;
   padding: 0 var(--em-6);
 }
 
@@ -472,7 +472,74 @@ html[data-theme="sakura"] {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-  padding-bottom: var(--em-7);
+  padding-bottom: 96px;
+}
+
+.em-floatbar {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  width: min(540px, calc(100% - 32px));
+}
+
+.em-floatbar-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--em-3);
+  height: 50px;
+  padding: 0 var(--em-4);
+  border-radius: 999px;
+  border: 1px solid var(--color-kumo-line);
+  background: color-mix(in srgb, var(--color-kumo-canvas) 78%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.em-floatbar-icon {
+  color: var(--text-color-kumo-subtle);
+  flex: none;
+}
+
+.em-floatbar-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 0.95rem;
+  color: var(--text-color-kumo-default);
+}
+
+.em-floatbar-input::placeholder {
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-floatbar-compose {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  height: 50px;
+  padding: 0 var(--em-5);
+  border: none;
+  border-radius: 999px;
+  background: var(--color-kumo-brand);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: background var(--em-fast);
+}
+
+.em-floatbar-compose:hover {
+  background: var(--color-kumo-brand-hover);
 }
 
 .em-row {
@@ -2599,6 +2666,20 @@ html[data-theme="sakura"] {
   width: auto !important;
   min-height: 0 !important;
   height: 100%;
+}
+
+.em-sidebar-wrap > div,
+.em-sidebar-wrap > div > div,
+.em-sidebar-wrap [data-slot="sidebar"],
+.em-sidebar-wrap [data-slot="sidebar-inner"],
+.em-sidebar-wrap [data-slot="sidebar-content"] {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.em-sidebar-wrap [data-slot="sidebar-content"] {
+  justify-content: center;
 }
 
 .em-menu-btn {

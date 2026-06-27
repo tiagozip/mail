@@ -97,14 +97,6 @@ export function MailSidebar({
   return (
     <SidebarProvider collapsible="none">
       <SidebarRoot>
-        <SidebarHeader>
-          <div className="em-sidebar-head">
-            <div className="em-wordmark">
-              <span className="em-wordmark-glyph">e</span>
-              estrogen.delivery
-            </div>
-          </div>
-        </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
             <SidebarMenu>
@@ -171,14 +163,6 @@ export function MailSidebar({
 
         <SidebarFooter>
           <div className="em-sidebar-foot">
-            <Button
-              className="em-compose-btn"
-              variant="primary"
-              icon={PencilSimpleLine}
-              onClick={onCompose}
-            >
-              Compose
-            </Button>
             <DropdownMenu>
             <DropdownMenu.Trigger
               render={(p) => (

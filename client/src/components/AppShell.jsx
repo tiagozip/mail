@@ -266,6 +266,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
                 store={store}
                 searchRef={searchRef}
                 onMenu={() => setSidebarOpen(true)}
+                onCompose={() => openCompose()}
               />
             )}
           </div>

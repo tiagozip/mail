@@ -1,4 +1,4 @@
-import { Button, Checkbox, InputGroup, Loader, SkeletonLine, Tooltip } from "@cloudflare/kumo";
+import { Button, Checkbox, Loader, SkeletonLine, Tooltip } from "@cloudflare/kumo";
 import {
   Archive,
   Envelope,
@@ -8,6 +8,7 @@ import {
   NotePencil,
   Paperclip,
   PaperPlaneTilt,
+  PencilSimpleLine,
   ShieldWarning,
   Star,
   Tray,
@@ -120,7 +121,7 @@ function listTitle(view, labels) {
   return FOLDER_LABELS[view.folder] || "Inbox";
 }
 
-export function MessageList({ store, searchRef, onMenu }) {
+export function MessageList({ store, searchRef, onMenu, onCompose }) {
   const {
     view,
     goView,
@@ -193,20 +194,6 @@ export function MessageList({ store, searchRef, onMenu }) {
           <span className="em-pane-title-text">{listTitle(view, labels)}</span>
           {unread > 0 && <span className="em-pane-title-count">{unread} unread</span>}
         </div>
-        <form onSubmit={onSearch} className="em-pane-search">
-          <InputGroup>
-            <InputGroup.Addon>
-              <MagnifyingGlass size={16} />
-            </InputGroup.Addon>
-            <InputGroup.Input
-              ref={searchRef}
-              placeholder="Search mail"
-              aria-label="Search mail"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </InputGroup>
-        </form>
       </div>
 
       {selecting ? (
@@ -284,6 +271,24 @@ export function MessageList({ store, searchRef, onMenu }) {
             )}
           </>
         )}
+      </div>
+
+      <div className="em-floatbar">
+        <form className="em-floatbar-search" onSubmit={onSearch}>
+          <MagnifyingGlass className="em-floatbar-icon" size={18} />
+          <input
+            ref={searchRef}
+            className="em-floatbar-input"
+            placeholder="Search"
+            aria-label="Search mail"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </form>
+        <button type="button" className="em-floatbar-compose" onClick={onCompose}>
+          <PencilSimpleLine size={18} weight="bold" />
+          <span>Write</span>
+        </button>
       </div>
     </div>
   );
