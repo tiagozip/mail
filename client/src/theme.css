@@ -1984,7 +1984,6 @@ html[data-theme="sakura"] {
   gap: 2px;
   flex-wrap: wrap;
   padding-bottom: var(--em-2);
-  border-bottom: 1px solid var(--color-kumo-hairline);
 }
 
 .em-rt-tool.is-active {

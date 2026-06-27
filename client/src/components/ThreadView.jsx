@@ -26,11 +26,12 @@ import {
   Tray,
   Warning,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sanitize } from "lettersanitizer";
 import { Letter } from "react-letter";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
+import { RichEditor } from "./RichEditor.jsx";
 import { notifyError } from "../toast.js";
 import {
   escapeHtml,
@@ -377,7 +378,9 @@ function pickFromAddress(message, user) {
 function QuickReply({ store, last, onReply, onForward }) {
   const { user, thread, reloadThread, openMessage } = store;
   const [text, setText] = useState("");
+  const [html, setHtml] = useState("");
   const [sending, setSending] = useState(false);
+  const editorRef = useRef(null);
 
   const selves = new Set((user?.addresses?.map((a) => a.address) || [user?.address]).filter(Boolean).map((a) => a.toLowerCase()));
   const lastExternalSender =
@@ -396,10 +399,13 @@ function QuickReply({ store, last, onReply, onForward }) {
         to: [replyTo],
         subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`,
         text: body,
+        html,
         inReplyTo: last.rfcMessageId,
         references: [...(last.references || []), last.rfcMessageId].filter(Boolean),
       });
       setText("");
+      setHtml("");
+      editorRef.current?.commands.clearContent();
       if (reloadThread) reloadThread(thread.threadId);
       else openMessage({ id: store.openId, threadId: thread.threadId });
     } catch (e) {
@@ -411,11 +417,15 @@ function QuickReply({ store, last, onReply, onForward }) {
 
   return (
     <div className="em-quickreply">
-      <textarea
-        className="em-quickreply-input"
+      <RichEditor
         placeholder={`Reply to ${replyName}`}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
+        onUpdate={({ html: h, text: t }) => {
+          setHtml(h);
+          setText(t);
+        }}
+        onEditorReady={(ed) => {
+          editorRef.current = ed;
+        }}
       />
       <div className="em-quickreply-actions">
         <Button

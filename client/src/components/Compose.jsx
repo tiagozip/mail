@@ -269,14 +269,6 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   const canE2E =
     user.pgpEnabled === true && keysReady && !bccFilled && !pendingAtts;
 
-  function e2eReason() {
-    if (recipientAddrs.length === 0) return "add a recipient to encrypt";
-    if (bccFilled) return "bcc not supported with encryption";
-    if (pendingAtts) return "remove attachments to encrypt";
-    if (!keysReady) return "recipient has no encryption key";
-    return "";
-  }
-
   async function saveDraft() {
     const payload = {
       to: parseRecipients(to),
@@ -577,21 +569,15 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             Save draft
           </Button>
           <div className="em-spacer" />
-          {user.pgpEnabled === true &&
-            (canE2E ? (
-              <span
-                className="em-e2e-chip is-on"
-                title="Only the recipients can read this. The server never sees it."
-              >
-                <Lock size={13} weight="fill" />
-                End-to-end encrypted
-              </span>
-            ) : (
-              <span className="em-e2e-chip" title={e2eReason()}>
-                <Lock size={13} />
-                Not end-to-end encrypted
-              </span>
-            ))}
+          {user.pgpEnabled === true && canE2E && (
+            <span
+              className="em-e2e-chip is-on"
+              title="Only the recipients can read this. The server never sees it."
+            >
+              <Lock size={13} weight="fill" />
+              End-to-end encrypted
+            </span>
+          )}
           <Button variant="secondary-destructive" icon={Trash} onClick={onDiscard}>
             Discard
           </Button>
