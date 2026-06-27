@@ -1,5 +1,5 @@
 import { Badge, Button, ClipboardText, Dialog, DialogRoot, Input, Loader, Switch } from "@cloudflare/kumo";
-import { Camera, Check, Lock, LockKey, Plus, Star, Trash, X } from "@phosphor-icons/react";
+import { Camera, Check, Code, Lock, LockKey, Palette, Plus, Star, Trash, User, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
@@ -409,6 +409,13 @@ function Encryption({ user, setUser }) {
   );
 }
 
+const SECTIONS = [
+  { id: "account", label: "Account", icon: User },
+  { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "encryption", label: "Encryption", icon: LockKey },
+  { id: "developer", label: "Developer", icon: Code },
+];
+
 export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetPalette, onClose }) {
   const [displayName, setDisplayName] = useState(user.displayName || "");
   const [signature, setSignature] = useState(user.signature || "");
@@ -416,6 +423,7 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
   const [catchAll, setCatchAll] = useState(!!user.settings?.catchAll);
   const [busy, setBusy] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [section, setSection] = useState("account");
   const avatarInput = useRef(null);
 
   const used = user.storageUsed || 0;
@@ -510,6 +518,26 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
           />
         </div>
         <div className="em-settings-body">
+          <nav className="em-settings-rail">
+            {SECTIONS.map((s) => {
+              const Icon = s.icon;
+              const active = section === s.id;
+              return (
+                <button
+                  type="button"
+                  key={s.id}
+                  className={`em-settings-nav${active ? " is-active" : ""}`}
+                  onClick={() => setSection(s.id)}
+                >
+                  <Icon size={17} weight={active ? "fill" : "regular"} />
+                  <span>{s.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+          <div className="em-settings-content">
+          {section === "account" && (
+          <>
           <div className="em-card">
             <div className="em-card-head">
               <h2 className="em-card-title">Identity</h2>
@@ -567,6 +595,42 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
 
           <Addresses user={user} setUser={setUser} />
 
+          {user.isAdmin && (
+            <div className="em-card">
+              <div className="em-card-head">
+                <h2 className="em-card-title">Catch-all</h2>
+              </div>
+              <div className="em-toggle-row">
+                <div className="em-toggle-copy">
+                  <div className="em-toggle-title">Receive unclaimed mail</div>
+                  <div className="em-toggle-sub">
+                    Receive mail sent to any unclaimed @estrogen.delivery address.
+                  </div>
+                </div>
+                <Switch aria-label="Catch-all" checked={catchAll} onCheckedChange={saveCatchAll} />
+              </div>
+            </div>
+          )}
+
+          <div className="em-card">
+            <div className="em-card-head">
+              <h2 className="em-card-title">Storage</h2>
+              <p className="em-card-sub">No limits. Store as much as you like.</p>
+            </div>
+            <div className="em-stat-row">
+              <span className="em-stat-value">{humanSize(used)}</span>
+              <span className="em-stat-label">used</span>
+            </div>
+          </div>
+
+          <Button variant="primary" loading={busy} onClick={save}>
+            Save changes
+          </Button>
+          </>
+          )}
+
+          {section === "appearance" && (
+          <>
           <div className="em-card">
             <div className="em-card-head">
               <h2 className="em-card-title">Appearance & reading</h2>
@@ -617,41 +681,16 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
             </div>
           </div>
 
-          {user.isAdmin && (
-            <div className="em-card">
-              <div className="em-card-head">
-                <h2 className="em-card-title">Catch-all</h2>
-              </div>
-              <div className="em-toggle-row">
-                <div className="em-toggle-copy">
-                  <div className="em-toggle-title">Receive unclaimed mail</div>
-                  <div className="em-toggle-sub">
-                    Receive mail sent to any unclaimed @estrogen.delivery address.
-                  </div>
-                </div>
-                <Switch aria-label="Catch-all" checked={catchAll} onCheckedChange={saveCatchAll} />
-              </div>
-            </div>
-          )}
-
-          <div className="em-card">
-            <div className="em-card-head">
-              <h2 className="em-card-title">Storage</h2>
-              <p className="em-card-sub">No limits. Store as much as you like.</p>
-            </div>
-            <div className="em-stat-row">
-              <span className="em-stat-value">{humanSize(used)}</span>
-              <span className="em-stat-label">used</span>
-            </div>
-          </div>
-
-          <Encryption user={user} setUser={setUser} />
-
-          <ApiKeys />
-
           <Button variant="primary" loading={busy} onClick={save}>
             Save changes
           </Button>
+          </>
+          )}
+
+          {section === "encryption" && <Encryption user={user} setUser={setUser} />}
+
+          {section === "developer" && <ApiKeys />}
+          </div>
         </div>
       </Dialog>
     </DialogRoot>

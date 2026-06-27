@@ -527,6 +527,10 @@ export async function handleApi(request, env, ctx) {
     for (const r of rows.results || []) out.push(await getMessage(env, user, r.id, false));
     const msgs = out.filter(Boolean);
     await attachSenderAvatars(env, msgs);
+    const unreadIds = (rows.results || [])
+      .filter((r) => !r.is_read && r.folder !== "sent")
+      .map((r) => r.id);
+    if (unreadIds.length) await markRead(env, user, unreadIds, true);
     return json({ messages: msgs });
   }
 

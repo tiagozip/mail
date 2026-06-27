@@ -107,6 +107,10 @@ export function useMailStore(initialUser) {
         .thread(item.threadId)
         .then((d) => {
           setThread({ threadId: item.threadId, messages: d.messages || [] });
+          setMessages((prev) =>
+            prev.map((m) => (m.threadId === item.threadId && m.folder !== "sent" ? { ...m, isRead: true } : m)),
+          );
+          refreshCounts();
         })
         .catch(notifyError)
         .finally(() => setThreadLoading(false));
@@ -123,7 +127,7 @@ export function useMailStore(initialUser) {
         });
       }
     },
-    [],
+    [refreshCounts],
   );
 
   const closeMessage = useCallback(() => {
