@@ -20,6 +20,7 @@ object ApiFactory {
         val authInterceptor = Interceptor { chain ->
             val request = chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("X-API-Key", apiKey)
                 .addHeader("Accept", "application/json")
                 .build()
             chain.proceed(request)

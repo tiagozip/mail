@@ -9,6 +9,8 @@ import zip.estrogen.mail.data.model.FoldersResponse
 import zip.estrogen.mail.data.model.MeResponse
 import zip.estrogen.mail.data.model.MessagesResponse
 import zip.estrogen.mail.data.model.MoveBody
+import zip.estrogen.mail.data.model.PgpResponse
+import zip.estrogen.mail.data.model.PubkeyResponse
 import zip.estrogen.mail.data.model.ReadBody
 import zip.estrogen.mail.data.model.SendRequest
 import zip.estrogen.mail.data.model.SendResponse
@@ -48,4 +50,10 @@ interface MailApi {
 
     @POST("api/send")
     suspend fun send(@Body body: SendRequest): SendResponse
+
+    @GET("api/pgp")
+    suspend fun pgp(): PgpResponse
+
+    @GET("api/pgp/pubkey")
+    suspend fun pubkey(@Query("address") address: String): PubkeyResponse
 }

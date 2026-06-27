@@ -13,7 +13,8 @@ data class User(
     val username: String? = null,
     val address: String? = null,
     val displayName: String? = null,
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val pgpEnabled: Boolean = false
 )
 
 @Serializable
@@ -123,7 +124,8 @@ data class SendRequest(
     val from: String? = null,
     val inReplyTo: String? = null,
     val references: List<String> = emptyList(),
-    val attachmentIds: List<String> = emptyList()
+    val attachmentIds: List<String> = emptyList(),
+    val pgp: Boolean = false
 )
 
 @Serializable
@@ -131,4 +133,16 @@ data class SendResponse(
     val ok: Boolean = false,
     val id: String? = null,
     @SerialName("threadId") val threadId: String? = null
+)
+
+@Serializable
+data class PgpResponse(
+    val enabled: Boolean = false,
+    val publicKey: String? = null,
+    val privateKeyEnc: String? = null
+)
+
+@Serializable
+data class PubkeyResponse(
+    val publicKey: String? = null
 )
