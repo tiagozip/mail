@@ -199,17 +199,6 @@ export function MessageList({ store, searchRef, onMenu, onCompose }) {
   }
 
   const selecting = selectedIds.size > 0;
-  const allSelected = threads.length > 0 && threads.every((t) => selectedIds.has(t.id));
-
-  function toggleSelectAll(on) {
-    if (!on) {
-      selectAll(false);
-      return;
-    }
-    for (const t of threads) {
-      if (!selectedIds.has(t.id)) toggleSelect(t.id);
-    }
-  }
 
   return (
     <div className="em-pane em-pane-list">
@@ -225,23 +214,7 @@ export function MessageList({ store, searchRef, onMenu, onCompose }) {
         />
       </div>
 
-      {selecting ? (
-        <BulkBar store={store} />
-      ) : (
-        <div className="em-listhead">
-          <span className={`em-listhead-check${allSelected ? " is-shown" : ""}`}>
-            <Checkbox
-              checked={allSelected}
-              onCheckedChange={() => toggleSelectAll(!allSelected)}
-              aria-label="Select all"
-            />
-          </span>
-          <span className="em-listhead-title">
-            Select all
-            {threads.length > 0 && <span className="em-listhead-count">{threads.length}</span>}
-          </span>
-        </div>
-      )}
+      {selecting && <BulkBar store={store} />}
 
       <div className="em-list-scroll" ref={scrollRef} onScroll={onScroll}>
         {listLoading ? (

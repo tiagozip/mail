@@ -1,6 +1,7 @@
 import { Button, Tooltip } from "@cloudflare/kumo";
 import {
   Code,
+  CodeBlock,
   LinkSimple,
   ListBullets,
   ListNumbers,
@@ -128,6 +129,12 @@ export function RichEditor({ value, onUpdate, placeholder, onEditorReady }) {
           label="Inline code"
           active={editor.isActive("code")}
           onClick={() => editor.chain().focus().toggleCode().run()}
+        />
+        <ToolButton
+          icon={CodeBlock}
+          label="Code block"
+          active={editor.isActive("codeBlock")}
+          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         />
         <span className="em-rt-sep" />
         <ToolButton icon={LinkSimple} label="Link" active={editor.isActive("link")} onClick={toggleLink} />
