@@ -307,7 +307,7 @@ function Addresses({ user, setUser }) {
             <span className="em-alias-suffix">@{domain || "estrogen.delivery"}</span>
           )}
         </div>
-        <Button type="submit" variant="outline" icon={Plus} loading={busy}>
+        <Button type="submit" variant="ghost" icon={Plus} loading={busy}>
           Add
         </Button>
       </form>

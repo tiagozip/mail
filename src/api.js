@@ -1344,10 +1344,10 @@ export async function handleApi(request, env, ctx) {
     if (!DOMAIN_RE.test(domain)) return error(400, "invalid domain");
     if (domain === String(env.MAIL_DOMAIN || "").toLowerCase())
       return error(409, "that is the built-in domain");
-    const exists = await env.DB.prepare("SELECT id FROM domains WHERE domain = ?")
-      .bind(domain)
+    const exists = await env.DB.prepare("SELECT id FROM domains WHERE domain = ? AND owner_id = ?")
+      .bind(domain, user.id)
       .first();
-    if (exists) return error(409, "that domain is already taken");
+    if (exists) return error(409, "you already added this domain");
     const id = uuid();
     await env.DB.prepare(
       "INSERT INTO domains (id, domain, verified, owner_id, created_at, added_by) VALUES (?,?,0,?,?,?)",
@@ -1395,12 +1395,6 @@ export async function handleApi(request, env, ctx) {
         return json({ public: false, publicPending: false });
       }
       if (!row.verified) return error(400, "verify the domain before publishing it");
-      if (user.is_admin) {
-        await env.DB.prepare("UPDATE domains SET public = 1, public_pending = 0 WHERE id = ?")
-          .bind(row.id)
-          .run();
-        return json({ public: true, publicPending: false });
-      }
       await env.DB.prepare("UPDATE domains SET public_pending = 1 WHERE id = ?").bind(row.id).run();
       ctx.waitUntil(notifyAdminsPublicRequest(env, row.domain, user));
       return json({ public: false, publicPending: true });

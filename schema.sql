@@ -137,7 +137,7 @@ CREATE INDEX IF NOT EXISTS idx_filters_user ON filters(user_id, position);
 
 CREATE TABLE IF NOT EXISTS domains (
   id TEXT PRIMARY KEY,
-  domain TEXT UNIQUE NOT NULL,
+  domain TEXT NOT NULL,
   verified INTEGER NOT NULL DEFAULT 0,
   send_verified INTEGER NOT NULL DEFAULT 0,
   public INTEGER NOT NULL DEFAULT 0,
@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS domains (
   created_at INTEGER NOT NULL,
   added_by TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_domains_domain ON domains(domain);
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id TEXT PRIMARY KEY,
