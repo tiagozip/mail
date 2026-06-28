@@ -1806,6 +1806,126 @@ html[data-theme="sakura"] {
   border-top: 1px solid var(--color-kumo-hairline);
 }
 
+.em-empty-hint {
+  font-size: 0.84rem;
+  color: var(--text-color-kumo-inactive);
+  padding: var(--em-3) 0;
+}
+
+.em-hidden-alias {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--em-2) var(--em-3);
+  padding: var(--em-3) 0;
+  border-top: 1px solid var(--color-kumo-hairline);
+}
+
+.em-hidden-alias:first-child {
+  border-top: none;
+}
+
+.em-hidden-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.em-hidden-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--em-2);
+  align-self: flex-start;
+  max-width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-color-kumo-default);
+}
+
+.em-hidden-addr > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.em-hidden-addr svg {
+  flex: none;
+  color: var(--text-color-kumo-inactive);
+}
+
+.em-hidden-addr:hover svg {
+  color: var(--text-color-kumo-brand);
+}
+
+.em-hidden-addr.is-off > span {
+  color: var(--text-color-kumo-inactive);
+  text-decoration: line-through;
+}
+
+.em-hidden-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--em-2);
+  font-size: 0.78rem;
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-hidden-label {
+  color: var(--text-color-kumo-default);
+  font-weight: 500;
+}
+
+.em-hidden-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--em-1);
+  flex: none;
+}
+
+.em-hidden-senders {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-1);
+  margin-top: var(--em-1);
+  padding: var(--em-2) var(--em-3);
+  background: var(--color-kumo-tint);
+  border-radius: var(--em-radius-sm);
+  font-size: 0.8rem;
+}
+
+.em-hidden-sender {
+  display: flex;
+  align-items: baseline;
+  gap: var(--em-2);
+}
+
+.em-hidden-sender-name {
+  color: var(--text-color-kumo-default);
+  font-weight: 500;
+}
+
+.em-hidden-sender-addr {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-color-kumo-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.em-hidden-sender-count {
+  color: var(--text-color-kumo-inactive);
+  font-variant-numeric: tabular-nums;
+}
+
 .em-alias-input {
   flex: 1;
   display: flex;

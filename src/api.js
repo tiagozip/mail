@@ -217,6 +217,15 @@ async function upsertOidcUser(env, claims) {
 
 const ALIAS_RE = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
 const ALIAS_LIMIT = 100;
+const HIDDEN_LIMIT = 500;
+const HIDDEN_CHARS = "abcdefghijkmnpqrstuvwxyz23456789";
+
+function genHiddenLocal() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  let out = "";
+  for (const b of bytes) out += HIDDEN_CHARS[b % HIDDEN_CHARS.length];
+  return out;
+}
 const DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const CF_MX_RE = /(?:^|\.)mx\.cloudflare\.net\.?$/;
 const CF_SPF_INCLUDE = "_spf.mx.cloudflare.net";
@@ -281,7 +290,7 @@ async function verifiedDomainSet(env) {
 
 async function listAddresses(env, userId) {
   const res = await env.DB.prepare(
-    "SELECT address, is_primary FROM addresses WHERE user_id = ? ORDER BY is_primary DESC, address",
+    "SELECT address, is_primary FROM addresses WHERE user_id = ? AND kind = 'standard' ORDER BY is_primary DESC, address",
   )
     .bind(userId)
     .all();
@@ -890,6 +899,103 @@ export async function handleApi(request, env, ctx) {
       a === builtIn ? -1 : b === builtIn ? 1 : a.localeCompare(b),
     );
     return json({ domains, builtIn });
+  }
+
+  if (path === "/api/hidden-aliases" && method === "GET") {
+    const res = await env.DB.prepare(
+      "SELECT address, label, enabled, recv_count, last_seen, created_at FROM addresses WHERE user_id = ? AND kind = 'hidden' ORDER BY created_at DESC",
+    )
+      .bind(user.id)
+      .all();
+    return json({
+      aliases: (res.results || []).map((r) => ({
+        address: r.address,
+        label: r.label || "",
+        enabled: !!r.enabled,
+        recvCount: r.recv_count || 0,
+        lastSeen: r.last_seen || null,
+        createdAt: r.created_at,
+      })),
+    });
+  }
+  if (path === "/api/hidden-aliases" && method === "POST") {
+    const b = await readJson(request);
+    const label = String(b.label || "").slice(0, 80);
+    const domain = String(b.domain || env.MAIL_DOMAIN)
+      .trim()
+      .toLowerCase();
+    const allowed = await verifiedDomainSet(env);
+    if (!allowed.has(domain)) return error(400, "unknown or unverified domain");
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM addresses WHERE user_id = ? AND kind = 'hidden'",
+    )
+      .bind(user.id)
+      .first();
+    if ((count?.n || 0) >= HIDDEN_LIMIT) return error(400, `alias limit reached (${HIDDEN_LIMIT})`);
+    let address = "";
+    for (let i = 0; i < 5; i++) {
+      const candidate = `${genHiddenLocal()}@${domain}`;
+      const taken = await env.DB.prepare("SELECT user_id FROM addresses WHERE address = ?")
+        .bind(candidate)
+        .first();
+      if (!taken) {
+        address = candidate;
+        break;
+      }
+    }
+    if (!address) return error(500, "could not generate a unique alias, try again");
+    await env.DB.prepare(
+      "INSERT INTO addresses (address, user_id, is_primary, label, kind, enabled, created_at) VALUES (?,?,0,?,'hidden',1,?)",
+    )
+      .bind(address, user.id, label, now())
+      .run();
+    return json({ address, label, enabled: true, recvCount: 0, lastSeen: null, createdAt: now() });
+  }
+  if ((m = path.match(/^\/api\/hidden-aliases\/([^/]+)\/senders$/)) && method === "GET") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const res = await env.DB.prepare(
+      "SELECT from_addr, from_name, COUNT(*) AS n, MAX(date) AS last FROM messages WHERE user_id = ? AND to_json LIKE ? GROUP BY from_addr ORDER BY n DESC LIMIT 50",
+    )
+      .bind(user.id, `%"${address}"%`)
+      .all();
+    return json({
+      senders: (res.results || []).map((r) => ({
+        address: r.from_addr,
+        name: r.from_name || "",
+        count: r.n || 0,
+        last: r.last || null,
+      })),
+    });
+  }
+  if ((m = path.match(/^\/api\/hidden-aliases\/([^/]+)$/)) && method === "PATCH") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const row = await env.DB.prepare(
+      "SELECT address FROM addresses WHERE address = ? AND user_id = ? AND kind = 'hidden'",
+    )
+      .bind(address, user.id)
+      .first();
+    if (!row) return error(404, "not found");
+    const b = await readJson(request);
+    if (typeof b.enabled === "boolean") {
+      await env.DB.prepare("UPDATE addresses SET enabled = ? WHERE address = ? AND user_id = ?")
+        .bind(b.enabled ? 1 : 0, address, user.id)
+        .run();
+    }
+    if (typeof b.label === "string") {
+      await env.DB.prepare("UPDATE addresses SET label = ? WHERE address = ? AND user_id = ?")
+        .bind(b.label.slice(0, 80), address, user.id)
+        .run();
+    }
+    return json({ ok: true });
+  }
+  if ((m = path.match(/^\/api\/hidden-aliases\/([^/]+)$/)) && method === "DELETE") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    await env.DB.prepare(
+      "DELETE FROM addresses WHERE address = ? AND user_id = ? AND kind = 'hidden'",
+    )
+      .bind(address, user.id)
+      .run();
+    return json({ ok: true });
   }
 
   if (path === "/api/aliases" && method === "GET") {

@@ -310,6 +310,170 @@ function Addresses({ user, setUser }) {
   );
 }
 
+function HiddenAliases() {
+  const [aliases, setAliases] = useState(null);
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState("");
+  const [openSenders, setOpenSenders] = useState("");
+  const [senders, setSenders] = useState({});
+
+  useEffect(() => {
+    api
+      .hiddenAliases()
+      .then((d) => setAliases(d.aliases || []))
+      .catch(notifyError);
+  }, []);
+
+  async function copy(addr) {
+    try {
+      await navigator.clipboard?.writeText(addr);
+    } catch {}
+    setCopied(addr);
+    setTimeout(() => setCopied((c) => (c === addr ? "" : c)), 1500);
+  }
+
+  async function generate() {
+    setBusy(true);
+    try {
+      const a = await api.createHiddenAlias(label.trim());
+      setAliases((p) => [a, ...(p || [])]);
+      setLabel("");
+      await copy(a.address);
+      notify("Alias created", "Copied to clipboard. Paste it wherever you sign up.", "success");
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggle(a, v) {
+    setAliases((p) => p.map((x) => (x.address === a.address ? { ...x, enabled: v } : x)));
+    try {
+      await api.updateHiddenAlias(a.address, { enabled: v });
+    } catch (e) {
+      setAliases((p) => p.map((x) => (x.address === a.address ? { ...x, enabled: !v } : x)));
+      notifyError(e);
+    }
+  }
+
+  async function remove(a) {
+    try {
+      await api.removeHiddenAlias(a.address);
+      setAliases((p) => p.filter((x) => x.address !== a.address));
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function showSenders(addr) {
+    if (openSenders === addr) {
+      setOpenSenders("");
+      return;
+    }
+    setOpenSenders(addr);
+    if (!senders[addr]) {
+      try {
+        const d = await api.hiddenAliasSenders(addr);
+        setSenders((p) => ({ ...p, [addr]: d.senders || [] }));
+      } catch (e) {
+        notifyError(e);
+      }
+    }
+  }
+
+  return (
+    <div className="em-card">
+      <div className="em-card-head">
+        <h2 className="em-card-title">Hidden aliases</h2>
+        <p className="em-card-sub">
+          Generate a unique address for each site. Everything lands in your inbox. If one starts
+          getting spam you can see who leaked it, then switch it off in one tap.
+        </p>
+      </div>
+      <div className="em-alias-add">
+        <div className="em-alias-input">
+          <input
+            aria-label="Label"
+            placeholder="What's it for? (optional, e.g. Amazon)"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          />
+        </div>
+        <Button type="button" variant="primary" icon={Plus} loading={busy} onClick={generate}>
+          Generate alias
+        </Button>
+      </div>
+      {!aliases ? (
+        <Loader size="sm" />
+      ) : aliases.length === 0 ? (
+        <div className="em-empty-hint">No hidden aliases yet.</div>
+      ) : (
+        <div className="em-alias-list">
+          {aliases.map((a) => (
+            <div key={a.address} className="em-hidden-alias">
+              <div className="em-hidden-main">
+                <button
+                  type="button"
+                  className={`em-hidden-addr${a.enabled ? "" : " is-off"}`}
+                  onClick={() => copy(a.address)}
+                  title="Copy address"
+                >
+                  <span>{a.address}</span>
+                  {copied === a.address ? <Check size={14} weight="bold" /> : <ClipboardText size={14} />}
+                </button>
+                <div className="em-hidden-meta">
+                  {a.label && <span className="em-hidden-label">{a.label}</span>}
+                  <span>{a.recvCount} received</span>
+                  {a.lastSeen ? <span>· {relativeTime(a.lastSeen)}</span> : null}
+                </div>
+              </div>
+              <div className="em-hidden-actions">
+                {a.recvCount > 0 && (
+                  <Button size="sm" variant="ghost" onClick={() => showSenders(a.address)}>
+                    Senders
+                  </Button>
+                )}
+                <Switch
+                  aria-label="Active"
+                  checked={a.enabled}
+                  onCheckedChange={(v) => toggle(a, v)}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  shape="square"
+                  aria-label="Delete alias"
+                  icon={Trash}
+                  onClick={() => remove(a)}
+                />
+              </div>
+              {openSenders === a.address && (
+                <div className="em-hidden-senders">
+                  {!senders[a.address] ? (
+                    <Loader size="sm" />
+                  ) : senders[a.address].length === 0 ? (
+                    <span className="em-empty-hint">No senders recorded yet.</span>
+                  ) : (
+                    senders[a.address].map((s) => (
+                      <div key={s.address} className="em-hidden-sender">
+                        <span className="em-hidden-sender-name">{s.name || s.address}</span>
+                        <span className="em-hidden-sender-addr">{s.address}</span>
+                        <span className="em-hidden-sender-count">{s.count}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Encryption({ user, setUser }) {
   const [showForm, setShowForm] = useState(false);
   const [pass, setPass] = useState("");
@@ -909,6 +1073,8 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
           </div>
 
           <Addresses user={user} setUser={setUser} />
+
+          <HiddenAliases />
 
           {user.isAdmin && (
             <div className="em-card">

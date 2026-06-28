@@ -68,6 +68,14 @@ export const api = {
   addAlias: (localPart, domain) => req("POST", "/api/aliases", { localPart, domain }),
   removeAlias: (address) => req("DELETE", `/api/aliases/${encodeURIComponent(address)}`),
   setPrimaryAddress: (address) => req("POST", "/api/aliases/primary", { address }),
+  hiddenAliases: () => req("GET", "/api/hidden-aliases"),
+  createHiddenAlias: (label) => req("POST", "/api/hidden-aliases", { label }),
+  updateHiddenAlias: (address, patch) =>
+    req("PATCH", `/api/hidden-aliases/${encodeURIComponent(address)}`, patch),
+  removeHiddenAlias: (address) =>
+    req("DELETE", `/api/hidden-aliases/${encodeURIComponent(address)}`),
+  hiddenAliasSenders: (address) =>
+    req("GET", `/api/hidden-aliases/${encodeURIComponent(address)}/senders`),
 
   send: (payload) => req("POST", "/api/send", payload),
   createDraft: (payload) => req("POST", "/api/drafts", payload),

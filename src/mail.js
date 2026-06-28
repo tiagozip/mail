@@ -69,19 +69,28 @@ function evaluateAuth(rawHeaders) {
 
 async function resolveRecipient(env, to) {
   const addr = normalizeAddr(to);
-  const direct = await env.DB.prepare("SELECT user_id FROM addresses WHERE address = ?")
+  const direct = await env.DB.prepare("SELECT user_id, enabled FROM addresses WHERE address = ?")
     .bind(addr)
     .first();
-  if (direct?.user_id) return direct.user_id;
+  if (direct?.user_id) {
+    if (!direct.enabled) return { disabled: true };
+    return { userId: direct.user_id, address: addr };
+  }
   const catchAll = await env.DB.prepare(
     "SELECT id FROM users WHERE is_admin = 1 AND json_extract(settings_json, '$.catchAll') = 1 ORDER BY created_at LIMIT 1",
   ).first();
-  return catchAll?.id || null;
+  return catchAll?.id ? { userId: catchAll.id } : {};
 }
 
 export async function handleEmail(message, env, ctx) {
   const raw = new Uint8Array(await new Response(message.raw).arrayBuffer());
-  const userId = await resolveRecipient(env, message.to);
+  const resolved = await resolveRecipient(env, message.to);
+  if (resolved.disabled) {
+    message.setReject("550 5.1.1 This address is no longer active");
+    return;
+  }
+  const userId = resolved.userId;
+  const matchedAddress = resolved.address;
   if (!userId) {
     message.setReject("550 5.1.1 No such mailbox at estrogen.delivery");
     return;
@@ -330,6 +339,15 @@ export async function handleEmail(message, env, ctx) {
 
   await updateStorage(env, userId, used - (user?.storage_used || 0));
   ctx.waitUntil(bumpContact(env, userId, fromAddr, fromName));
+  if (matchedAddress) {
+    ctx.waitUntil(
+      env.DB.prepare(
+        "UPDATE addresses SET recv_count = recv_count + 1, last_seen = ? WHERE address = ?",
+      )
+        .bind(now(), matchedAddress)
+        .run(),
+    );
+  }
 
   if (folder !== "spam") {
     ctx.waitUntil(
