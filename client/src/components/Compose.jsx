@@ -628,6 +628,11 @@ export function Compose({ open, initial, user, onClose, onSent }) {
               setBodyHtml(html);
               setBodyText(text);
             }}
+            onFiles={(files) => {
+              dragDepth.current = 0;
+              setDragOver(false);
+              uploadFiles(files);
+            }}
           />
           {atts.length > 0 && (
             <div className="em-pending-atts">

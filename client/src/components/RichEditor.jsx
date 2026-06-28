@@ -39,7 +39,21 @@ function ToolButton({ icon, label, active, onClick, disabled }) {
   );
 }
 
-export function RichEditor({ value, onUpdate, placeholder, onEditorReady }) {
+function filesFrom(dt) {
+  const out = [];
+  for (const f of dt?.files || []) out.push(f);
+  if (!out.length) {
+    for (const it of dt?.items || []) {
+      if (it.kind === "file") {
+        const f = it.getAsFile();
+        if (f) out.push(f);
+      }
+    }
+  }
+  return out;
+}
+
+export function RichEditor({ value, onUpdate, placeholder, onEditorReady, onFiles }) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: false }),
@@ -48,6 +62,26 @@ export function RichEditor({ value, onUpdate, placeholder, onEditorReady }) {
     ],
     content: value || "",
     onUpdate: ({ editor: ed }) => onUpdate?.({ html: ed.getHTML(), text: ed.getText() }),
+    editorProps: {
+      handlePaste: (_view, event) => {
+        if (!onFiles) return false;
+        const files = filesFrom(event.clipboardData);
+        if (!files.length) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        onFiles(files);
+        return true;
+      },
+      handleDrop: (_view, event, _slice, moved) => {
+        if (moved || !onFiles) return false;
+        const files = filesFrom(event.dataTransfer);
+        if (!files.length) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        onFiles(files);
+        return true;
+      },
+    },
   });
 
   useEffect(() => {
