@@ -2017,6 +2017,44 @@ html[data-theme="sakura"] {
   cursor: pointer;
 }
 
+.em-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--em-4);
+  background: rgba(0, 0, 0, 0.55);
+  animation: em-scrim-in 140ms var(--em-ease);
+}
+
+.em-modal-panel {
+  width: 560px;
+  max-width: 94vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: var(--em-6);
+  border-radius: var(--em-radius-lg);
+  background: var(--color-kumo-base);
+  border: 1px solid var(--color-kumo-line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  animation: em-panel-in 180ms var(--em-ease);
+}
+
+@keyframes em-scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes em-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
 .em-setup-progress {
   font-size: 0.78rem;
   font-weight: 600;

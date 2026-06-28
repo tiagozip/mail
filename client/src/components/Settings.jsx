@@ -30,6 +30,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
@@ -952,11 +953,46 @@ function DomainSetupModal({ open, existing, onClose, onDone }) {
     }
   }
 
-  return (
-    <DialogRoot open={open} onOpenChange={(o) => !o && onClose()}>
-      <Dialog className="em-setup-dialog" style={{ width: 560, maxWidth: "94vw", padding: "var(--em-6)" }}>
+  useEffect(() => {
+    if (!open || step !== 3 || !created) return;
+    let cancelled = false;
+    let timer;
+    let attempts = 0;
+    async function poll() {
+      if (cancelled) return;
+      setBusy(true);
+      try {
+        const r = await api.verifyDomain(created.id);
+        if (cancelled) return;
+        setResult(r);
+        if (r.verified && r.sendVerified) {
+          setBusy(false);
+          return;
+        }
+      } catch {}
+      if (cancelled) return;
+      setBusy(false);
+      attempts += 1;
+      if (attempts < 10) timer = setTimeout(poll, 7000);
+    }
+    poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open, step, created]);
+
+  if (!open) return null;
+  return createPortal(
+    <div
+      className="em-modal-scrim"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="em-modal-panel em-setup-dialog">
         <div className="em-label-head">
-          <Dialog.Title className="em-label-title">Add a domain</Dialog.Title>
+          <h2 className="em-label-title">Add a domain</h2>
           <Button size="sm" variant="ghost" shape="square" aria-label="Close" icon={X} onClick={onClose} />
         </div>
         <div className="em-setup-progress">Step {step} of 3</div>
@@ -1021,21 +1057,21 @@ function DomainSetupModal({ open, existing, onClose, onDone }) {
         {step === 3 && (
           <div className="em-setup-body">
             <p className="em-card-sub">
-              Verify <b>{dom}</b>. DNS can take a few minutes to propagate after you add the records.
+              Checking <b>{dom}</b> automatically. DNS can take a few minutes to propagate, you can
+              leave this open.
             </p>
-            {result && (
-              <div className="em-dns-check">
-                <span className={result.verified ? "is-ok" : "is-bad"}>
-                  {result.verified ? "✓" : "✗"} Receiving (MX)
-                </span>
-                <span className={result.sending?.spf ? "is-ok" : "is-bad"}>
-                  {result.sending?.spf ? "✓" : "✗"} SPF
-                </span>
-                <span className={result.sending?.dkim ? "is-ok" : "is-bad"}>
-                  {result.sending?.dkim ? "✓" : "✗"} DKIM
-                </span>
-              </div>
-            )}
+            <div className="em-dns-check">
+              <span className={result?.verified ? "is-ok" : "is-bad"}>
+                {result?.verified ? "✓" : busy && !result ? "•" : "✗"} Receiving (MX)
+              </span>
+              <span className={result?.sending?.spf ? "is-ok" : "is-bad"}>
+                {result?.sending?.spf ? "✓" : busy && !result ? "•" : "✗"} SPF
+              </span>
+              <span className={result?.sending?.dkim ? "is-ok" : "is-bad"}>
+                {result?.sending?.dkim ? "✓" : busy && !result ? "•" : "✗"} DKIM
+              </span>
+            </div>
+            {busy && !ready && <div className="em-setup-note">Checking DNS…</div>}
             {ready && <div className="em-setup-success">Your domain is ready to send and receive.</div>}
             <div className="em-label-foot">
               <Button variant="ghost" onClick={() => setStep(2)}>
@@ -1053,14 +1089,15 @@ function DomainSetupModal({ open, existing, onClose, onDone }) {
                 </Button>
               ) : (
                 <Button variant="primary" loading={busy} onClick={verify}>
-                  {result ? "Check again" : "Verify"}
+                  Check now
                 </Button>
               )}
             </div>
           </div>
         )}
-      </Dialog>
-    </DialogRoot>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
