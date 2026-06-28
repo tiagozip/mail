@@ -13,15 +13,19 @@ import {
   Bell,
   Camera,
   Check,
+  CheckCircle,
   Code,
   Funnel,
+  Globe,
   Lock,
   LockKey,
   Palette,
   Plus,
+  ShieldCheck,
   Star,
   Trash,
   User,
+  Warning,
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
@@ -870,10 +874,240 @@ function Notifications() {
   );
 }
 
+function Domains() {
+  const [domains, setDomains] = useState(null);
+  const [directory, setDirectory] = useState([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [verifying, setVerifying] = useState("");
+  const [lookups, setLookups] = useState({});
+
+  useEffect(() => {
+    api
+      .domains()
+      .then((d) => setDomains(d.domains || []))
+      .catch(notifyError);
+    api
+      .publicDomains()
+      .then((d) => setDirectory(d.domains || []))
+      .catch(() => {});
+  }, []);
+
+  async function add(e) {
+    e.preventDefault();
+    const d = input.trim().toLowerCase();
+    if (!d) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.addDomain(d);
+      setInput("");
+      const res = await api.domains();
+      setDomains(res.domains || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verify(id) {
+    setVerifying(id);
+    try {
+      const res = await api.verifyDomain(id);
+      setLookups((p) => ({ ...p, [id]: res }));
+      setDomains((p) =>
+        (p || []).map((d) =>
+          d.id === id ? { ...d, verified: res.verified, sendVerified: res.sendVerified } : d,
+        ),
+      );
+      if (res.verified && res.sendVerified)
+        notify("Domain ready", "This domain can send and receive mail.", "success");
+      else if (res.verified)
+        notify("Receiving verified", "Set up Email Sending to send from it too.", "success");
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      setVerifying("");
+    }
+  }
+
+  async function togglePublic(d, v) {
+    setDomains((p) => (p || []).map((x) => (x.id === d.id ? { ...x, public: v } : x)));
+    try {
+      await api.setDomainPublic(d.id, v);
+    } catch (err) {
+      setDomains((p) => (p || []).map((x) => (x.id === d.id ? { ...x, public: !v } : x)));
+      notifyError(err);
+    }
+  }
+
+  async function remove(id) {
+    try {
+      await api.removeDomain(id);
+      setDomains((p) => (p || []).filter((d) => d.id !== id));
+    } catch (err) {
+      notifyError(err);
+    }
+  }
+
+  return (
+    <>
+      <div className="em-card">
+        <div className="em-card-head">
+          <h2 className="em-card-title">Your domains</h2>
+          <p className="em-card-sub">
+            Add your own domain to send and receive mail on it. Domains are private to you. Publish
+            one to list it in the public directory so other people here can make addresses on it too.
+          </p>
+        </div>
+
+        {!domains ? (
+          <Loader size="sm" />
+        ) : (
+          <div className="em-alias-list">
+            {domains.map((d) => (
+              <div key={d.id} className="em-domain-row">
+                <div className="em-domain-main">
+                  <span className="em-alias-addr">{d.domain}</span>
+                  {d.verified ? (
+                    <Badge variant="green" icon={CheckCircle}>
+                      receiving
+                    </Badge>
+                  ) : (
+                    <Badge variant="neutral" icon={Warning}>
+                      no receiving
+                    </Badge>
+                  )}
+                  {d.sendVerified ? (
+                    <Badge variant="green" icon={CheckCircle}>
+                      sending
+                    </Badge>
+                  ) : (
+                    <Badge variant="neutral" icon={Warning}>
+                      no sending
+                    </Badge>
+                  )}
+                  {d.builtIn && <Badge variant="purple">built-in</Badge>}
+                </div>
+                {!d.builtIn && (
+                  <div className="em-alias-actions">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      icon={ShieldCheck}
+                      loading={verifying === d.id}
+                      onClick={() => verify(d.id)}
+                    >
+                      Verify
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      shape="square"
+                      aria-label="Remove domain"
+                      icon={Trash}
+                      onClick={() => remove(d.id)}
+                    />
+                  </div>
+                )}
+                {!d.builtIn && d.verified && (
+                  <label className="em-domain-public">
+                    <Switch
+                      aria-label="List in public directory"
+                      checked={!!d.public}
+                      onCheckedChange={(v) => togglePublic(d, v)}
+                    />
+                    <span>List in public directory</span>
+                  </label>
+                )}
+                {lookups[d.id] && (
+                  <div className="em-domain-lookup">
+                    <div className="em-dns-check">
+                      <span className={lookups[d.id].verified ? "is-ok" : "is-bad"}>
+                        {lookups[d.id].verified ? "✓" : "✗"} Receiving (MX, Cloudflare Email Routing)
+                      </span>
+                      <span className={lookups[d.id].sending?.spf ? "is-ok" : "is-bad"}>
+                        {lookups[d.id].sending?.spf ? "✓" : "✗"} SPF record
+                      </span>
+                      <span className={lookups[d.id].sending?.dkim ? "is-ok" : "is-bad"}>
+                        {lookups[d.id].sending?.dkim ? "✓" : "✗"} DKIM record
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form className="em-alias-add" onSubmit={add}>
+          <div className="em-alias-input">
+            <input
+              aria-label="New domain"
+              placeholder="example.com"
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setError("");
+              }}
+            />
+          </div>
+          <Button type="submit" variant="outline" icon={Plus} loading={busy}>
+            Add domain
+          </Button>
+        </form>
+        {error && (
+          <div className="em-form-error" style={{ marginTop: 8 }}>
+            {error}
+          </div>
+        )}
+
+        <div className="em-dns-steps">
+          <div className="em-dns-steps-title">Setup</div>
+          <ol>
+            <li>The domain must be on the Cloudflare account that runs this mail server.</li>
+            <li>
+              Enable Email Routing (adds the MX records) and point the catch-all at this worker, then
+              enable Email Sending (adds SPF + DKIM).
+            </li>
+            <li>
+              Press Verify. Receiving passes once the MX resolves, sending once SPF and DKIM resolve.
+            </li>
+          </ol>
+        </div>
+      </div>
+
+      {directory.length > 0 && (
+        <div className="em-card">
+          <div className="em-card-head">
+            <h2 className="em-card-title">Public directory</h2>
+            <p className="em-card-sub">
+              Domains other people have published. You can make addresses on these too.
+            </p>
+          </div>
+          <div className="em-alias-list">
+            {directory.map((d) => (
+              <div key={d} className="em-domain-row">
+                <span className="em-alias-addr">{d}</span>
+                <Badge variant="purple" icon={Globe}>
+                  public
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 const SECTIONS = [
   { id: "account", label: "Account", icon: User },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "domains", label: "Domains", icon: Globe },
   { id: "filters", label: "Filters", icon: Funnel },
   { id: "encryption", label: "Encryption", icon: LockKey },
   { id: "developer", label: "Developer", icon: Code },
@@ -1169,6 +1403,8 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
           )}
 
           {section === "notifications" && <Notifications />}
+
+          {section === "domains" && <Domains />}
 
           {section === "filters" && (
             <>

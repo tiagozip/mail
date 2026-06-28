@@ -76,6 +76,21 @@ async function resolveRecipient(env, to) {
     if (!direct.enabled) return { disabled: true };
     return { userId: direct.user_id, address: addr };
   }
+  const domain = (addr.split("@")[1] || "").toLowerCase();
+  if (domain && domain !== String(env.MAIL_DOMAIN || "").toLowerCase()) {
+    const dom = await env.DB.prepare(
+      "SELECT owner_id FROM domains WHERE domain = ? AND verified = 1",
+    )
+      .bind(domain)
+      .first();
+    if (!dom?.owner_id) return {};
+    const owner = await env.DB.prepare(
+      "SELECT id FROM users WHERE id = ? AND json_extract(settings_json, '$.catchAll') = 1",
+    )
+      .bind(dom.owner_id)
+      .first();
+    return owner?.id ? { userId: owner.id } : {};
+  }
   const catchAll = await env.DB.prepare(
     "SELECT id FROM users WHERE is_admin = 1 AND json_extract(settings_json, '$.catchAll') = 1 ORDER BY created_at LIMIT 1",
   ).first();

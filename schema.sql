@@ -140,6 +140,8 @@ CREATE TABLE IF NOT EXISTS domains (
   domain TEXT UNIQUE NOT NULL,
   verified INTEGER NOT NULL DEFAULT 0,
   send_verified INTEGER NOT NULL DEFAULT 0,
+  public INTEGER NOT NULL DEFAULT 0,
+  owner_id TEXT,
   created_at INTEGER NOT NULL,
   added_by TEXT
 );

@@ -280,9 +280,13 @@ async function lookupMx(domain) {
   return { records, routesToCloudflare };
 }
 
-async function verifiedDomainSet(env) {
+async function verifiedDomainSet(env, userId) {
   const set = new Set([String(env.MAIL_DOMAIN || "").toLowerCase()]);
-  const res = await env.DB.prepare("SELECT domain FROM domains WHERE verified = 1").all();
+  const res = await env.DB.prepare(
+    "SELECT domain FROM domains WHERE verified = 1 AND (public = 1 OR owner_id = ?)",
+  )
+    .bind(userId || "")
+    .all();
   for (const r of res.results || []) set.add(String(r.domain).toLowerCase());
   set.delete("");
   return set;
@@ -893,7 +897,7 @@ export async function handleApi(request, env, ctx) {
   }
 
   if (path === "/api/alias-domains" && method === "GET") {
-    const set = await verifiedDomainSet(env);
+    const set = await verifiedDomainSet(env, user.id);
     const builtIn = String(env.MAIL_DOMAIN || "").toLowerCase();
     const domains = [...set].sort((a, b) =>
       a === builtIn ? -1 : b === builtIn ? 1 : a.localeCompare(b),
@@ -924,7 +928,7 @@ export async function handleApi(request, env, ctx) {
     const domain = String(b.domain || env.MAIL_DOMAIN)
       .trim()
       .toLowerCase();
-    const allowed = await verifiedDomainSet(env);
+    const allowed = await verifiedDomainSet(env, user.id);
     if (!allowed.has(domain)) return error(400, "unknown or unverified domain");
     const count = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM addresses WHERE user_id = ? AND kind = 'hidden'",
@@ -1010,7 +1014,7 @@ export async function handleApi(request, env, ctx) {
     const domain = String(b.domain || env.MAIL_DOMAIN)
       .trim()
       .toLowerCase();
-    const allowed = await verifiedDomainSet(env);
+    const allowed = await verifiedDomainSet(env, user.id);
     if (!allowed.has(domain)) return error(400, "unknown or unverified domain");
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?")
       .bind(user.id)
@@ -1267,15 +1271,17 @@ export async function handleApi(request, env, ctx) {
   }
 
   if (path === "/api/domains" && method === "GET") {
-    if (!user.is_admin) return error(403, "admin only");
     const res = await env.DB.prepare(
-      "SELECT id, domain, verified, send_verified, created_at, added_by FROM domains ORDER BY created_at DESC",
-    ).all();
+      "SELECT id, domain, verified, send_verified, public, created_at FROM domains WHERE owner_id = ? ORDER BY created_at DESC",
+    )
+      .bind(user.id)
+      .all();
     const custom = (res.results || []).map((r) => ({
       id: r.id,
       domain: r.domain,
       verified: !!r.verified,
       sendVerified: !!r.send_verified,
+      public: !!r.public,
       createdAt: r.created_at,
       builtIn: false,
     }));
@@ -1284,13 +1290,21 @@ export async function handleApi(request, env, ctx) {
       domain: String(env.MAIL_DOMAIN || "").toLowerCase(),
       verified: true,
       sendVerified: true,
+      public: true,
       createdAt: null,
       builtIn: true,
     };
     return json({ domains: [builtIn, ...custom] });
   }
+  if (path === "/api/domains/public" && method === "GET") {
+    const res = await env.DB.prepare(
+      "SELECT domain FROM domains WHERE public = 1 AND verified = 1 AND owner_id != ? ORDER BY domain",
+    )
+      .bind(user.id)
+      .all();
+    return json({ domains: (res.results || []).map((r) => r.domain) });
+  }
   if (path === "/api/domains" && method === "POST") {
-    if (!user.is_admin) return error(403, "admin only");
     const b = await readJson(request);
     const domain = String(b.domain || "")
       .trim()
@@ -1301,19 +1315,18 @@ export async function handleApi(request, env, ctx) {
     const exists = await env.DB.prepare("SELECT id FROM domains WHERE domain = ?")
       .bind(domain)
       .first();
-    if (exists) return error(409, "domain already added");
+    if (exists) return error(409, "that domain is already taken");
     const id = uuid();
     await env.DB.prepare(
-      "INSERT INTO domains (id, domain, verified, created_at, added_by) VALUES (?,?,0,?,?)",
+      "INSERT INTO domains (id, domain, verified, owner_id, created_at, added_by) VALUES (?,?,0,?,?,?)",
     )
-      .bind(id, domain, now(), user.id)
+      .bind(id, domain, user.id, now(), user.id)
       .run();
-    return json({ id, domain, verified: false, createdAt: now(), builtIn: false });
+    return json({ id, domain, verified: false, public: false, createdAt: now(), builtIn: false });
   }
   if ((m = path.match(/^\/api\/domains\/([\w-]+)\/verify$/)) && method === "POST") {
-    if (!user.is_admin) return error(403, "admin only");
-    const row = await env.DB.prepare("SELECT id, domain FROM domains WHERE id = ?")
-      .bind(m[1])
+    const row = await env.DB.prepare("SELECT id, domain FROM domains WHERE id = ? AND owner_id = ?")
+      .bind(m[1], user.id)
       .first();
     if (!row) return error(404, "not found");
     let lookup;
@@ -1334,9 +1347,26 @@ export async function handleApi(request, env, ctx) {
       records: lookup.records,
     });
   }
+  if ((m = path.match(/^\/api\/domains\/([\w-]+)$/)) && method === "PATCH") {
+    const row = await env.DB.prepare(
+      "SELECT id, verified FROM domains WHERE id = ? AND owner_id = ?",
+    )
+      .bind(m[1], user.id)
+      .first();
+    if (!row) return error(404, "not found");
+    const b = await readJson(request);
+    if (typeof b.public === "boolean") {
+      if (b.public && !row.verified) return error(400, "verify the domain before publishing it");
+      await env.DB.prepare("UPDATE domains SET public = ? WHERE id = ?")
+        .bind(b.public ? 1 : 0, row.id)
+        .run();
+    }
+    return json({ ok: true });
+  }
   if ((m = path.match(/^\/api\/domains\/([\w-]+)$/)) && method === "DELETE") {
-    if (!user.is_admin) return error(403, "admin only");
-    const row = await env.DB.prepare("SELECT domain FROM domains WHERE id = ?").bind(m[1]).first();
+    const row = await env.DB.prepare("SELECT domain FROM domains WHERE id = ? AND owner_id = ?")
+      .bind(m[1], user.id)
+      .first();
     if (!row) return error(404, "not found");
     const inUse = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE address LIKE ?")
       .bind(`%@${row.domain}`)

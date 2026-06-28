@@ -2008,6 +2008,16 @@ html[data-theme="sakura"] {
   font-variant-numeric: tabular-nums;
 }
 
+.em-domain-public {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  font-size: 0.82rem;
+  color: var(--text-color-kumo-subtle);
+  cursor: pointer;
+}
+
 .em-dns-check {
   display: flex;
   flex-direction: column;

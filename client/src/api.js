@@ -110,7 +110,9 @@ export const api = {
   adminUsers: () => req("GET", "/api/admin/users"),
 
   domains: () => req("GET", "/api/domains"),
+  publicDomains: () => req("GET", "/api/domains/public"),
   addDomain: (domain) => req("POST", "/api/domains", { domain }),
   verifyDomain: (id) => req("POST", `/api/domains/${id}/verify`),
+  setDomainPublic: (id, isPublic) => req("PATCH", `/api/domains/${id}`, { public: isPublic }),
   removeDomain: (id) => req("DELETE", `/api/domains/${id}`),
 };
