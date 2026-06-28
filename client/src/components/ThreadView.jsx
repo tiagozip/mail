@@ -641,18 +641,8 @@ export function ThreadView({ store, onReply, onForward, onBack }) {
   return (
     <div className="em-pane em-pane-reader">
       <div className="em-reader-topbar">
-        <Button size="sm" variant="ghost" icon={ArrowLeft} onClick={onBack}>
+        <Button className="em-reader-back" size="sm" variant="ghost" icon={ArrowLeft} onClick={onBack}>
           {backLabel}
-        </Button>
-        <div className="em-spacer" />
-        <Button size="sm" variant="ghost" icon={ArrowBendUpLeft} onClick={() => onReply(last, "reply")}>
-          Reply
-        </Button>
-        <Button size="sm" variant="ghost" icon={ArrowBendDoubleUpLeft} onClick={() => onReply(last, "replyAll")}>
-          Reply all
-        </Button>
-        <Button size="sm" variant="ghost" icon={ArrowRight} onClick={() => onForward(last)}>
-          Forward
         </Button>
         <div className="em-spacer" />
         <Tooltip content={headerItem.isStarred ? "Unstar" : "Star"}>

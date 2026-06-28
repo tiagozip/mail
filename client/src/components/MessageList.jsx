@@ -117,7 +117,7 @@ function BulkBar({ store }) {
   );
 }
 
-export function MessageList({ store, searchRef, onMenu, onCompose }) {
+export function MessageList({ store, searchRef, onMenu, onCompose, floatHidden }) {
   const {
     view,
     goView,
@@ -280,7 +280,7 @@ export function MessageList({ store, searchRef, onMenu, onCompose }) {
         )}
       </div>
 
-      <div className="em-floatbar">
+      <div className={`em-floatbar${floatHidden ? " is-hidden" : ""}`}>
         <form className="em-floatbar-search" onSubmit={onSearch}>
           <MagnifyingGlass className="em-floatbar-icon" size={18} />
           <input

@@ -311,6 +311,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
                 searchRef={searchRef}
                 onMenu={() => setSidebarOpen(true)}
                 onCompose={() => openCompose()}
+                floatHidden={composeOpen || settingsOpen || !!e2ePrompt}
               />
             )}
           </div>
