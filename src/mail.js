@@ -90,11 +90,15 @@ export async function handleEmail(message, env, ctx) {
   const parsed = await PostalMime.parse(raw);
   const messageId = uuid();
   const user = await env.DB.prepare(
-    "SELECT storage_used, pgp_enabled, pgp_public_key FROM users WHERE id = ?",
+    "SELECT storage_used, pgp_enabled, pgp_public_key, settings_json FROM users WHERE id = ?",
   )
     .bind(userId)
     .first();
   let used = user?.storage_used || 0;
+  let aiSpamEnabled = true;
+  try {
+    aiSpamEnabled = JSON.parse(user?.settings_json || "{}").aiSpam !== false;
+  } catch {}
 
   const rawText = new TextDecoder().decode(raw);
   const alreadyPgp =
@@ -245,7 +249,7 @@ export async function handleEmail(message, env, ctx) {
       body: bodyText,
     });
 
-    if (folder === "inbox") {
+    if (folder === "inbox" && aiSpamEnabled) {
       const verdict = await classifySpam(env, {
         from: `${fromName} <${fromAddr}>`,
         subject: parsed.subject || "",

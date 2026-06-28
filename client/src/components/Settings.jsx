@@ -720,6 +720,7 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
   const [signature, setSignature] = useState(user.signature || "");
   const [imagesDefault, setImagesDefault] = useState(!!user.settings?.imagesDefault);
   const [catchAll, setCatchAll] = useState(!!user.settings?.catchAll);
+  const [aiSpam, setAiSpam] = useState(user.settings?.aiSpam !== false);
   const [busy, setBusy] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [section, setSection] = useState("account");
@@ -784,6 +785,21 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
       setUser(data.user);
     } catch (e) {
       setCatchAll(!v);
+      notifyError(e);
+    }
+  }
+
+  async function saveAiSpam(v) {
+    setAiSpam(v);
+    try {
+      const data = await api.saveSettings({
+        displayName,
+        signature,
+        settings: { ...user.settings, theme: mode, palette, imagesDefault, catchAll, aiSpam: v },
+      });
+      setUser(data.user);
+    } catch (e) {
+      setAiSpam(!v);
       notifyError(e);
     }
   }
@@ -988,7 +1004,26 @@ export function Settings({ open, user, setUser, mode, onSetMode, palette, onSetP
 
           {section === "notifications" && <Notifications />}
 
-          {section === "filters" && <Filters />}
+          {section === "filters" && (
+            <>
+              <div className="em-card">
+                <div className="em-card-head">
+                  <h2 className="em-card-title">Spam filter</h2>
+                </div>
+                <div className="em-toggle-row">
+                  <div className="em-toggle-copy">
+                    <div className="em-toggle-title">Smart spam detection</div>
+                    <div className="em-toggle-sub">
+                      Automatically move scams, phishing, and junk to the spam folder. Your data is
+                      not stored or used for training.
+                    </div>
+                  </div>
+                  <Switch aria-label="Smart spam detection" checked={aiSpam} onCheckedChange={saveAiSpam} />
+                </div>
+              </div>
+              <Filters />
+            </>
+          )}
 
           {section === "encryption" && <Encryption user={user} setUser={setUser} />}
 
