@@ -165,24 +165,38 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
   useEffect(() => {
     let cancelled = false;
     let tries = 0;
-    async function run() {
-      if (cancelled) return;
-      if (!pgp.getUnlocked()) {
-        if (tries++ < 6) setTimeout(run, 700);
-        return;
-      }
+
+    async function seedFromCache() {
       const pending = messages.filter((m) => m.pgp && decSnippets[m.id] === undefined);
       if (!pending.length) return;
       const stored = await cache.getSnippets(pending.map((m) => m.id));
+      const updates = {};
+      for (const id of Object.keys(stored)) {
+        try {
+          updates[id] = await pgp.localDecrypt(stored[id]);
+        } catch {}
+      }
+      if (!cancelled && Object.keys(updates).length) {
+        setDecSnippets((prev) => ({ ...prev, ...updates }));
+      }
+    }
+
+    async function decryptRest() {
+      if (cancelled) return;
+      if (!pgp.getUnlocked()) {
+        if (tries++ < 8) setTimeout(decryptRest, 600);
+        return;
+      }
+      const candidates = messages.filter((m) => m.pgp && decSnippets[m.id] === undefined);
+      if (!candidates.length) return;
+      const stored = await cache.getSnippets(candidates.map((m) => m.id));
+      const pending = candidates.filter((m) => !stored[m.id]);
+      if (!pending.length) return;
       const updates = {};
       const toPersist = [];
       for (const m of pending) {
         if (cancelled) return;
         try {
-          if (stored[m.id]) {
-            updates[m.id] = await pgp.localDecrypt(stored[m.id]);
-            continue;
-          }
           let text;
           if (m.snippetEnc) {
             text = await pgp.decryptArmored(m.snippetEnc);
@@ -207,7 +221,9 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
         } catch {}
       }
     }
-    run();
+
+    seedFromCache();
+    decryptRest();
     return () => {
       cancelled = true;
     };
