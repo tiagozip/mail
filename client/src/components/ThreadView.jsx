@@ -19,6 +19,7 @@ import {
   Image,
   Lock,
   LockKeyOpen,
+  Paperclip,
   PaperPlaneTilt,
   Printer,
   ShieldCheck,
@@ -26,6 +27,7 @@ import {
   Trash,
   Tray,
   Warning,
+  X,
 } from "@phosphor-icons/react";
 import { sanitize } from "lettersanitizer";
 import { useEffect, useRef, useState } from "react";
@@ -426,7 +428,28 @@ function QuickReply({ store, last, onReply, onForward }) {
   const [text, setText] = useState("");
   const [html, setHtml] = useState("");
   const [sending, setSending] = useState(false);
+  const [atts, setAtts] = useState([]);
   const editorRef = useRef(null);
+  const fileInput = useRef(null);
+
+  async function uploadFiles(files) {
+    for (const file of files) {
+      const tmpId = `pending-${Math.random()}`;
+      setAtts((p) => [...p, { id: tmpId, filename: file.name, size: file.size, pending: true }]);
+      try {
+        const d = await api.uploadAttachment(file);
+        setAtts((p) => p.map((a) => (a.id === tmpId ? d : a)));
+      } catch (err) {
+        setAtts((p) => p.filter((a) => a.id !== tmpId));
+        notifyError(err);
+      }
+    }
+  }
+
+  async function removeAtt(att) {
+    setAtts((p) => p.filter((a) => a.id !== att.id));
+    if (!att.pending) await api.deleteAttachment(att.id).catch(() => {});
+  }
 
   const selves = new Set(
     (user?.addresses?.map((a) => a.address) || [user?.address])
@@ -442,7 +465,7 @@ function QuickReply({ store, last, onReply, onForward }) {
 
   async function send() {
     const body = text.trim();
-    if (!body || !replyTo) return;
+    if ((!body && !atts.length) || !replyTo) return;
     setSending(true);
     const subj = lastExternalSender.subject || "";
     try {
@@ -454,9 +477,11 @@ function QuickReply({ store, last, onReply, onForward }) {
         html,
         inReplyTo: last.rfcMessageId,
         references: [...(last.references || []), last.rfcMessageId].filter(Boolean),
+        attachmentIds: atts.filter((a) => !a.pending).map((a) => a.id),
       });
       setText("");
       setHtml("");
+      setAtts([]);
       editorRef.current?.commands.clearContent();
       if (reloadThread) reloadThread(thread.threadId);
       else openMessage({ id: store.openId, threadId: thread.threadId });
@@ -478,6 +503,39 @@ function QuickReply({ store, last, onReply, onForward }) {
         onEditorReady={(ed) => {
           editorRef.current = ed;
         }}
+        onFiles={uploadFiles}
+      />
+      {atts.length > 0 && (
+        <div className="em-pending-atts">
+          {atts.map((a) => (
+            <div key={a.id} className="em-att-chip">
+              <span className="em-att-name">{a.filename}</span>
+              {a.pending ? (
+                <Loader size="sm" />
+              ) : (
+                <button
+                  type="button"
+                  className="em-att-dl"
+                  aria-label="Remove attachment"
+                  onClick={() => removeAtt(a)}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          const f = [...(e.target.files || [])];
+          e.target.value = "";
+          uploadFiles(f);
+        }}
       />
       <div className="em-quickreply-actions">
         <Button
@@ -485,10 +543,18 @@ function QuickReply({ store, last, onReply, onForward }) {
           variant="primary"
           icon={PaperPlaneTilt}
           loading={sending}
-          disabled={!text.trim() || !replyTo}
+          disabled={(!text.trim() && !atts.length) || !replyTo || atts.some((a) => a.pending)}
           onClick={send}
         >
           Send
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={Paperclip}
+          onClick={() => fileInput.current?.click()}
+        >
+          Attach
         </Button>
         <button type="button" className="em-quote-toggle" onClick={() => onReply(last, "replyAll")}>
           Reply all
