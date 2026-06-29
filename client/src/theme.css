@@ -552,6 +552,7 @@ html[data-theme="nord"] {
   height: 100%;
   overflow: hidden;
   background: var(--color-kumo-recessed);
+  border-top-left-radius: 12px;
 }
 
 .em-topbar {
@@ -559,10 +560,8 @@ html[data-theme="nord"] {
   align-items: center;
   gap: var(--em-2);
   padding: 0 var(--em-3);
-  border-bottom: 1px solid var(--color-kumo-line);
   height: 56px;
   flex: none;
-  background: var(--color-kumo-canvas);
 }
 
 .em-topbar-title {
@@ -2992,6 +2991,11 @@ html[data-theme="nord"] {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .em-table th,

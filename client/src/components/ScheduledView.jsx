@@ -47,7 +47,7 @@ export function ScheduledModal({ open, onClose }) {
           <Button size="sm" variant="ghost" shape="square" aria-label="Close" icon={X} onClick={onClose} />
         </div>
         <p className="em-card-sub">
-          Messages waiting to be sent later. Cancel one to stop it from going out.
+          Messages waiting to be sent later.
         </p>
         {!sends ? (
           <Loader size="sm" />

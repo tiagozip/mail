@@ -15,6 +15,7 @@ import {
   Trash,
   Tray,
   Warning,
+  UserCircleIcon
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import { FOLDER_LABELS, initials, monoColor } from "../util.js";
@@ -158,6 +159,9 @@ export function MailSidebar({
               </DropdownMenu.Item>
             )}
             <DropdownMenu.Separator />
+            <DropdownMenu.LinkItem href="https://id.estrogen.delivery" icon={UserCircleIcon}>
+              My hrtID
+            </DropdownMenu.LinkItem>
             <DropdownMenu.Item icon={SignOut} variant="danger" onClick={onSignOut}>
               Sign out
             </DropdownMenu.Item>

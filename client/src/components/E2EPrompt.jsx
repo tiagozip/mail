@@ -71,9 +71,8 @@ export function E2EPrompt({ user, setUser, onClose }) {
         </div>
         <Dialog.Title className="em-e2e-title">Encrypt your inbox</Dialog.Title>
         <p className="em-e2e-copy">
-          Encryption is on by default here. New mail is encrypted to your key the moment it arrives,
-          so only you can read it, and your passphrase never leaves this device. Pick something
-          you'll remember, if you lose it, your encrypted mail can't be recovered.
+          New mail is encrypted to your key the moment it arrives, so only you can read it. Pick
+          something you'll remember - if you lose it, your encrypted mail can't be recovered.
         </p>
         <form className="em-e2e-form" onSubmit={enable}>
           <Input
