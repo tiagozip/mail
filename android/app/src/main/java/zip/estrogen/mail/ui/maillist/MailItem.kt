@@ -33,11 +33,20 @@ data class MailItem(
 
     val preview: String
         get() = when {
-            pgp && decryptedPreview != null -> decryptedPreview
-            pgp -> "Encrypted message"
-            else -> snippet?.takeIf { it.isNotBlank() } ?: ""
+            pgp && decryptedPreview != null -> stripHtml(decryptedPreview)
+            pgp -> ""
+            else -> snippet?.takeIf { it.isNotBlank() }?.let(::stripHtml) ?: ""
         }
 }
+
+private val tagRegex = Regex("<[^>]*>")
+private val wsRegex = Regex("\\s+")
+
+fun stripHtml(text: String): String = text
+    .replace(tagRegex, " ")
+    .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&#39;", "'").replace("&quot;", "\"")
+    .replace(wsRegex, " ")
+    .trim()
 
 fun CachedMessage.toItem(decryptedPreview: String?): MailItem = MailItem(
     id = id,

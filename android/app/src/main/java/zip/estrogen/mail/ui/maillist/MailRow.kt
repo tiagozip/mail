@@ -119,10 +119,6 @@ fun MailRow(
             Spacer(Modifier.size(2.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (item.pgp) {
-                    Icon(Icons.Rounded.Lock, contentDescription = "Encrypted", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
-                    Spacer(Modifier.width(4.dp))
-                }
                 Text(
                     text = item.preview,
                     style = MaterialTheme.typography.bodySmall,
