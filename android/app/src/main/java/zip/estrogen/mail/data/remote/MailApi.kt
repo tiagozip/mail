@@ -22,7 +22,15 @@ import zip.estrogen.mail.data.model.ApiKeysResponse
 import zip.estrogen.mail.data.model.AttachmentUploadResponse
 import zip.estrogen.mail.data.model.AvatarResponse
 import zip.estrogen.mail.data.model.BulkBody
+import zip.estrogen.mail.data.model.ByodDomainBody
+import zip.estrogen.mail.data.model.ByodDomainResponse
 import zip.estrogen.mail.data.model.ContactsResponse
+import zip.estrogen.mail.data.model.DomainsResponse
+import zip.estrogen.mail.data.model.RelayHealthResponse
+import zip.estrogen.mail.data.model.RelayStatusResponse
+import zip.estrogen.mail.data.model.RotateRelayResponse
+import zip.estrogen.mail.data.model.SetupRelayBody
+import zip.estrogen.mail.data.model.SetupRelayResponse
 import zip.estrogen.mail.data.model.CreateAliasBody
 import zip.estrogen.mail.data.model.CreateHiddenAliasBody
 import zip.estrogen.mail.data.model.DraftBody
@@ -227,4 +235,22 @@ interface MailApi {
 
     @POST("api/threads/bulk")
     suspend fun threadsBulk(@Body body: ThreadsBulkBody): ThreadsBulkResponse
+
+    @GET("api/domains")
+    suspend fun domains(): DomainsResponse
+
+    @POST("api/domains/byod")
+    suspend fun addByodDomain(@Body body: ByodDomainBody): ByodDomainResponse
+
+    @POST("api/domains/{id}/relay")
+    suspend fun setupRelay(@Path("id") id: String, @Body body: SetupRelayBody): SetupRelayResponse
+
+    @GET("api/domains/{id}/relay-status")
+    suspend fun relayStatus(@Path("id") id: String): RelayStatusResponse
+
+    @POST("api/domains/{id}/relay-health")
+    suspend fun relayHealth(@Path("id") id: String): RelayHealthResponse
+
+    @POST("api/domains/{id}/relay/rotate")
+    suspend fun rotateRelay(@Path("id") id: String): RotateRelayResponse
 }

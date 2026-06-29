@@ -13,6 +13,7 @@ import zip.estrogen.mail.ui.compose.ComposeScreen
 import zip.estrogen.mail.ui.encryption.EncryptionScreen
 import zip.estrogen.mail.ui.compose.ComposePrefill
 import zip.estrogen.mail.ui.maillist.MailListScreen
+import zip.estrogen.mail.ui.byod.ByodScreen
 import zip.estrogen.mail.ui.scheduled.ScheduledScreen
 import zip.estrogen.mail.ui.settings.AliasesScreen
 import zip.estrogen.mail.ui.settings.AppearanceScreen
@@ -39,6 +40,7 @@ object Routes {
     const val NOTIFICATIONS = "notifications"
     const val SCHEDULED = "scheduled"
     const val KEYS = "keys"
+    const val BYOD = "byod"
 
     fun thread(threadId: String, messageId: String) =
         "thread/${Uri.encode(threadId)}/${Uri.encode(messageId)}"
@@ -129,6 +131,7 @@ fun AppNavHost(
                 onOpenNotifications = { navController.navigate(Routes.NOTIFICATIONS) },
                 onOpenScheduled = { navController.navigate(Routes.SCHEDULED) },
                 onOpenKeys = { navController.navigate(Routes.KEYS) },
+                onOpenByod = { navController.navigate(Routes.BYOD) },
                 onSignedOut = {
                     navController.navigate(Routes.SETUP) {
                         popUpTo(0) { inclusive = true }
@@ -151,5 +154,6 @@ fun AppNavHost(
         composable(Routes.NOTIFICATIONS) { NotificationsScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SCHEDULED) { ScheduledScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.KEYS) { KeysScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.BYOD) { ByodScreen(onBack = { navController.popBackStack() }) }
     }
 }

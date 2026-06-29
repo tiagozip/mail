@@ -20,7 +20,15 @@ import zip.estrogen.mail.data.model.ApiKeyBody
 import zip.estrogen.mail.data.model.AttachmentUploadResponse
 import zip.estrogen.mail.data.model.AvatarResponse
 import zip.estrogen.mail.data.model.BulkBody
+import zip.estrogen.mail.data.model.ByodDomainBody
+import zip.estrogen.mail.data.model.ByodDomainResponse
 import zip.estrogen.mail.data.model.Contact
+import zip.estrogen.mail.data.model.Domain
+import zip.estrogen.mail.data.model.RelayHealthResponse
+import zip.estrogen.mail.data.model.RelayStatusResponse
+import zip.estrogen.mail.data.model.RotateRelayResponse
+import zip.estrogen.mail.data.model.SetupRelayBody
+import zip.estrogen.mail.data.model.SetupRelayResponse
 import zip.estrogen.mail.data.model.CreateAliasBody
 import zip.estrogen.mail.data.model.CreateHiddenAliasBody
 import zip.estrogen.mail.data.model.DraftBody
@@ -306,4 +314,18 @@ class MailRepository(
 
     suspend fun cacheDecryptedSnippet(id: String, snippet: String?) =
         withContext(Dispatchers.IO) { messageDao.setDecryptedSnippet(id, snippet) }
+
+    suspend fun listDomains(): Result<List<Domain>> = call { it.domains().domains }
+
+    suspend fun addByodDomain(domain: String): Result<ByodDomainResponse> =
+        call { it.addByodDomain(ByodDomainBody(domain)) }
+
+    suspend fun setupRelay(id: String, relayUrl: String): Result<SetupRelayResponse> =
+        call { it.setupRelay(id, SetupRelayBody(relayUrl)) }
+
+    suspend fun relayStatus(id: String): Result<RelayStatusResponse> = call { it.relayStatus(id) }
+
+    suspend fun relayHealth(id: String): Result<RelayHealthResponse> = call { it.relayHealth(id) }
+
+    suspend fun rotateRelay(id: String): Result<RotateRelayResponse> = call { it.rotateRelay(id) }
 }

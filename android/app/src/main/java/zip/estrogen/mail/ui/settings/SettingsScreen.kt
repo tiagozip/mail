@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.AlternateEmail
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.FilterAlt
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
@@ -66,6 +67,7 @@ fun SettingsScreen(
     onOpenNotifications: () -> Unit = {},
     onOpenScheduled: () -> Unit = {},
     onOpenKeys: () -> Unit = {},
+    onOpenByod: () -> Unit = {},
     onSignedOut: () -> Unit
 ) {
     val viewModel = appViewModel<SettingsViewModel>()
@@ -131,6 +133,7 @@ fun SettingsScreen(
                     )
                     NavRow(Icons.Rounded.Palette, "Appearance", "Palette, dynamic color, dark mode", onOpenAppearance)
                     NavRow(Icons.Rounded.Notifications, "Notifications", "New mail alerts", onOpenNotifications)
+                    NavRow(Icons.Rounded.Dns, "Your domain", "Receive mail on a domain you own", onOpenByod)
                     NavRow(Icons.Rounded.Key, "API keys", "For scripts and integrations", onOpenKeys, divider = false)
                 }
             }

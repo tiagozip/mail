@@ -368,3 +368,68 @@ data class PgpResponse(
 data class PubkeyResponse(
     val publicKey: String? = null
 )
+
+@Serializable
+data class DomainsResponse(
+    val domains: List<Domain> = emptyList()
+)
+
+@Serializable
+data class Domain(
+    val id: String = "",
+    val domain: String = "",
+    val verified: Boolean = false,
+    val sendVerified: Boolean = false,
+    val public: Boolean = false,
+    val publicPending: Boolean = false,
+    val builtIn: Boolean = false,
+    val isByod: Boolean = false,
+    val relayUrl: String = "",
+    val relayOk: Boolean? = null,
+    val relayCheckedAt: Long? = null,
+    val createdAt: Long? = null
+)
+
+@Serializable
+data class ByodDomainBody(val domain: String)
+
+@Serializable
+data class ByodDomainResponse(
+    val id: String = "",
+    val domain: String = "",
+    val relayConfig: String = "",
+    val deployUrl: String = "",
+    val relayUrl: String = "",
+    val verified: Boolean = false
+)
+
+@Serializable
+data class SetupRelayBody(val relayUrl: String)
+
+@Serializable
+data class SetupRelayResponse(
+    val ok: Boolean = false,
+    val verified: Boolean = false,
+    val probing: Boolean = false
+)
+
+@Serializable
+data class RelayStatusResponse(
+    val verified: Boolean = false,
+    val sendVerified: Boolean = false
+)
+
+@Serializable
+data class RelayHealthResponse(
+    val ok: Boolean = false,
+    val error: String? = null,
+    val checkedAt: Long? = null
+)
+
+@Serializable
+data class RotateRelayResponse(
+    val id: String = "",
+    val domain: String = "",
+    val relayConfig: String = "",
+    val deployUrl: String = ""
+)
