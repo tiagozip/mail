@@ -189,7 +189,12 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
                 val full = repository.loadMessage(item.id).getOrNull() ?: continue
                 val body = full.bodyText ?: continue
                 val plain = repository.pgp.decrypt(body).getOrNull() ?: continue
-                val preview = plain.replace('\n', ' ').trim().take(140)
+                val preview = plain
+                    .replace(Regex("<[^>]*>"), " ")
+                    .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                    .take(140)
                 repository.cacheDecryptedSnippet(item.id, SnippetCipher.encrypt(preview))
             }
         }
