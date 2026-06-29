@@ -119,6 +119,8 @@ dependencies {
 
     implementation("org.jsoup:jsoup:1.18.1")
 
+    implementation("com.mohamedrejeb.richeditor:richeditor-compose:1.0.0-rc13")
+
     implementation("org.pgpainless:pgpainless-core:1.6.8")
 
     val roomVersion = "2.7.1"

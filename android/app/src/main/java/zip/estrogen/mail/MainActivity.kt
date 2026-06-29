@@ -76,7 +76,11 @@ class MainActivity : FragmentActivity() {
 
     private fun consumeAuthIntent(intent: Intent?) {
         val data = intent?.data ?: return
-        if (data.scheme != "zip.estrogen.mail" || data.host != "auth") return
+        val isCustomScheme = data.scheme == "zip.estrogen.mail" && data.host == "auth"
+        val isAppLink = data.scheme == "https" &&
+            data.host == "mail.estrogen.delivery" &&
+            data.path?.startsWith("/app/auth") == true
+        if (!isCustomScheme && !isAppLink) return
         val code = data.getQueryParameter("code") ?: return
         (application as MailApp).completeNativeLogin(code)
     }

@@ -68,6 +68,8 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
     private var initialized = false
     private var suggestJob: Job? = null
     private var holdJob: Job? = null
+    private var pendingHtml: String = ""
+    private var pendingPlain: String = ""
 
     fun init(prefill: ComposePrefillData?) {
         if (initialized) return
@@ -118,7 +120,6 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
     fun onCc(value: String) = _state.update { it.copy(cc = value, encryptionReady = false) }
     fun onBcc(value: String) = _state.update { it.copy(bcc = value) }
     fun onSubject(value: String) = _state.update { it.copy(subject = value) }
-    fun onBody(value: String) = _state.update { it.copy(body = value) }
     fun toggleCcBcc() = _state.update { it.copy(showCcBcc = !it.showCcBcc) }
     fun setFrom(address: String) = _state.update { it.copy(from = address, showFromMenu = false) }
     fun setShowFromMenu(show: Boolean) = _state.update { it.copy(showFromMenu = show) }
@@ -215,7 +216,7 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
         }
     }
 
-    fun send() {
+    fun send(html: String, plainText: String) {
         val s = _state.value
         if (parseAddresses(s.to).isEmpty()) {
             _state.update { it.copy(error = "Add at least one recipient") }
@@ -225,6 +226,8 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
             _state.update { it.copy(error = "Wait for attachments to finish uploading") }
             return
         }
+        pendingHtml = html
+        pendingPlain = plainText
         if (s.undoSeconds > 0 && s.sendAt == null) {
             startHold(s.undoSeconds)
         } else {
@@ -254,14 +257,17 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
 
     private fun dispatch() {
         val s = _state.value
+        val html = pendingHtml
+        val plain = pendingPlain
         _state.update { it.copy(sending = true, error = null) }
         viewModelScope.launch {
             val recipients = parseAddresses(s.to)
-            val bodyWithSig = if (s.signature.isNotBlank()) "${s.body}\n\n--\n${s.signature}" else s.body
+            val plainWithSig = if (s.signature.isNotBlank()) "$plain\n\n--\n${s.signature}" else plain
+            val htmlWithSig = if (s.signature.isNotBlank()) "$html<br>--<br>${s.signature}" else html
             val attachmentIds = s.attachments.mapNotNull { it.remoteId }
 
             if (s.encrypt && s.canEncrypt) {
-                val ok = sendEncrypted(s, recipients, bodyWithSig, attachmentIds)
+                val ok = sendEncrypted(s, recipients, plainWithSig, attachmentIds)
                 if (!ok) return@launch
             } else {
                 val request = SendRequest(
@@ -269,7 +275,8 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
                     cc = parseAddresses(s.cc),
                     bcc = parseAddresses(s.bcc),
                     subject = s.subject.ifBlank { "(no subject)" },
-                    text = bodyWithSig,
+                    text = plainWithSig,
+                    html = htmlWithSig,
                     from = s.from.ifBlank { null },
                     inReplyTo = s.inReplyTo,
                     references = s.references,

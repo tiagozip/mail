@@ -17,16 +17,26 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.FormatBold
+import androidx.compose.material.icons.rounded.FormatItalic
+import androidx.compose.material.icons.rounded.FormatListBulleted
+import androidx.compose.material.icons.rounded.FormatListNumbered
+import androidx.compose.material.icons.rounded.FormatStrikethrough
+import androidx.compose.material.icons.rounded.FormatUnderlined
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -47,7 +57,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -62,9 +71,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mohamedrejeb.richeditor.model.rememberRichTextState
+import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
+import com.mohamedrejeb.richeditor.ui.material3.RichTextEditorDefaults
 import zip.estrogen.mail.ui.appViewModel
 import zip.estrogen.mail.ui.common.Avatar
 import zip.estrogen.mail.ui.common.fullTime
@@ -81,6 +96,17 @@ fun ComposeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     var showSchedule by remember { mutableStateOf(false) }
+    var showLinkDialog by remember { mutableStateOf(false) }
+    val richState = rememberRichTextState()
+    var seeded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.body) {
+        if (!seeded && state.body.isNotBlank()) {
+            seeded = true
+            val body = state.body
+            if (body.trimStart().startsWith("<")) richState.setHtml(body) else richState.setText(body)
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         uris.forEach { viewModel.addAttachment(context, it) }
@@ -116,7 +142,7 @@ fun ComposeScreen(
                     if (state.sending) {
                         CircularProgressIndicator(modifier = Modifier.size(22.dp).padding(end = 8.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                     } else {
-                        IconButton(onClick = viewModel::send, enabled = state.to.isNotBlank()) {
+                        IconButton(onClick = { viewModel.send(richState.toHtml(), richState.annotatedString.text) }, enabled = state.to.isNotBlank()) {
                             Icon(Icons.Rounded.Send, contentDescription = "Send", tint = if (state.to.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -204,15 +230,15 @@ fun ComposeScreen(
                 }
 
                 Spacer(Modifier.size(12.dp))
-                TextField(
-                    value = state.body,
-                    onValueChange = viewModel::onBody,
+                FormatToolbar(richState, onLink = { showLinkDialog = true })
+                Spacer(Modifier.size(8.dp))
+                RichTextEditor(
+                    state = richState,
                     placeholder = { Text("Write your message", style = MaterialTheme.typography.bodyLarge) },
                     textStyle = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
+                    colors = RichTextEditorDefaults.richTextEditorColors(
+                        containerColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent
                     )
@@ -233,6 +259,71 @@ fun ComposeScreen(
             onDismiss = { showSchedule = false }
         )
     }
+
+    if (showLinkDialog) {
+        LinkDialog(
+            onConfirm = { text, url -> richState.addLink(text.ifBlank { url }, url); showLinkDialog = false },
+            onDismiss = { showLinkDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun FormatToolbar(state: com.mohamedrejeb.richeditor.model.RichTextState, onLink: () -> Unit) {
+    val span = state.currentSpanStyle
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            ToolbarButton(Icons.Rounded.FormatBold, "Bold", span.fontWeight == FontWeight.Bold) {
+                state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold))
+            }
+            ToolbarButton(Icons.Rounded.FormatItalic, "Italic", span.fontStyle == FontStyle.Italic) {
+                state.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic))
+            }
+            ToolbarButton(Icons.Rounded.FormatUnderlined, "Underline", span.textDecoration == TextDecoration.Underline) {
+                state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+            }
+            ToolbarButton(Icons.Rounded.FormatStrikethrough, "Strikethrough", span.textDecoration == TextDecoration.LineThrough) {
+                state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.LineThrough))
+            }
+            ToolbarButton(Icons.Rounded.FormatListBulleted, "Bulleted list", state.isUnorderedList) {
+                state.toggleUnorderedList()
+            }
+            ToolbarButton(Icons.Rounded.FormatListNumbered, "Numbered list", state.isOrderedList) {
+                state.toggleOrderedList()
+            }
+            ToolbarButton(Icons.Rounded.Link, "Link", false, onLink)
+        }
+    }
+}
+
+@Composable
+private fun ToolbarButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun LinkDialog(onConfirm: (String, String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add link") },
+        text = {
+            Column {
+                OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Text") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.size(8.dp))
+                OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("https://") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(onClick = { if (url.isNotBlank()) onConfirm(text, url) }) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
