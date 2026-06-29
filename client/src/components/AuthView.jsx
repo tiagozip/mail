@@ -40,7 +40,7 @@ export function AuthView() {
           >
             Continue with hrtID
           </Button>
-          <p className="em-auth-foot">Passkey, password, or GitHub, your choice on hrtID.</p>
+          <p className="em-auth-foot">Fair use applies.</p>
         </div>
         <div className="em-auth-art" aria-hidden="true" />
       </div>

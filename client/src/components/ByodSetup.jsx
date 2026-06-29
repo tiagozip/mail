@@ -124,9 +124,7 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
         {step === 1 && (
           <div className="em-setup-body">
             <p className="em-card-sub">
-              Use a domain on <strong>your own</strong> Cloudflare account. You'll deploy a tiny
-              Worker with one click that bridges it to your mailbox here, for sending and receiving.
-              Nothing leaves your account.
+              Use Estrogen Mail with a domain on your own Cloudflare account using a simple worker.
             </p>
             <Input
               autoFocus
@@ -149,6 +147,9 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
           <div className="em-setup-body">
             <div className="em-byod-block">
               <div className="em-byod-block-title">1. Install the Worker</div>
+              <p className="em-byod-hint">
+                Don't change anything other than <code className="em-inline-code">RELAY_CONFIG</code>.
+              </p>
 
               <Button
                 variant="primary"
@@ -162,8 +163,7 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
             <div className="em-byod-block">
               <div className="em-byod-block-title">2. Use this as "RELAY_CONFIG"</div>
               <p className="em-byod-hint">
-                When Cloudflare asks you for <code className="em-inline-code">RELAY_CONFIG</code>,
-                copy this and paste it there.
+                Don't share this with anyone. It's a secret.
               </p>
               <ClipboardText
                 text={created.relayConfig}
