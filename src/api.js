@@ -227,7 +227,7 @@ async function oidcCallback(request, env) {
       await env.KV.put(`nativeauth:${oneTime}`, JSON.stringify({ userId: user.id }), {
         expirationTtl: 120,
       });
-      return redirectTo(`zip.estrogen.mail://auth?code=${oneTime}`, { "set-cookie": clearFlow });
+      return redirectTo(`${url.origin}/app/auth?code=${oneTime}`, { "set-cookie": clearFlow });
     }
     const headers = new Headers();
     headers.append("set-cookie", clearFlow);
