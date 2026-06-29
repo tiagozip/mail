@@ -9,6 +9,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import zip.estrogen.mail.MailApp
+import zip.estrogen.mail.util.MailNotifier
 import java.util.concurrent.TimeUnit
 
 class SyncWorker(
@@ -20,6 +21,11 @@ class SyncWorker(
         val app = applicationContext as? MailApp ?: return Result.success()
         if (!app.repository.isConfigured()) return Result.success()
         val outcome = app.repository.syncDelta()
+        if (outcome.isSuccess && app.repository.isNotificationsEnabled()) {
+            app.repository.pushLatest().onSuccess { latest ->
+                MailNotifier.notifyNewMail(applicationContext, latest.count, latest.title, latest.body)
+            }
+        }
         return if (outcome.isSuccess) Result.success() else Result.retry()
     }
 

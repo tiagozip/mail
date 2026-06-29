@@ -34,6 +34,7 @@ class SettingsStore(private val context: Context) {
     private val keyDarkMode = stringPreferencesKey("dark_mode")
     private val keyAmoled = stringPreferencesKey("amoled")
     private val keyPgpPublicKey = stringPreferencesKey("pgp_public_key")
+    private val keyNotifications = stringPreferencesKey("notifications")
 
     val credentials: Flow<Credentials?> = context.dataStore.data.map { prefs ->
         val legacyKey = prefs[keyApiKey]
@@ -61,6 +62,14 @@ class SettingsStore(private val context: Context) {
 
     val pgpPublicKey: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[keyPgpPublicKey]
+    }
+
+    val notificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[keyNotifications] == "true"
+    }
+
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[keyNotifications] = if (enabled) "true" else "false" }
     }
 
     suspend fun save(apiKey: String, baseUrl: String) {

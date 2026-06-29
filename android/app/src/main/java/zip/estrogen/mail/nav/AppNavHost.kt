@@ -13,7 +13,14 @@ import zip.estrogen.mail.ui.compose.ComposeScreen
 import zip.estrogen.mail.ui.encryption.EncryptionScreen
 import zip.estrogen.mail.ui.compose.ComposePrefill
 import zip.estrogen.mail.ui.maillist.MailListScreen
+import zip.estrogen.mail.ui.scheduled.ScheduledScreen
+import zip.estrogen.mail.ui.settings.AliasesScreen
 import zip.estrogen.mail.ui.settings.AppearanceScreen
+import zip.estrogen.mail.ui.settings.FiltersScreen
+import zip.estrogen.mail.ui.settings.KeysScreen
+import zip.estrogen.mail.ui.settings.LabelsScreen
+import zip.estrogen.mail.ui.settings.NotificationsScreen
+import zip.estrogen.mail.ui.settings.ProfileScreen
 import zip.estrogen.mail.ui.settings.SettingsScreen
 import zip.estrogen.mail.ui.thread.ThreadScreen
 
@@ -25,6 +32,13 @@ object Routes {
     const val SETTINGS = "settings"
     const val ENCRYPTION = "encryption"
     const val APPEARANCE = "appearance"
+    const val PROFILE = "profile"
+    const val ALIASES = "aliases"
+    const val FILTERS = "filters"
+    const val LABELS = "labels"
+    const val NOTIFICATIONS = "notifications"
+    const val SCHEDULED = "scheduled"
+    const val KEYS = "keys"
 
     fun thread(threadId: String, messageId: String) =
         "thread/${Uri.encode(threadId)}/${Uri.encode(messageId)}"
@@ -108,6 +122,13 @@ fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenEncryption = { navController.navigate(Routes.ENCRYPTION) },
                 onOpenAppearance = { navController.navigate(Routes.APPEARANCE) },
+                onOpenProfile = { navController.navigate(Routes.PROFILE) },
+                onOpenAliases = { navController.navigate(Routes.ALIASES) },
+                onOpenFilters = { navController.navigate(Routes.FILTERS) },
+                onOpenLabels = { navController.navigate(Routes.LABELS) },
+                onOpenNotifications = { navController.navigate(Routes.NOTIFICATIONS) },
+                onOpenScheduled = { navController.navigate(Routes.SCHEDULED) },
+                onOpenKeys = { navController.navigate(Routes.KEYS) },
                 onSignedOut = {
                     navController.navigate(Routes.SETUP) {
                         popUpTo(0) { inclusive = true }
@@ -123,5 +144,12 @@ fun AppNavHost(
         composable(Routes.APPEARANCE) {
             AppearanceScreen(onBack = { navController.popBackStack() })
         }
+        composable(Routes.PROFILE) { ProfileScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.ALIASES) { AliasesScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.FILTERS) { FiltersScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.LABELS) { LabelsScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.NOTIFICATIONS) { NotificationsScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.SCHEDULED) { ScheduledScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.KEYS) { KeysScreen(onBack = { navController.popBackStack() }) }
     }
 }

@@ -292,6 +292,10 @@ class MailRepository(
 
     suspend fun pushLatest(): Result<PushLatestResponse> = call { it.pushLatest() }
 
+    val notificationsEnabled: Flow<Boolean> = settings.notificationsEnabled
+    suspend fun setNotificationsEnabled(enabled: Boolean) = settings.setNotificationsEnabled(enabled)
+    suspend fun isNotificationsEnabled(): Boolean = settings.notificationsEnabled.first()
+
     suspend fun lookupPublicKey(address: String): Result<String?> = call { it.pubkey(address).publicKey }
     suspend fun fetchPgpFromServer(): Result<Pair<String?, String?>> =
         call { val r = it.pgp(); r.publicKey to r.privateKeyEnc }
