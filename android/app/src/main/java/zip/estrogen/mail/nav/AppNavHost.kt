@@ -13,6 +13,7 @@ import zip.estrogen.mail.ui.compose.ComposeScreen
 import zip.estrogen.mail.ui.encryption.EncryptionScreen
 import zip.estrogen.mail.ui.compose.ComposePrefill
 import zip.estrogen.mail.ui.maillist.MailListScreen
+import zip.estrogen.mail.ui.settings.AppearanceScreen
 import zip.estrogen.mail.ui.settings.SettingsScreen
 import zip.estrogen.mail.ui.thread.ThreadScreen
 
@@ -23,6 +24,7 @@ object Routes {
     const val COMPOSE = "compose"
     const val SETTINGS = "settings"
     const val ENCRYPTION = "encryption"
+    const val APPEARANCE = "appearance"
 
     fun thread(threadId: String, messageId: String) =
         "thread/${Uri.encode(threadId)}/${Uri.encode(messageId)}"
@@ -105,6 +107,7 @@ fun AppNavHost(
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenEncryption = { navController.navigate(Routes.ENCRYPTION) },
+                onOpenAppearance = { navController.navigate(Routes.APPEARANCE) },
                 onSignedOut = {
                     navController.navigate(Routes.SETUP) {
                         popUpTo(0) { inclusive = true }
@@ -115,6 +118,10 @@ fun AppNavHost(
 
         composable(Routes.ENCRYPTION) {
             EncryptionScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.APPEARANCE) {
+            AppearanceScreen(onBack = { navController.popBackStack() })
         }
     }
 }

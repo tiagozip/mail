@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -61,6 +62,7 @@ import zip.estrogen.mail.ui.common.Avatar
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenEncryption: () -> Unit = {},
+    onOpenAppearance: () -> Unit = {},
     onSignedOut: () -> Unit
 ) {
     val viewModel = appViewModel<SettingsViewModel>()
@@ -107,22 +109,16 @@ fun SettingsScreen(
             SectionTitle("Appearance")
             SettingCard {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenAppearance).padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(Icons.Rounded.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Dynamic color", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                        Text(
-                            if (state.dynamicSupported) "Match colors to your wallpaper" else "Needs Android 12 or newer",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text("Theme & colors", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                        Text("Palette, dynamic color, dark mode", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(
-                        checked = state.dynamicColor && state.dynamicSupported,
-                        onCheckedChange = { viewModel.setDynamicColor(it) },
-                        enabled = state.dynamicSupported
-                    )
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 

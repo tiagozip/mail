@@ -11,6 +11,7 @@ import zip.estrogen.mail.data.MailRepository
 import zip.estrogen.mail.ui.compose.ComposeViewModel
 import zip.estrogen.mail.ui.encryption.EncryptionViewModel
 import zip.estrogen.mail.ui.maillist.MailListViewModel
+import zip.estrogen.mail.ui.settings.AppearanceViewModel
 import zip.estrogen.mail.ui.settings.SettingsViewModel
 import zip.estrogen.mail.ui.setup.SetupViewModel
 import zip.estrogen.mail.ui.thread.ThreadViewModel
@@ -25,6 +26,7 @@ class AppViewModelFactory(private val repository: MailRepository) : ViewModelPro
             modelClass.isAssignableFrom(ComposeViewModel::class.java) -> ComposeViewModel(repository)
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(repository)
             modelClass.isAssignableFrom(EncryptionViewModel::class.java) -> EncryptionViewModel(repository)
+            modelClass.isAssignableFrom(AppearanceViewModel::class.java) -> AppearanceViewModel(repository)
             else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.name}")
         } as T
     }
