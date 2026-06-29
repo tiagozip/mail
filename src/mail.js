@@ -199,7 +199,7 @@ export async function handleEmail(message, env, ctx) {
     used += size;
     const contentId = (att.contentId || "").replace(/^<|>$/g, "");
     const isInline = att.disposition === "inline" || !!contentId;
-    if (contentId && !pgpEncrypt) cidMap[contentId] = `/api/attachments/${attId}/inline`;
+    if (contentId) cidMap[contentId] = `/api/attachments/${attId}/inline`;
     attRows.push({
       id: attId,
       filename: att.filename || "attachment",
@@ -220,7 +220,7 @@ export async function handleEmail(message, env, ctx) {
       const m = rawText.match(/-----BEGIN PGP MESSAGE-----[\s\S]*?-----END PGP MESSAGE-----/);
       armoredBody = m?.[0] || parsed.text || rawText;
     } else if (parsed.html) {
-      const sanitized = sanitizeEmailHtml(parsed.html, { allowRemote: true });
+      const sanitized = sanitizeEmailHtml(parsed.html, { cidMap, allowRemote: true });
       armoredBody = await encryptToPgpText(sanitized);
       hasHtml = 1;
     } else {

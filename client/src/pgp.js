@@ -148,3 +148,13 @@ export async function decryptArmored(armored) {
   });
   return data;
 }
+
+export async function decryptBytes(armored) {
+  if (!unlockedKey) throw new Error("PGP key is locked");
+  const { data } = await openpgp.decrypt({
+    message: await openpgp.readMessage({ armoredMessage: armored }),
+    decryptionKeys: unlockedKey,
+    format: "binary",
+  });
+  return data;
+}

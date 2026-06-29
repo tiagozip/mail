@@ -64,17 +64,21 @@ function passResource(url) {
   return url;
 }
 
-function LetterBody({ html, allowRemote }) {
+function LetterBody({ html, allowRemote, resource }) {
   return (
     <div className="em-letter">
       <Letter
         html={html || ""}
         allowedSchemas={ALLOWED_SCHEMAS}
-        rewriteExternalResources={allowRemote ? passResource : blockResource}
+        rewriteExternalResources={resource || (allowRemote ? passResource : blockResource)}
         className="em-letter-inner"
       />
     </div>
   );
+}
+
+function inlineResource(blobMap) {
+  return (url) => blobMap[url] || (url.startsWith("data:") ? url : "");
 }
 
 function PgpLock({ onUnlocked }) {
@@ -142,27 +146,64 @@ function PgpLock({ onUnlocked }) {
   );
 }
 
+async function decryptInlineImages(html, cancelledRef) {
+  const ids = [
+    ...new Set(
+      [...String(html).matchAll(/\/api\/attachments\/([\w-]+)\/inline/g)].map((m) => m[1]),
+    ),
+  ];
+  const map = {};
+  const urls = [];
+  await Promise.all(
+    ids.map(async (id) => {
+      const path = `/api/attachments/${id}/inline`;
+      try {
+        const res = await fetch(path, { credentials: "include" });
+        if (!res.ok) return;
+        const mime = res.headers.get("content-type") || "application/octet-stream";
+        const armored = await res.text();
+        const bytes = await pgp.decryptBytes(armored);
+        if (cancelledRef.cancelled) return;
+        const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+        urls.push(blobUrl);
+        map[path] = blobUrl;
+      } catch {}
+    }),
+  );
+  return { map, urls };
+}
+
 function PgpBody({ message, onUnlocked }) {
   const [error, setError] = useState(false);
   const [decrypted, setDecrypted] = useState(null);
+  const [blobMap, setBlobMap] = useState({});
   const unlocked = !!pgp.getUnlocked();
 
   useEffect(() => {
     if (!unlocked) return;
-    let cancelled = false;
+    const ref = { cancelled: false };
+    let made = [];
     setError(false);
+    setBlobMap({});
     pgp
       .decryptArmored(message.bodyText || "")
-      .then((data) => {
-        if (!cancelled) setDecrypted(data);
+      .then(async (data) => {
+        if (ref.cancelled) return;
+        setDecrypted(data);
+        if (!message.hasHtml) return;
+        const { map, urls } = await decryptInlineImages(data, ref);
+        made = urls;
+        if (!ref.cancelled) setBlobMap(map);
+        else urls.forEach((u) => URL.revokeObjectURL(u));
       })
       .catch(() => {
-        if (!cancelled) setError(true);
+        if (!ref.cancelled) setError(true);
       });
     return () => {
-      cancelled = true;
+      ref.cancelled = true;
+      made.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [unlocked, message.bodyText]);
+  }, [unlocked, message.bodyText, message.hasHtml]);
 
   if (!unlocked) return <PgpLock onUnlocked={onUnlocked} />;
 
@@ -185,7 +226,7 @@ function PgpBody({ message, onUnlocked }) {
   }
 
   return message.hasHtml ? (
-    <LetterBody html={decrypted} allowRemote={false} />
+    <LetterBody html={decrypted} resource={inlineResource(blobMap)} />
   ) : (
     <PlainBody text={decrypted} />
   );
