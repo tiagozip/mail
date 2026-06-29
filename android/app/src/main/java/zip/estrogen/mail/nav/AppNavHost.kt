@@ -1,6 +1,11 @@
 package zip.estrogen.mail.nav
 
 import android.net.Uri
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavType
@@ -62,7 +67,14 @@ fun AppNavHost(
         }
     }
 
-    NavHost(navController = navController, startDestination = start) {
+    NavHost(
+        navController = navController,
+        startDestination = start,
+        enterTransition = { slideInHorizontally(tween(280)) { it / 4 } + fadeIn(tween(280)) },
+        exitTransition = { slideOutHorizontally(tween(280)) { -it / 8 } + fadeOut(tween(220)) },
+        popEnterTransition = { slideInHorizontally(tween(280)) { -it / 8 } + fadeIn(tween(280)) },
+        popExitTransition = { slideOutHorizontally(tween(280)) { it / 4 } + fadeOut(tween(220)) }
+    ) {
 
         composable(Routes.SETUP) {
             AuthScreen(

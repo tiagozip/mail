@@ -176,26 +176,28 @@ fun MailListScreen(
                     ) {
                         items(items, key = { it.id }) { item ->
                             val selected = item.id in ui.selected
-                            SwipeRow(
-                                selecting = ui.selecting,
-                                onArchive = { viewModel.archive(item) },
-                                onDelete = { viewModel.trash(item) }
-                            ) {
-                                MailRowInteractive(
-                                    item = item,
-                                    selected = selected,
-                                    onTap = {
-                                        if (ui.selecting) viewModel.toggleSelect(item.id)
-                                        else {
-                                            viewModel.markRead(item.id)
-                                            onOpenThread(item.threadId ?: item.id, item.id)
-                                        }
-                                    },
-                                    onLongPress = { viewModel.toggleSelect(item.id) },
-                                    onToggleStar = { viewModel.toggleStar(item) }
-                                )
+                            Column(modifier = Modifier.animateItem()) {
+                                SwipeRow(
+                                    selecting = ui.selecting,
+                                    onArchive = { viewModel.archive(item) },
+                                    onDelete = { viewModel.trash(item) }
+                                ) {
+                                    MailRowInteractive(
+                                        item = item,
+                                        selected = selected,
+                                        onTap = {
+                                            if (ui.selecting) viewModel.toggleSelect(item.id)
+                                            else {
+                                                viewModel.markRead(item.id)
+                                                onOpenThread(item.threadId ?: item.id, item.id)
+                                            }
+                                        },
+                                        onLongPress = { viewModel.toggleSelect(item.id) },
+                                        onToggleStar = { viewModel.toggleStar(item) }
+                                    )
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                             }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         }
                         if (ui.loadingMore) item { CenteredSpinner(small = true) }
                     }
