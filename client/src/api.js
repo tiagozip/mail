@@ -43,6 +43,7 @@ export const api = {
   },
   message: (id, images) => req("GET", `/api/messages/${id}${images ? "?images=1" : ""}`),
   thread: (threadId) => req("GET", `/api/threads/${threadId}`),
+  threadsBulk: (ids) => req("POST", "/api/threads/bulk", { ids }),
 
   setRead: (id, read) => req("POST", `/api/messages/${id}/read`, { read }),
   setStar: (id, star) => req("POST", `/api/messages/${id}/star`, { star }),
@@ -78,6 +79,9 @@ export const api = {
     req("GET", `/api/hidden-aliases/${encodeURIComponent(address)}/senders`),
 
   send: (payload) => req("POST", "/api/send", payload),
+  scheduledSends: () => req("GET", "/api/scheduled-sends"),
+  cancelScheduled: (id) => req("DELETE", `/api/scheduled-sends/${id}`),
+  snoozeMessage: (id, until) => req("POST", `/api/messages/${id}/snooze`, { until }),
   createDraft: (payload) => req("POST", "/api/drafts", payload),
   updateDraft: (id, payload) => req("PUT", `/api/drafts/${id}`, payload),
 

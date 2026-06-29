@@ -507,6 +507,23 @@ async function markRead(env, user, ids, read) {
     .run();
 }
 
+async function buildThread(env, user, threadId) {
+  const rows = await env.DB.prepare(
+    "SELECT * FROM messages WHERE user_id = ? AND thread_id = ? ORDER BY date ASC",
+  )
+    .bind(user.id, threadId)
+    .all();
+  const out = [];
+  for (const r of rows.results || []) out.push(await getMessage(env, user, r.id, false));
+  const msgs = out.filter(Boolean);
+  await attachSenderAvatars(env, msgs);
+  const unreadIds = (rows.results || [])
+    .filter((r) => !r.is_read && r.folder !== "sent")
+    .map((r) => r.id);
+  if (unreadIds.length) await markRead(env, user, unreadIds, true);
+  return msgs;
+}
+
 async function uploadAttachment(request, env, user) {
   const max = Number.parseInt(env.MAX_ATTACHMENT_BYTES || "26214400", 10);
   const form = await request.formData();
@@ -658,20 +675,18 @@ export async function handleApi(request, env, ctx) {
 
   let m;
   if ((m = path.match(/^\/api\/threads\/([\w-]+)$/)) && method === "GET") {
-    const rows = await env.DB.prepare(
-      "SELECT * FROM messages WHERE user_id = ? AND thread_id = ? ORDER BY date ASC",
-    )
-      .bind(user.id, m[1])
-      .all();
-    const out = [];
-    for (const r of rows.results || []) out.push(await getMessage(env, user, r.id, false));
-    const msgs = out.filter(Boolean);
-    await attachSenderAvatars(env, msgs);
-    const unreadIds = (rows.results || [])
-      .filter((r) => !r.is_read && r.folder !== "sent")
-      .map((r) => r.id);
-    if (unreadIds.length) await markRead(env, user, unreadIds, true);
-    return json({ messages: msgs });
+    return json({ messages: await buildThread(env, user, m[1]) });
+  }
+
+  if (path === "/api/threads/bulk" && method === "POST") {
+    const b = await readJson(request);
+    const ids = [...new Set((b.ids || []).filter(Boolean))].slice(0, 10);
+    const threads = {};
+    for (const threadId of ids) {
+      const msgs = await buildThread(env, user, threadId);
+      if (msgs.length) threads[threadId] = msgs;
+    }
+    return json({ threads });
   }
 
   if ((m = path.match(/^\/api\/messages\/([\w-]+)$/))) {

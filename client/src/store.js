@@ -28,6 +28,22 @@ export function useMailStore(initialUser) {
   const [threadLoading, setThreadLoading] = useState(false);
 
   const reqSeq = useRef(0);
+  const threadCache = useRef(new Map());
+  const inflight = useRef(new Set());
+
+  const prefetchThread = useCallback((threadId) => {
+    if (!threadId) return;
+    if (threadCache.current.has(threadId) || inflight.current.has(threadId)) return;
+    inflight.current.add(threadId);
+    api
+      .threadsBulk([threadId])
+      .then((d) => {
+        const msgs = d.threads?.[threadId];
+        if (msgs) threadCache.current.set(threadId, msgs);
+      })
+      .catch(() => {})
+      .finally(() => inflight.current.delete(threadId));
+  }, []);
 
   const refreshCounts = useCallback(() => {
     api
@@ -64,8 +80,27 @@ export function useMailStore(initialUser) {
         .messages(queryFor(v))
         .then((d) => {
           if (seq !== reqSeq.current) return;
-          setMessages(d.messages || []);
+          const list = d.messages || [];
+          setMessages(list);
           setNextCursor(d.nextCursor || null);
+          const ids = [
+            ...new Set(list.slice(0, 3).map((mm) => mm.threadId).filter(Boolean)),
+          ].filter((id) => !threadCache.current.has(id) && !inflight.current.has(id));
+          if (ids.length) {
+            for (const id of ids) inflight.current.add(id);
+            api
+              .threadsBulk(ids)
+              .then((r) => {
+                for (const id of ids) {
+                  const msgs = r.threads?.[id];
+                  if (msgs) threadCache.current.set(id, msgs);
+                }
+              })
+              .catch(() => {})
+              .finally(() => {
+                for (const id of ids) inflight.current.delete(id);
+              });
+          }
         })
         .catch((e) => {
           if (seq === reqSeq.current) notifyError(e);
@@ -102,6 +137,8 @@ export function useMailStore(initialUser) {
   }, [refreshCounts, refreshLabels]);
 
   const goView = useCallback((v) => {
+    threadCache.current.clear();
+    inflight.current.clear();
     setOpenId(null);
     setThread(null);
     setView(v);
@@ -109,10 +146,16 @@ export function useMailStore(initialUser) {
 
   const openMessage = useCallback(
     (item) => {
+      const cached = threadCache.current.get(item.threadId);
       runViewTransition(() => {
         setOpenId(item.id);
-        setThreadLoading(true);
-        setThread(null);
+        if (cached) {
+          setThreadLoading(false);
+          setThread({ threadId: item.threadId, messages: cached });
+        } else {
+          setThreadLoading(true);
+          setThread(null);
+        }
         if (!item.isRead) {
           setMessages((prev) => prev.map((m) => (m.id === item.id ? { ...m, isRead: true } : m)));
           setCounts((c) => {
@@ -129,7 +172,9 @@ export function useMailStore(initialUser) {
       api
         .thread(item.threadId)
         .then((d) => {
-          setThread({ threadId: item.threadId, messages: d.messages || [] });
+          const msgs = d.messages || [];
+          threadCache.current.set(item.threadId, msgs);
+          setThread({ threadId: item.threadId, messages: msgs });
           setMessages((prev) =>
             prev.map((m) =>
               m.threadId === item.threadId && m.folder !== "sent" ? { ...m, isRead: true } : m,
@@ -137,7 +182,9 @@ export function useMailStore(initialUser) {
           );
           refreshCounts();
         })
-        .catch(notifyError)
+        .catch((e) => {
+          if (!cached) notifyError(e);
+        })
         .finally(() => setThreadLoading(false));
     },
     [refreshCounts],
@@ -197,6 +244,7 @@ export function useMailStore(initialUser) {
 
   const moveMessage = useCallback(
     (item, folder) => {
+      threadCache.current.delete(item.threadId);
       removeFromList([item.id]);
       if (openId === item.id) {
         setOpenId(null);
@@ -215,6 +263,7 @@ export function useMailStore(initialUser) {
 
   const snooze = useCallback(
     (item, until) => {
+      threadCache.current.delete(item.threadId);
       removeFromList([item.id]);
       if (openId === item.id) {
         setOpenId(null);
@@ -233,6 +282,7 @@ export function useMailStore(initialUser) {
 
   const deleteForever = useCallback(
     (item) => {
+      threadCache.current.delete(item.threadId);
       removeFromList([item.id]);
       if (openId === item.id) {
         setOpenId(null);
@@ -306,7 +356,12 @@ export function useMailStore(initialUser) {
     listLoading,
     loadingMore,
     loadMore,
-    reload: () => loadList(view),
+    reload: () => {
+      threadCache.current.clear();
+      inflight.current.clear();
+      loadList(view);
+    },
+    prefetchThread,
     selectedIds,
     toggleSelect,
     selectAll,

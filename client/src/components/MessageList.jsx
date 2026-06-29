@@ -35,15 +35,32 @@ function StarToggle({ on, onClick }) {
   );
 }
 
-function Row({ item, active, selected, selfAddresses, decSnippet, onOpen, onToggleSelect, onToggleStar }) {
+function Row({
+  item,
+  active,
+  selected,
+  selfAddresses,
+  decSnippet,
+  onOpen,
+  onPrefetch,
+  onToggleSelect,
+  onToggleStar,
+}) {
   const sender = senderLabel(item, selfAddresses);
   const addr = item.from?.address || "";
   const handle = addr.includes("@") ? `@${addr.split("@")[1]}` : addr;
   const snip = item.pgp ? decSnippet || item.snippet : item.snippet;
+  const hoverTimer = useRef(null);
   return (
     <div
       className={`em-row${active ? " is-active" : ""}${selected ? " is-selected" : ""}${item.isRead ? "" : " is-unread"}`}
       onClick={() => onOpen(item)}
+      onMouseEnter={() => {
+        hoverTimer.current = setTimeout(() => onPrefetch(item.threadId), 200);
+      }}
+      onMouseLeave={() => {
+        if (hoverTimer.current) clearTimeout(hoverTimer.current);
+      }}
     >
       <div className="em-row-avatar">
         {item.from?.avatar ? (
@@ -137,6 +154,7 @@ export function MessageList({ store, searchRef, onMenu, onCompose, floatHidden }
     selectAll,
     openId,
     openMessage,
+    prefetchThread,
     toggleStar,
   } = store;
   const [query, setQuery] = useState("");
@@ -272,6 +290,7 @@ export function MessageList({ store, searchRef, onMenu, onCompose, floatHidden }
                 selfAddresses={selfAddresses}
                 decSnippet={decSnippets[item.id]}
                 onOpen={openMessage}
+                onPrefetch={prefetchThread}
                 onToggleSelect={toggleSelect}
                 onToggleStar={toggleStar}
               />
