@@ -156,6 +156,13 @@ class MailRepository(
         resp
     }
 
+    suspend fun refreshLabel(labelId: String): Result<MessagesResponse> = call {
+        val resp = it.messages(label = labelId, limit = 50)
+        val entities = resp.messages.map { m -> m.toEntity(m.folder ?: "inbox", messageDao.decryptedSnippet(m.id)) }
+        messageDao.upsertAll(entities)
+        resp
+    }
+
     suspend fun searchRemote(q: String): Result<List<MessageSummary>> = call {
         val resp = it.messages(q = q, limit = 50)
         val entities = resp.messages.map { m -> m.toEntity(m.folder ?: "inbox", messageDao.decryptedSnippet(m.id)) }

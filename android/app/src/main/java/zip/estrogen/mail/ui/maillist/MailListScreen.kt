@@ -1,7 +1,8 @@
 package zip.estrogen.mail.ui.maillist
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,38 +15,51 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.MarkEmailRead
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -54,10 +68,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import zip.estrogen.mail.data.Folder
-import zip.estrogen.mail.data.model.MessageSummary
-import zip.estrogen.mail.data.model.User
 import zip.estrogen.mail.ui.appViewModel
 import zip.estrogen.mail.ui.common.Avatar
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,156 +81,187 @@ fun MailListScreen(
     onSignedOut: () -> Unit
 ) {
     val viewModel = appViewModel<MailListViewModel>()
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val items by viewModel.items.collectAsStateWithLifecycle()
+    val view by viewModel.view.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val snackbarHost = remember { SnackbarHostState() }
+    var showSnooze by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.start() }
-
-    LaunchedEffect(state.signedOut) {
-        if (state.signedOut) onSignedOut()
+    LaunchedEffect(ui.signedOut) { if (ui.signedOut) onSignedOut() }
+    LaunchedEffect(ui.snackbar) {
+        ui.snackbar?.let { snackbarHost.showSnackbar(it); viewModel.consumeSnackbar() }
     }
 
     val shouldLoadMore by remember {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= state.messages.size - 5 && state.nextCursor != null
+            last >= items.size - 5 && ui.nextCursor != null
         }
     }
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore) viewModel.loadMore()
-    }
+    LaunchedEffect(shouldLoadMore) { if (shouldLoadMore) viewModel.loadMore() }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = !ui.selecting,
         drawerContent = {
             FolderDrawer(
-                user = state.user,
-                counts = state.counts,
-                selected = state.folder,
-                onSelect = { folder ->
-                    scope.launch { drawerState.close() }
-                    runCatching { viewModel.selectFolder(folder) }
-                },
-                onOpenSettings = {
-                    scope.launch { drawerState.close() }
-                    runCatching { onOpenSettings() }
-                },
-                onSignOut = {
-                    scope.launch { drawerState.close() }
-                    runCatching { viewModel.signOut() }
-                }
+                user = ui.user,
+                counts = ui.counts,
+                labels = ui.labels,
+                currentView = view,
+                onSelectFolder = { scope.launch { drawerState.close() }; viewModel.selectFolder(it) },
+                onOpenSnoozed = { scope.launch { drawerState.close() }; viewModel.openSnoozed() },
+                onOpenLabel = { id, name -> scope.launch { drawerState.close() }; viewModel.openLabel(id, name) },
+                onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
+                onSignOut = { scope.launch { drawerState.close() }; viewModel.signOut() }
             )
         }
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHost) },
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(text = state.folder.label, fontWeight = FontWeight.Bold)
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Rounded.Menu, contentDescription = "Folders")
-                        }
-                    },
-                    actions = {
-                        AccountAction(user = state.user) { onOpenSettings() }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                when {
+                    ui.selecting -> SelectionBar(
+                        count = ui.selected.size,
+                        onClose = viewModel::clearSelection,
+                        onArchive = { viewModel.selectionAction("move", "archive") },
+                        onDelete = { viewModel.selectionAction("move", "trash") },
+                        onRead = { viewModel.selectionAction("read", "true") },
+                        onStar = { viewModel.selectionAction("star", "true") },
+                        onSnooze = { showSnooze = true }
                     )
-                )
+                    ui.searchActive -> SearchBar(
+                        query = ui.query,
+                        onQuery = viewModel::setQuery,
+                        onClose = viewModel::closeSearch
+                    )
+                    else -> NormalBar(
+                        title = view.title,
+                        user = ui.user,
+                        onMenu = { scope.launch { drawerState.open() } },
+                        onSearch = viewModel::openSearch,
+                        onAccount = onOpenSettings
+                    )
+                }
             },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    text = { Text("Compose") },
-                    icon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
-                    onClick = onCompose,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                if (!ui.selecting && !ui.searchActive) {
+                    ExtendedFloatingActionButton(
+                        text = { Text("Compose") },
+                        icon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                        onClick = onCompose,
+                        expanded = !listState.canScrollBackward
+                    )
+                }
             }
         ) { padding ->
             PullToRefreshBox(
-                isRefreshing = state.refreshing,
-                onRefresh = viewModel::refresh,
+                isRefreshing = ui.refreshing,
+                onRefresh = { viewModel.refresh() },
                 modifier = Modifier.fillMaxSize().padding(padding)
             ) {
                 when {
-                    state.loading && state.messages.isEmpty() -> CenteredSpinner()
-                    state.error != null && state.messages.isEmpty() ->
-                        CenteredMessage(state.error ?: "", isError = true)
-                    state.messages.isEmpty() ->
-                        CenteredMessage("Nothing in ${state.folder.label} yet.")
+                    ui.loading && items.isEmpty() -> CenteredSpinner()
+                    items.isEmpty() && ui.error != null -> CenteredMessage(ui.error ?: "", isError = true)
+                    items.isEmpty() && ui.searchActive -> CenteredMessage("No results")
+                    items.isEmpty() -> CenteredMessage("Nothing here yet")
                     else -> LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 96.dp)
                     ) {
-                        items(state.messages, key = { it.id }) { message ->
-                            SwipeableRow(
-                                message = message,
-                                onArchive = { viewModel.moveMessage(message, Folder.ARCHIVE) },
-                                onDelete = { viewModel.moveMessage(message, Folder.TRASH) },
-                                onClick = {
-                                    viewModel.markReadLocally(message.id)
-                                    onOpenThread(message.threadId ?: message.id, message.id)
-                                },
-                                onToggleStar = { viewModel.toggleStar(message) }
-                            )
+                        items(items, key = { it.id }) { item ->
+                            val selected = item.id in ui.selected
+                            SwipeRow(
+                                selecting = ui.selecting,
+                                onArchive = { viewModel.archive(item) },
+                                onDelete = { viewModel.trash(item) }
+                            ) {
+                                MailRowInteractive(
+                                    item = item,
+                                    selected = selected,
+                                    onTap = {
+                                        if (ui.selecting) viewModel.toggleSelect(item.id)
+                                        else {
+                                            viewModel.markRead(item.id)
+                                            onOpenThread(item.threadId ?: item.id, item.id)
+                                        }
+                                    },
+                                    onLongPress = { viewModel.toggleSelect(item.id) },
+                                    onToggleStar = { viewModel.toggleStar(item) }
+                                )
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         }
-                        if (state.loadingMore) {
-                            item { CenteredSpinner(small = true) }
-                        }
+                        if (ui.loadingMore) item { CenteredSpinner(small = true) }
                     }
                 }
             }
         }
     }
+
+    if (showSnooze) {
+        SnoozeSheet(
+            onPick = { until -> viewModel.snoozeSelected(until); showSnooze = false },
+            onDismiss = { showSnooze = false }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SwipeableRow(
-    message: MessageSummary,
-    onArchive: () -> Unit,
-    onDelete: () -> Unit,
-    onClick: () -> Unit,
+private fun MailRowInteractive(
+    item: MailItem,
+    selected: Boolean,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
     onToggleStar: () -> Unit
 ) {
+    val haptics = LocalHapticFeedback.current
+    Box(
+        modifier = Modifier.combinedClickable(
+            onClick = onTap,
+            onLongClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onLongPress()
+            }
+        )
+    ) {
+        MailRow(item = item, selected = selected, onClick = onTap, onToggleStar = onToggleStar)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeRow(
+    selecting: Boolean,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    if (selecting) {
+        content()
+        return
+    }
     val haptics = LocalHapticFeedback.current
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onArchive()
-                    true
-                }
-                SwipeToDismissBoxValue.EndToStart -> {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onDelete()
-                    true
-                }
+                SwipeToDismissBoxValue.StartToEnd -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onArchive(); true }
+                SwipeToDismissBoxValue.EndToStart -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onDelete(); true }
                 SwipeToDismissBoxValue.Settled -> false
             }
         },
-        positionalThreshold = { it * 0.5f }
+        positionalThreshold = { it * 0.45f }
     )
-
     SwipeToDismissBox(
         state = dismissState,
         backgroundContent = { SwipeBackground(dismissState.targetValue) },
-        content = {
-            MailRow(
-                message = message,
-                onClick = onClick,
-                onToggleStar = onToggleStar
-            )
-        }
+        content = { content() }
     )
 }
 
@@ -236,51 +280,134 @@ private fun SwipeBackground(target: SwipeToDismissBoxValue) {
         delete -> MaterialTheme.colorScheme.onErrorContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val scale by animateFloatAsState(
-        if (target == SwipeToDismissBoxValue.Settled) 0.7f else 1f,
-        label = "swipeScale"
-    )
-
     Box(
         modifier = Modifier.fillMaxSize().background(color).padding(horizontal = 24.dp),
         contentAlignment = if (archive) Alignment.CenterStart else Alignment.CenterEnd
     ) {
-        if (archive) {
-            Icon(
-                Icons.Rounded.Archive,
-                contentDescription = "Archive",
-                tint = onColor,
-                modifier = Modifier.size(26.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+        Icon(
+            imageVector = if (archive) Icons.Rounded.Archive else Icons.Rounded.Delete,
+            contentDescription = null,
+            tint = onColor,
+            modifier = Modifier.size(26.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NormalBar(
+    title: String,
+    user: zip.estrogen.mail.data.model.User?,
+    onMenu: () -> Unit,
+    onSearch: () -> Unit,
+    onAccount: () -> Unit
+) {
+    TopAppBar(
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        navigationIcon = {
+            IconButton(onClick = onMenu) { Icon(Icons.Rounded.Menu, contentDescription = "Folders") }
+        },
+        actions = {
+            IconButton(onClick = onSearch) { Icon(Icons.Rounded.Search, contentDescription = "Search") }
+            IconButton(onClick = onAccount) {
+                Avatar(url = user?.avatarUrl, seed = user?.address ?: "me", label = user?.displayName ?: user?.username, size = 30.dp)
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
+        )
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchBar(query: String, onQuery: (String) -> Unit, onClose: () -> Unit) {
+    TopAppBar(
+        title = {
+            TextField(
+                value = query,
+                onValueChange = onQuery,
+                placeholder = { Text("Search mail") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedIndicatorColor = MaterialTheme.colorScheme.surface,
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.surface
+                )
             )
-        } else if (delete) {
-            Icon(
-                Icons.Rounded.Delete,
-                contentDescription = "Delete",
-                tint = onColor,
-                modifier = Modifier.size(26.dp).graphicsLayer { scaleX = scale; scaleY = scale }
-            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Close search") }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectionBar(
+    count: Int,
+    onClose: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    onRead: () -> Unit,
+    onStar: () -> Unit,
+    onSnooze: () -> Unit
+) {
+    TopAppBar(
+        title = { Text("$count selected", fontWeight = FontWeight.SemiBold) },
+        navigationIcon = {
+            IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = "Clear") }
+        },
+        actions = {
+            IconButton(onClick = onStar) { Icon(Icons.Rounded.Star, contentDescription = "Star") }
+            IconButton(onClick = onRead) { Icon(Icons.Rounded.MarkEmailRead, contentDescription = "Mark read") }
+            IconButton(onClick = onSnooze) { Icon(Icons.Rounded.Bedtime, contentDescription = "Snooze") }
+            IconButton(onClick = onArchive) { Icon(Icons.Rounded.Archive, contentDescription = "Archive") }
+            IconButton(onClick = onDelete) { Icon(Icons.Rounded.Delete, contentDescription = "Delete") }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            titleContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SnoozeSheet(onPick: (Long?) -> Unit, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState()
+    val now = System.currentTimeMillis()
+    val options = listOf(
+        "Later today" to now + TimeUnit.HOURS.toMillis(3),
+        "This evening" to now + TimeUnit.HOURS.toMillis(6),
+        "Tomorrow" to now + TimeUnit.DAYS.toMillis(1),
+        "This weekend" to now + TimeUnit.DAYS.toMillis(2),
+        "Next week" to now + TimeUnit.DAYS.toMillis(7)
+    )
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
+            Text("Snooze until", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp))
+            options.forEach { (label, ts) ->
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(ts) }
+                        .padding(horizontal = 24.dp, vertical = 14.dp)
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun AccountAction(user: User?, onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
-        Avatar(
-            url = user?.avatarUrl,
-            seed = user?.address ?: "me",
-            label = user?.displayName ?: user?.username,
-            size = 32.dp
-        )
-    }
-}
-
-@Composable
 private fun CenteredSpinner(small: Boolean = false) {
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(
             modifier = Modifier.size(if (small) 24.dp else 36.dp),
             color = MaterialTheme.colorScheme.primary,
@@ -299,7 +426,7 @@ private fun CenteredMessage(text: String, isError: Boolean = false) {
         Icon(
             imageVector = Icons.Rounded.Inbox,
             contentDescription = null,
-            modifier = Modifier.size(48.dp).alpha(0.7f),
+            modifier = Modifier.size(48.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
@@ -307,8 +434,7 @@ private fun CenteredMessage(text: String, isError: Boolean = false) {
             modifier = Modifier.padding(top = 12.dp),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
-            color = if (isError) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
