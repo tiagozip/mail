@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -31,6 +33,8 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +64,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -70,6 +76,7 @@ import kotlinx.coroutines.launch
 import zip.estrogen.mail.data.Folder
 import zip.estrogen.mail.ui.appViewModel
 import zip.estrogen.mail.ui.common.Avatar
+import zip.estrogen.mail.ui.common.MailListSkeleton
 import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,6 +94,7 @@ fun MailListScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbarHost = remember { SnackbarHostState() }
     var showSnooze by remember { mutableStateOf(false) }
 
@@ -122,6 +130,7 @@ fun MailListScreen(
         }
     ) {
         Scaffold(
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             snackbarHost = { SnackbarHost(snackbarHost) },
             topBar = {
                 when {
@@ -142,6 +151,7 @@ fun MailListScreen(
                     else -> NormalBar(
                         title = view.title,
                         user = ui.user,
+                        scrollBehavior = scrollBehavior,
                         onMenu = { scope.launch { drawerState.open() } },
                         onSearch = viewModel::openSearch,
                         onAccount = onOpenSettings
@@ -165,10 +175,10 @@ fun MailListScreen(
                 modifier = Modifier.fillMaxSize().padding(padding)
             ) {
                 when {
-                    ui.loading && items.isEmpty() -> CenteredSpinner()
+                    ui.loading && items.isEmpty() -> MailListSkeleton()
                     items.isEmpty() && ui.error != null -> CenteredMessage(ui.error ?: "", isError = true)
-                    items.isEmpty() && ui.searchActive -> CenteredMessage("No results")
-                    items.isEmpty() -> CenteredMessage("Nothing here yet")
+                    items.isEmpty() && ui.searchActive -> CenteredMessage("No results", icon = Icons.Rounded.Search)
+                    items.isEmpty() -> CenteredMessage("Inbox zero", subtitle = "You're all caught up.")
                     else -> LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
@@ -300,11 +310,12 @@ private fun SwipeBackground(target: SwipeToDismissBoxValue) {
 private fun NormalBar(
     title: String,
     user: zip.estrogen.mail.data.model.User?,
+    scrollBehavior: TopAppBarScrollBehavior,
     onMenu: () -> Unit,
     onSearch: () -> Unit,
     onAccount: () -> Unit
 ) {
-    TopAppBar(
+    LargeTopAppBar(
         title = { Text(title, fontWeight = FontWeight.Bold) },
         navigationIcon = {
             IconButton(onClick = onMenu) { Icon(Icons.Rounded.Menu, contentDescription = "Folders") }
@@ -312,11 +323,14 @@ private fun NormalBar(
         actions = {
             IconButton(onClick = onSearch) { Icon(Icons.Rounded.Search, contentDescription = "Search") }
             IconButton(onClick = onAccount) {
-                Avatar(url = user?.avatarUrl, seed = user?.address ?: "me", label = user?.displayName ?: user?.username, size = 30.dp)
+                Avatar(url = user?.avatarUrl, seed = user?.address ?: "me", label = user?.displayName ?: user?.username, size = 32.dp)
             }
+            Spacer(Modifier.width(6.dp))
         },
-        colors = TopAppBarDefaults.topAppBarColors(
+        scrollBehavior = scrollBehavior,
+        colors = TopAppBarDefaults.largeTopAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
+            scrolledContainerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface
         )
     )
@@ -419,24 +433,42 @@ private fun CenteredSpinner(small: Boolean = false) {
 }
 
 @Composable
-private fun CenteredMessage(text: String, isError: Boolean = false) {
+private fun CenteredMessage(
+    text: String,
+    subtitle: String? = null,
+    isError: Boolean = false,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Rounded.Inbox
+) {
     Column(
         modifier = Modifier.fillMaxSize().padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = Icons.Rounded.Inbox,
-            contentDescription = null,
-            modifier = Modifier.size(48.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Box(
+            modifier = Modifier
+                .size(88.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHighest),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.size(16.dp))
         Text(
             text = text,
-            modifier = Modifier.padding(top = 12.dp),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
-            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
         )
+        if (subtitle != null) {
+            Spacer(Modifier.size(4.dp))
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
