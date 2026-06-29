@@ -63,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -93,6 +94,7 @@ fun ThreadScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val dark = isSystemInDarkTheme()
+    val context = LocalContext.current
 
     LaunchedEffect(threadId) { viewModel.load(threadId, seedMessageId) }
 
@@ -219,7 +221,8 @@ fun ThreadScreen(
                             onUnlock = viewModel::unlock,
                             onReply = { onReply(buildReply(message, all = false)) },
                             onReplyAll = { onReply(buildReply(message, all = true)) },
-                            onForward = { onReply(buildForward(message)) }
+                            onForward = { onReply(buildForward(message)) },
+                            onOpenAttachment = { viewModel.openAttachment(context, it) }
                         )
                     }
                 }
@@ -243,7 +246,8 @@ private fun MessageCard(
     onUnlock: (String, Boolean) -> Unit,
     onReply: () -> Unit,
     onReplyAll: () -> Unit,
-    onForward: () -> Unit
+    onForward: () -> Unit,
+    onOpenAttachment: (Attachment) -> Unit
 ) {
     val sender = message.from.name?.takeIf { it.isNotBlank() }
         ?: message.from.address?.takeIf { it.isNotBlank() } ?: "Unknown"
@@ -317,7 +321,7 @@ private fun MessageCard(
 
                     if (message.attachments.isNotEmpty()) {
                         Spacer(Modifier.size(12.dp))
-                        message.attachments.forEach { AttachmentRow(it) }
+                        message.attachments.forEach { att -> AttachmentRow(att) { onOpenAttachment(att) } }
                     }
 
                     Spacer(Modifier.size(8.dp))
@@ -557,11 +561,11 @@ private fun EncryptedNotice(title: String, detail: String) {
 }
 
 @Composable
-private fun AttachmentRow(attachment: Attachment) {
+private fun AttachmentRow(attachment: Attachment, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

@@ -1,5 +1,8 @@
 package zip.estrogen.mail.ui.thread
 
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -8,11 +11,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.ResponseBody
 import zip.estrogen.mail.data.Folder
 import zip.estrogen.mail.data.MailRepository
+import zip.estrogen.mail.data.model.Attachment
 import zip.estrogen.mail.data.model.FullMessage
 import zip.estrogen.mail.data.pgp.PgpEngine
 import zip.estrogen.mail.data.pgp.PgpStatus
+import java.io.File
 
 data class ThreadState(
     val loading: Boolean = true,
@@ -148,6 +154,42 @@ class ThreadViewModel(private val repository: MailRepository) : ViewModel() {
             ids.forEach { repository.move(it, folder) }
             onDone()
         }
+    }
+
+    fun openAttachment(context: Context, attachment: Attachment) {
+        _state.update { it.copy(actionMessage = "Downloading ${attachment.filename ?: "attachment"}…") }
+        viewModelScope.launch {
+            repository.downloadAttachment(attachment.id).fold(
+                onSuccess = { body ->
+                    val file = withContext(Dispatchers.IO) { saveAttachment(context, attachment, body) }
+                    if (file != null) {
+                        _state.update { it.copy(actionMessage = null) }
+                        openFile(context, file, attachment.mime)
+                    } else {
+                        _state.update { it.copy(actionMessage = "Could not save attachment") }
+                    }
+                },
+                onFailure = { _state.update { it.copy(actionMessage = "Download failed") } }
+            )
+        }
+    }
+
+    private fun saveAttachment(context: Context, attachment: Attachment, body: ResponseBody): File? = runCatching {
+        val dir = File(context.cacheDir, "attachments").apply { mkdirs() }
+        val name = (attachment.filename ?: "attachment").replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "attachment" }
+        val file = File(dir, name)
+        body.byteStream().use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+        file
+    }.getOrNull()
+
+    private fun openFile(context: Context, file: File, mime: String?) {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime ?: "*/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(Intent.createChooser(intent, "Open with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            .onFailure { _state.update { it.copy(actionMessage = "No app can open this file") } }
     }
 
     fun consumeActionMessage() {
