@@ -29,7 +29,10 @@ import androidx.compose.material.icons.rounded.Forward
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,6 +78,8 @@ import zip.estrogen.mail.ui.common.Avatar
 import zip.estrogen.mail.ui.common.fullTime
 import zip.estrogen.mail.ui.common.relativeTime
 import zip.estrogen.mail.ui.compose.ComposePrefillData
+import zip.estrogen.mail.ui.thread.html.HtmlBlocks
+import zip.estrogen.mail.ui.thread.html.rememberParsedHtml
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -350,15 +355,9 @@ private fun MessageBody(
     dark: Boolean,
     onUnlock: (String, Boolean) -> Unit
 ) {
-    val html = message.bodyHtml
-
     if (message.pgp) {
         when {
-            decrypted != null -> Text(
-                text = decrypted,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            decrypted != null -> BodyContent(content = decrypted, isHtml = looksLikeHtml(decrypted), message = message)
             decryptFailed -> EncryptedNotice(
                 title = "Could not decrypt",
                 detail = "This message is not encrypted to your current key."
@@ -371,25 +370,107 @@ private fun MessageBody(
             pgpStatus == PgpStatus.LOCKED -> UnlockPrompt(unlocking, unlockError, onUnlock)
             else -> EncryptedNotice(
                 title = "Encrypted message",
-                detail = "Import your PGP key in Settings to read encrypted mail on this device."
+                detail = "Set up your key in Settings to read encrypted mail on this device."
             )
         }
         return
     }
 
+    val html = message.bodyHtml
     if (message.hasHtml && !html.isNullOrBlank()) {
-        HtmlBody(
-            html = html,
-            textColor = MaterialTheme.colorScheme.onSurface,
-            linkColor = MaterialTheme.colorScheme.primary,
-            dark = dark
-        )
+        BodyContent(content = html, isHtml = true, message = message)
     } else {
         Text(
             text = message.bodyText?.takeIf { it.isNotBlank() } ?: "(empty message)",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+private fun looksLikeHtml(text: String): Boolean {
+    val t = text.lowercase()
+    return t.contains("</") || t.contains("<p") || t.contains("<div") || t.contains("<br") ||
+        t.contains("<a ") || t.contains("<img") || t.contains("<table") || t.contains("<span")
+}
+
+@Composable
+private fun BodyContent(content: String, isHtml: Boolean, message: FullMessage) {
+    if (!isHtml) {
+        Text(
+            text = content,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        return
+    }
+    val parsed = rememberParsedHtml(content)
+    var allowImages by remember(content) { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (message.authStatus == "fail") SpoofBanner(message.authDetail)
+        val trackers = maxOf(message.trackersBlocked, parsed.trackersBlocked)
+        if (trackers > 0) {
+            InfoBanner(
+                icon = Icons.Rounded.Shield,
+                text = "Blocked $trackers tracker${if (trackers == 1) "" else "s"}"
+            )
+        }
+        if (parsed.hasRemoteImages && !allowImages) {
+            ImagesBanner(onShow = { allowImages = true })
+        }
+        HtmlBlocks(parsed = parsed, allowImages = allowImages)
+    }
+}
+
+@Composable
+private fun SpoofBanner(detail: zip.estrogen.mail.data.model.AuthDetail?) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.errorContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text("This message may be spoofed", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                val parts = listOfNotNull(
+                    detail?.spf?.let { "SPF $it" },
+                    detail?.dkim?.let { "DKIM $it" },
+                    detail?.dmarc?.let { "DMARC $it" }
+                )
+                Text(
+                    if (parts.isNotEmpty()) parts.joinToString(" · ") else "Authentication failed. Don't trust links or attachments.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoBanner(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ImagesBanner(onShow: () -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Remote images hidden", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            TextButton(onClick = onShow) { Text("Show") }
+        }
     }
 }
 

@@ -97,6 +97,8 @@ dependencies {
 
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    implementation("org.jsoup:jsoup:1.18.1")
+
     implementation("org.pgpainless:pgpainless-core:1.6.8")
 
     val roomVersion = "2.7.1"
