@@ -25,8 +25,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,7 +42,14 @@ import coil.compose.AsyncImage
 @Composable
 fun rememberParsedHtml(html: String): ParsedHtml {
     val linkColor = MaterialTheme.colorScheme.primary
-    return remember(html, linkColor) { HtmlParser.parse(html, linkColor) }
+    val state = produceState(
+        initialValue = ParsedHtml(emptyList(), hasRemoteImages = false, trackersBlocked = 0),
+        key1 = html,
+        key2 = linkColor
+    ) {
+        value = withContext(Dispatchers.Default) { HtmlParser.parse(html, linkColor) }
+    }
+    return state.value
 }
 
 @Composable

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -189,6 +192,16 @@ fun ThreadScreen(
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
+        },
+        bottomBar = {
+            val last = state.messages.lastOrNull()
+            if (last != null && !state.loading && state.error == null) {
+                ReplyBar(
+                    onReply = { onReply(buildReply(last, all = false)) },
+                    onReplyAll = { onReply(buildReply(last, all = true)) },
+                    onForward = { onReply(buildForward(last)) }
+                )
+            }
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -321,24 +334,6 @@ private fun MessageCard(
                         message.attachments.forEach { att -> AttachmentRow(att) { onOpenAttachment(att) } }
                     }
 
-                    Spacer(Modifier.size(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = onReply) {
-                            Icon(Icons.AutoMirrored.Rounded.Reply, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Reply")
-                        }
-                        TextButton(onClick = onReplyAll) {
-                            Icon(Icons.AutoMirrored.Rounded.ReplyAll, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Reply all")
-                        }
-                        TextButton(onClick = onForward) {
-                            Icon(Icons.Rounded.Forward, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Forward")
-                        }
-                    }
                 }
             }
         }
@@ -386,6 +381,29 @@ private fun MessageBody(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+private fun ReplyBar(onReply: () -> Unit, onReplyAll: () -> Unit, onForward: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilledTonalButton(onClick = onReply, modifier = Modifier.weight(1f).height(48.dp)) {
+                Icon(Icons.AutoMirrored.Rounded.Reply, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Reply")
+            }
+            OutlinedIconButton(onClick = onReplyAll, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.AutoMirrored.Rounded.ReplyAll, contentDescription = "Reply all")
+            }
+            OutlinedIconButton(onClick = onForward, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Forward, contentDescription = "Forward")
+            }
+        }
     }
 }
 

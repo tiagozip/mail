@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,6 +47,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -201,13 +203,19 @@ fun ComposeScreen(
                     AssistChip(onClick = { showSchedule = true }, label = { Text("Scheduled for ${fullTime(state.sendAt!!)}") }, leadingIcon = { Icon(Icons.Rounded.Schedule, contentDescription = null, modifier = Modifier.size(18.dp)) })
                 }
 
-                Spacer(Modifier.size(8.dp))
-                OutlinedTextField(
+                Spacer(Modifier.size(12.dp))
+                TextField(
                     value = state.body,
                     onValueChange = viewModel::onBody,
-                    placeholder = { Text("Write your message") },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    minLines = 8
+                    placeholder = { Text("Write your message", style = MaterialTheme.typography.bodyLarge) },
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    )
                 )
                 Spacer(Modifier.size(64.dp))
             }
