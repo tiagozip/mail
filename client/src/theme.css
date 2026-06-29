@@ -4068,8 +4068,7 @@ html[data-mode="dark"] .em-letter .em-shiki {
   gap: var(--em-2);
 }
 
-.em-byod-code,
-.em-byod-val {
+.em-byod-code {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
@@ -4080,19 +4079,6 @@ html[data-mode="dark"] .em-letter .em-shiki {
   border: 1px solid var(--color-kumo-hairline);
   border-radius: var(--em-radius-sm);
   padding: 6px 8px;
-}
-
-.em-byod-template {
-  width: 100%;
-  resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  background: var(--color-kumo-recessed);
-  color: var(--text-color-kumo-default);
-  border: 1px solid var(--color-kumo-hairline);
-  border-radius: var(--em-radius-sm);
-  padding: var(--em-2);
 }
 
 .em-byod-deploy {
@@ -4108,37 +4094,18 @@ html[data-mode="dark"] .em-letter .em-shiki {
   padding: 1px 5px;
 }
 
-.em-byod-disclosure {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
+.em-byod-steps {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-2);
   font-size: 0.8rem;
   color: var(--text-color-kumo-subtle);
-  width: fit-content;
 }
 
-.em-byod-disclosure:hover {
+.em-byod-steps strong {
   color: var(--text-color-kumo-default);
-}
-
-.em-byod-disclosure svg {
-  transition: transform 0.15s ease;
-}
-
-.em-byod-disclosure.open svg {
-  transform: rotate(180deg);
-}
-
-.em-byod-shiki {
-  max-height: 320px;
-  overflow: auto;
-  font-size: 0.72rem;
-  border: 1px solid var(--color-kumo-hairline);
-  border-radius: var(--em-radius-sm);
 }
 
 .em-byod-actions {

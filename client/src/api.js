@@ -120,6 +120,7 @@ export const api = {
   addDomain: (domain) => req("POST", "/api/domains", { domain }),
   addByodDomain: (domain) => req("POST", "/api/domains/byod", { domain }),
   setupRelay: (id, relayUrl) => req("POST", `/api/domains/${id}/relay`, { relayUrl }),
+  relayStatus: (id) => req("GET", `/api/domains/${id}/relay-status`),
   verifyDomain: (id) => req("POST", `/api/domains/${id}/verify`),
   setDomainPublic: (id, isPublic) => req("PATCH", `/api/domains/${id}`, { public: isPublic }),
   removeDomain: (id) => req("DELETE", `/api/domains/${id}`),

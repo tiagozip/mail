@@ -1,19 +1,17 @@
 import { Button, Input } from "@cloudflare/kumo";
-import { CaretDown, Check, Copy, X } from "@phosphor-icons/react";
-import { lazy, Suspense, useState } from "react";
+import { Check, Copy, X } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { notify } from "../toast.js";
 
-const ByodCode = lazy(() => import("./ByodCode.jsx"));
-
-function CopyField({ label, value, mono }) {
+function CopyField({ label, value }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="em-byod-field">
       {label && <label className="em-field-label">{label}</label>}
       <div className="em-byod-copyrow">
-        <code className={mono ? "em-byod-code" : "em-byod-val"}>{value}</code>
+        <code className="em-byod-code">{value}</code>
         <Button
           size="sm"
           variant="ghost"
@@ -32,26 +30,43 @@ function CopyField({ label, value, mono }) {
   );
 }
 
-export function ByodSetup({ open, onClose, onDone }) {
+const STEPS = 3;
+
+export function ByodSetup({ open, existing, onClose, onDone }) {
   const [step, setStep] = useState(1);
   const [domain, setDomain] = useState("");
   const [created, setCreated] = useState(null);
   const [relayUrl, setRelayUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState("");
-  const [showManual, setShowManual] = useState(false);
 
-  function reset() {
-    setStep(1);
-    setDomain("");
-    setCreated(null);
-    setRelayUrl("");
+  useEffect(() => {
+    if (!open) return;
     setError("");
-    setShowManual(false);
-  }
+    setBusy(false);
+    setVerifying(false);
+    if (existing?.domain) {
+      setDomain(existing.domain);
+      setBusy(true);
+      api
+        .addByodDomain(existing.domain)
+        .then((res) => {
+          setCreated(res);
+          setRelayUrl(res.relayUrl || "");
+          setStep(2);
+        })
+        .catch((e) => setError(e.message || "could not load domain"))
+        .finally(() => setBusy(false));
+    } else {
+      setStep(1);
+      setDomain("");
+      setCreated(null);
+      setRelayUrl("");
+    }
+  }, [open, existing]);
 
   function close() {
-    reset();
     onClose();
   }
 
@@ -63,6 +78,7 @@ export function ByodSetup({ open, onClose, onDone }) {
     try {
       const res = await api.addByodDomain(d);
       setCreated(res);
+      setRelayUrl(res.relayUrl || "");
       setStep(2);
     } catch (e) {
       setError(e.message || "could not add domain");
@@ -71,19 +87,37 @@ export function ByodSetup({ open, onClose, onDone }) {
     }
   }
 
-  async function verify() {
+  async function connect() {
     setBusy(true);
     setError("");
     try {
-      await api.setupRelay(created.id, relayUrl.trim());
-      notify("Domain connected", `${created.domain} is ready to send and receive.`, "success");
-      onDone?.();
-      close();
+      const res = await api.setupRelay(created.id, relayUrl.trim());
+      if (res.verified) return done();
+      setBusy(false);
+      setVerifying(true);
+      let ok = false;
+      for (let i = 0; i < 30 && !ok; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          ok = (await api.relayStatus(created.id)).verified;
+        } catch {}
+      }
+      if (ok) return done();
+      setVerifying(false);
+      setError(
+        "Sent a verification email to your domain but didn't see it come back. Make sure the Email Routing catch-all points at your Worker, then try again.",
+      );
     } catch (e) {
-      setError(e.message || "verification failed");
+      setError(e.message || "could not connect");
     } finally {
       setBusy(false);
     }
+  }
+
+  function done() {
+    notify("Domain connected", `${created.domain} is ready to send and receive.`, "success");
+    onDone?.();
+    close();
   }
 
   if (!open) return null;
@@ -95,11 +129,10 @@ export function ByodSetup({ open, onClose, onDone }) {
       }}
     >
       <div className="em-modal-panel em-setup-dialog">
-        <div className="em-setup-progress">Step {step} of 3</div>
         <div className="em-setup-steps">
-          <div className={`em-setup-step ${step >= 1 ? "active" : ""}`} />
-          <div className={`em-setup-step ${step >= 2 ? "active" : ""}`} />
-          <div className={`em-setup-step ${step >= 3 ? "active" : ""}`} />
+          {Array.from({ length: STEPS }, (_, i) => (
+            <div key={i} className={`em-setup-step ${step >= i + 1 ? "active" : ""}`} />
+          ))}
         </div>
         <div className="em-label-head">
           <h2 className="em-label-title">Bring your own domain</h2>
@@ -109,8 +142,8 @@ export function ByodSetup({ open, onClose, onDone }) {
         {step === 1 && (
           <div className="em-setup-body">
             <p className="em-card-sub">
-              Use a domain on <strong>your own</strong> Cloudflare account. You'll deploy a tiny relay
-              Worker that bridges it to your mailbox here, for both sending and receiving. Nothing
+              Use a domain on <strong>your own</strong> Cloudflare account. You'll deploy a tiny Worker
+              with one click that bridges it to your mailbox here, for sending and receiving. Nothing
               leaves your account.
             </p>
             <Input
@@ -132,23 +165,8 @@ export function ByodSetup({ open, onClose, onDone }) {
 
         {step === 2 && created && (
           <div className="em-setup-body">
-            <p className="em-card-sub">
-              On <strong>your</strong> Cloudflare account: prove ownership, deploy the relay with one
-              click, then turn on Email Routing and Email Sending for <strong>{created.domain}</strong>.
-            </p>
-
             <div className="em-byod-block">
-              <div className="em-byod-block-title">1. Prove you own it — add this DNS TXT record</div>
-              <CopyField label={`_estrogen.${created.domain}`} value={created.verifyToken} mono />
-            </div>
-
-            <div className="em-byod-block">
-              <div className="em-byod-block-title">2. Deploy the relay Worker</div>
-              <p className="em-byod-hint">
-                One click clones the Worker into your account. When it asks for{" "}
-                <code className="em-inline-code">RELAY_CONFIG</code>, paste the single value below.
-                That's the only thing to set.
-              </p>
+              <div className="em-byod-block-title">1. Deploy the Worker to your account</div>
               <a className="em-byod-deploy" href={created.deployUrl} target="_blank" rel="noreferrer">
                 <img
                   src="https://deploy.workers.cloudflare.com/button"
@@ -156,35 +174,32 @@ export function ByodSetup({ open, onClose, onDone }) {
                   height={32}
                 />
               </a>
-              <CopyField label="RELAY_CONFIG" value={created.relayConfig} mono />
-
-              <button
-                type="button"
-                className={`em-byod-disclosure ${showManual ? "open" : ""}`}
-                onClick={() => setShowManual((v) => !v)}
-              >
-                <CaretDown weight="bold" />
-                Prefer to do it by hand? Show the Worker code
-              </button>
-              {showManual && (
-                <Suspense fallback={<div className="em-byod-hint">Loading code…</div>}>
-                  <ByodCode code={created.relayCode} />
-                </Suspense>
-              )}
+              <p className="em-byod-hint">
+                When it asks for <code className="em-inline-code">RELAY_CONFIG</code>, paste this. It's
+                the only thing to set.
+              </p>
+              <CopyField value={created.relayConfig} />
             </div>
 
             <div className="em-byod-block">
-              <div className="em-byod-block-title">3. Wire it up</div>
+              <div className="em-byod-block-title">2. Turn on email for {created.domain}</div>
               <p className="em-byod-hint">
-                In the Cloudflare dashboard for {created.domain}: set the Email Routing catch-all to
-                send to your new Worker, and enable Email Sending for the domain (so it can send with
-                DKIM). Then continue.
+                In the Cloudflare dashboard, open <strong>{created.domain} → Email</strong>:
               </p>
+              <ul className="em-byod-steps">
+                <li>
+                  <strong>Email Routing</strong> → set the catch-all action to{" "}
+                  <strong>Send to a Worker</strong> → pick <strong>email-worker</strong>.
+                </li>
+                <li>
+                  <strong>Email Sending</strong> → enable it for the domain so it can send with DKIM.
+                </li>
+              </ul>
             </div>
 
             {error && <div className="em-form-error">{error}</div>}
             <Button variant="primary" onClick={() => setStep(3)}>
-              I've deployed it
+              I've done both
             </Button>
           </div>
         )}
@@ -192,25 +207,29 @@ export function ByodSetup({ open, onClose, onDone }) {
         {step === 3 && created && (
           <div className="em-setup-body">
             <p className="em-card-sub">
-              Paste your relay Worker's URL. We'll check the ownership record and do a signed
-              handshake with your relay.
+              Paste your Worker's URL. We'll send a verification email to {created.domain} and confirm
+              it routes back through your Worker. No DNS records needed.
             </p>
             <Input
               autoFocus
-              label="Relay Worker URL"
-              placeholder="https://estrogen-mail-relay.your-subdomain.workers.dev"
+              label="Worker URL"
+              placeholder="https://email-worker.your-subdomain.workers.dev"
               value={relayUrl}
+              disabled={verifying}
               onChange={(e) => {
                 setRelayUrl(e.target.value);
                 setError("");
               }}
             />
+            {verifying && (
+              <div className="em-byod-hint">Verifying… this can take up to a minute.</div>
+            )}
             {error && <div className="em-form-error">{error}</div>}
             <div className="em-byod-actions">
-              <Button variant="ghost" onClick={() => setStep(2)}>
+              <Button variant="ghost" disabled={verifying} onClick={() => setStep(2)}>
                 Back
               </Button>
-              <Button variant="primary" loading={busy} onClick={verify}>
+              <Button variant="primary" loading={busy || verifying} onClick={connect}>
                 Connect domain
               </Button>
             </div>

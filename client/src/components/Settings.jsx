@@ -30,7 +30,6 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
@@ -881,249 +880,12 @@ function Notifications() {
   );
 }
 
-function CopyField({ label, value }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard?.writeText(value);
-    } catch {}
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  }
-  return (
-    <div className="em-dns-field">
-      <span className="em-dns-field-label">{label}</span>
-      <button type="button" className="em-dns-field-val" onClick={copy} title="Copy">
-        <code>{value}</code>
-        {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
-      </button>
-    </div>
-  );
-}
-
-function DomainSetupModal({ open, existing, onClose, onDone }) {
-  const [step, setStep] = useState(1);
-  const [domain, setDomain] = useState("");
-  const [created, setCreated] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState(null);
-
-  useEffect(() => {
-    if (open) {
-      setStep(existing ? 2 : 1);
-      setDomain(existing?.domain || "");
-      setCreated(existing || null);
-      setError("");
-      setResult(null);
-      setBusy(false);
-    }
-  }, [open, existing]);
-
-  const dom = domain.trim().toLowerCase() || "yourdomain.com";
-  const ready = result?.verified && result?.sendVerified;
-
-  async function createDomain() {
-    const d = domain.trim().toLowerCase();
-    if (!d) return;
-    setBusy(true);
-    setError("");
-    try {
-      const r = await api.addDomain(d);
-      setCreated(r);
-      setStep(2);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verify() {
-    if (!created) return;
-    setBusy(true);
-    try {
-      setResult(await api.verifyDomain(created.id));
-    } catch (err) {
-      notifyError(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!open || step !== 3 || !created) return;
-    let cancelled = false;
-    let timer;
-    let attempts = 0;
-    async function poll() {
-      if (cancelled) return;
-      setBusy(true);
-      try {
-        const r = await api.verifyDomain(created.id);
-        if (cancelled) return;
-        setResult(r);
-        if (r.verified && r.sendVerified) {
-          setBusy(false);
-          return;
-        }
-      } catch {}
-      if (cancelled) return;
-      setBusy(false);
-      attempts += 1;
-      if (attempts < 10) timer = setTimeout(poll, 7000);
-    }
-    poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [open, step, created]);
-
-  if (!open) return null;
-  return createPortal(
-    <div
-      className="em-modal-scrim"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="em-modal-panel em-setup-dialog">
-        <div className="em-setup-progress">Step {step} of 3</div>
-        
-        <div className="em-setup-steps">
-          <div className={`em-setup-step ${step >= 1 ? "active" : ""}`} />
-          <div className={`em-setup-step ${step >= 2 ? "active" : ""}`} />
-          <div className={`em-setup-step ${step >= 3 ? "active" : ""}`} />
-        </div>
-        <div className="em-label-head">
-          <h2 className="em-label-title">Add a domain</h2>
-          <Button
-            size="sm"
-            variant="ghost"
-            shape="square"
-            aria-label="Close"
-            icon={X}
-            onClick={onClose}
-          />
-        </div>
-
-        {step === 1 && (
-          <div className="em-setup-body">
-            <p className="em-card-sub">
-              Enter the domain you want to send and receive mail on. It needs to be on the
-              Cloudflare account that runs this server.
-            </p>
-            <Input
-              autoFocus
-              label="Domain"
-              placeholder="example.com"
-              value={domain}
-              onChange={(e) => {
-                setDomain(e.target.value);
-                setError("");
-              }}
-            />
-            {error && <div className="em-form-error">{error}</div>}
-            <div className="em-label-foot">
-              <Button variant="ghost" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button variant="primary" loading={busy} onClick={createDomain}>
-                Continue
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="em-setup-body">
-            <p className="em-card-sub">
-              Add these DNS records for <b>{dom}</b>.
-            </p>
-            <div className="em-setup-section">Add a TXT record with host '_estrogen.{dom}'</div>
-            <CopyField label="TXT" value={created?.verifyToken || ""} />
-            <div className="em-setup-section">Add these three MX records with host '{dom}'</div>
-            <CopyField label="MX" value="route1.mx.cloudflare.net" />
-            <CopyField label="MX" value="route2.mx.cloudflare.net" />
-            <CopyField label="MX" value="route3.mx.cloudflare.net" />
-            <div className="em-setup-section">Add a TXT record with host '{dom}'</div>
-            <CopyField label="TXT" value="v=spf1 include:_spf.mx.cloudflare.net ~all" />
-            <div className="em-setup-section">Sending — DKIM</div>
-            <p className="em-setup-note">
-              The DKIM record is unique to your domain. Turn on Email Sending for {dom} in
-              Cloudflare (Email → Email Sending → onboard) and it adds the DKIM record
-              automatically.
-            </p>
-            <div className="em-label-foot">
-              <Button variant="ghost" onClick={() => setStep(1)}>
-                Back
-              </Button>
-              <Button variant="primary" onClick={() => setStep(3)}>
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="em-setup-body">
-            <p className="em-card-sub">
-              Checking <b>{dom}</b> automatically. DNS can take a few minutes to propagate, you can
-              leave this open.
-            </p>
-            <div className="em-dns-check">
-              <span className={result?.owns ? "is-ok" : "is-bad"}>
-                {result?.owns ? "✓" : busy && !result ? "•" : "✗"} Ownership (TXT)
-              </span>
-              <span className={result?.verified ? "is-ok" : "is-bad"}>
-                {result?.verified ? "✓" : busy && !result ? "•" : "✗"} Receiving (MX)
-              </span>
-              <span className={result?.sending?.spf ? "is-ok" : "is-bad"}>
-                {result?.sending?.spf ? "✓" : busy && !result ? "•" : "✗"} SPF
-              </span>
-              <span className={result?.sending?.dkim ? "is-ok" : "is-bad"}>
-                {result?.sending?.dkim ? "✓" : busy && !result ? "•" : "✗"} DKIM
-              </span>
-            </div>
-            {busy && !ready && <div className="em-setup-note">Checking DNS…</div>}
-            {ready && (
-              <div className="em-setup-success">Your domain is ready to send and receive.</div>
-            )}
-            <div className="em-label-foot">
-              <Button variant="ghost" onClick={() => setStep(2)}>
-                Back
-              </Button>
-              {ready ? (
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    onDone();
-                    onClose();
-                  }}
-                >
-                  Done
-                </Button>
-              ) : (
-                <Button variant="primary" loading={busy} onClick={verify}>
-                  Check now
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body,
-  );
-}
 
 function Domains() {
   const [domains, setDomains] = useState(null);
   const [directory, setDirectory] = useState([]);
-  const [setupOpen, setSetupOpen] = useState(false);
-  const [setupExisting, setSetupExisting] = useState(null);
   const [byodOpen, setByodOpen] = useState(false);
+  const [byodExisting, setByodExisting] = useState(null);
 
   function refresh() {
     api
@@ -1141,8 +903,8 @@ function Domains() {
   }, []);
 
   function openSetup(d) {
-    setSetupExisting(d ? { id: d.id, domain: d.domain, verifyToken: d.verifyToken } : null);
-    setSetupOpen(true);
+    setByodExisting(d ? { id: d.id, domain: d.domain } : null);
+    setByodOpen(true);
   }
 
   async function togglePublic(d, v) {
@@ -1175,8 +937,8 @@ function Domains() {
         <div className="em-card-head">
           <h2 className="em-card-title">Your domains</h2>
           <p className="em-card-sub">
-            Add your own domain to send and receive mail on it. "Bring your own domain" keeps it on
-            your own Cloudflare account via a relay Worker. Domains are private to you.
+            Bring your own domain to send and receive mail on it. It stays on your own Cloudflare
+            account via a one-click Worker. Domains are private to you.
           </p>
         </div>
 
@@ -1250,10 +1012,7 @@ function Domains() {
         )}
 
         <div className="em-alias-add">
-          <Button variant="ghost" icon={Plus} onClick={() => openSetup(null)}>
-            Add domain
-          </Button>
-          <Button variant="ghost" icon={Globe} onClick={() => setByodOpen(true)}>
+          <Button variant="primary" icon={Globe} onClick={() => openSetup(null)}>
             Bring your own domain
           </Button>
         </div>
@@ -1278,13 +1037,12 @@ function Domains() {
         </div>
       )}
 
-      <DomainSetupModal
-        open={setupOpen}
-        existing={setupExisting}
-        onClose={() => setSetupOpen(false)}
+      <ByodSetup
+        open={byodOpen}
+        existing={byodExisting}
+        onClose={() => setByodOpen(false)}
         onDone={refresh}
       />
-      <ByodSetup open={byodOpen} onClose={() => setByodOpen(false)} onDone={refresh} />
     </>
   );
 }

@@ -15,7 +15,7 @@ import {
   generateRelaySecret,
   RELAY_DEPLOY_URL,
   relayConfigToken,
-  relayWorkerCode,
+  sendVerifyProbe,
   verifyRelay,
 } from "./byod.js";
 import { encryptBytes, tryDecryptBytes, tryDecryptText } from "./crypto.js";
@@ -1523,10 +1523,23 @@ export async function handleApi(request, env, ctx) {
     if (!DOMAIN_RE.test(domain)) return error(400, "invalid domain");
     if (domain === String(env.MAIL_DOMAIN || "").toLowerCase())
       return error(409, "that is the built-in domain");
-    const exists = await env.DB.prepare("SELECT id FROM domains WHERE domain = ? AND owner_id = ?")
+    const exists = await env.DB.prepare(
+      "SELECT id, relay_secret_enc, relay_url, verified FROM domains WHERE domain = ? AND owner_id = ?",
+    )
       .bind(domain, user.id)
       .first();
-    if (exists) return error(409, "you already added this domain");
+    if (exists) {
+      if (!exists.relay_secret_enc) return error(409, "you already added this domain");
+      const secret = await decryptRelaySecret(env, domain, exists.relay_secret_enc);
+      return json({
+        id: exists.id,
+        domain,
+        relayConfig: relayConfigToken(secret, domain, url.origin),
+        deployUrl: RELAY_DEPLOY_URL,
+        relayUrl: exists.relay_url || "",
+        verified: !!exists.verified,
+      });
+    }
     const id = uuid();
     const verifyToken = randomToken(16);
     const secret = generateRelaySecret();
@@ -1539,10 +1552,10 @@ export async function handleApi(request, env, ctx) {
     return json({
       id,
       domain,
-      verifyToken,
       relayConfig: relayConfigToken(secret, domain, url.origin),
       deployUrl: RELAY_DEPLOY_URL,
-      relayCode: relayWorkerCode(secret, domain, url.origin),
+      relayUrl: "",
+      verified: false,
     });
   }
   if ((m = path.match(/^\/api\/domains\/([\w-]+)\/relay$/)) && method === "POST") {
@@ -1568,7 +1581,7 @@ export async function handleApi(request, env, ctx) {
     )
       return error(400, "relay URL must be a public https URL on port 443");
     const row = await env.DB.prepare(
-      "SELECT id, domain, verify_token, relay_secret_enc FROM domains WHERE id = ? AND owner_id = ?",
+      "SELECT id, domain, verified, relay_secret_enc FROM domains WHERE id = ? AND owner_id = ?",
     )
       .bind(m[1], user.id)
       .first();
@@ -1579,18 +1592,31 @@ export async function handleApi(request, env, ctx) {
       .bind(row.domain, user.id)
       .first();
     if (taken) return error(409, "this domain is already verified by another account");
-    const owns = await checkOwnership(row.domain, row.verify_token);
-    if (!owns)
-      return error(400, "ownership TXT record not found yet; add it and try again in a minute");
     const secret = await decryptRelaySecret(env, row.domain, row.relay_secret_enc);
     const v = await verifyRelay(relayUrl, secret, row.domain);
-    if (!v.ok) return error(400, v.error || "could not verify relay");
-    await env.DB.prepare(
-      "UPDATE domains SET relay_url = ?, verified = 1, send_verified = 1 WHERE id = ?",
-    )
+    if (!v.ok) return error(400, v.error || "could not reach your relay Worker");
+    await env.DB.prepare("UPDATE domains SET relay_url = ? WHERE id = ?")
       .bind(relayUrl, row.id)
       .run();
-    return json({ ok: true, verified: true, sendVerified: true });
+    if (row.verified) return json({ ok: true, verified: true, probing: false });
+    const cooldownKey = `byod:probe-cooldown:${row.id}`;
+    if (await env.KV.get(cooldownKey)) return json({ ok: true, verified: false, probing: true });
+    try {
+      await env.KV.put(cooldownKey, "1", { expirationTtl: 60 });
+      await sendVerifyProbe(env, { id: row.id, domain: row.domain });
+    } catch (e) {
+      return error(502, `could not send the verification email: ${e?.message || e}`);
+    }
+    return json({ ok: true, verified: false, probing: true });
+  }
+  if ((m = path.match(/^\/api\/domains\/([\w-]+)\/relay-status$/)) && method === "GET") {
+    const row = await env.DB.prepare(
+      "SELECT verified, send_verified FROM domains WHERE id = ? AND owner_id = ?",
+    )
+      .bind(m[1], user.id)
+      .first();
+    if (!row) return error(404, "not found");
+    return json({ verified: !!row.verified, sendVerified: !!row.send_verified });
   }
   if ((m = path.match(/^\/api\/domains\/([\w-]+)\/verify$/)) && method === "POST") {
     const row = await env.DB.prepare(

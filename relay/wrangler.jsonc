@@ -1,8 +1,0 @@
-{
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "estrogen-mail-relay",
-  "main": "src/index.js",
-  "compatibility_date": "2025-06-01",
-  "send_email": [{ "name": "EMAIL" }],
-  "observability": { "enabled": true }
-}
