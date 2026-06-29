@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.LocalContext
 import zip.estrogen.mail.MailApp
 import zip.estrogen.mail.data.MailRepository
 import zip.estrogen.mail.ui.compose.ComposeViewModel
+import zip.estrogen.mail.ui.encryption.EncryptionViewModel
 import zip.estrogen.mail.ui.maillist.MailListViewModel
 import zip.estrogen.mail.ui.settings.SettingsViewModel
 import zip.estrogen.mail.ui.setup.SetupViewModel
@@ -23,6 +24,7 @@ class AppViewModelFactory(private val repository: MailRepository) : ViewModelPro
             modelClass.isAssignableFrom(ThreadViewModel::class.java) -> ThreadViewModel(repository)
             modelClass.isAssignableFrom(ComposeViewModel::class.java) -> ComposeViewModel(repository)
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(repository)
+            modelClass.isAssignableFrom(EncryptionViewModel::class.java) -> EncryptionViewModel(repository)
             else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.name}")
         } as T
     }

@@ -10,13 +10,13 @@ import java.util.concurrent.TimeUnit
 
 object ApiFactory {
 
-    private val json = Json {
+    val json = Json {
         ignoreUnknownKeys = true
         explicitNulls = false
         coerceInputValues = true
     }
 
-    fun create(baseUrl: String, apiKey: String): MailApi {
+    fun client(apiKey: String): OkHttpClient {
         val authInterceptor = Interceptor { chain ->
             val request = chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $apiKey")
@@ -25,15 +25,16 @@ object ApiFactory {
                 .build()
             chain.proceed(request)
         }
-
-        val client = OkHttpClient.Builder()
+        return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
+    }
 
+    fun create(baseUrl: String, apiKey: String, client: OkHttpClient = client(apiKey)): MailApi {
         val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
-
         return Retrofit.Builder()
             .baseUrl(normalized)
             .client(client)

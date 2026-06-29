@@ -8,11 +8,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import zip.estrogen.mail.ui.auth.AuthScreen
 import zip.estrogen.mail.ui.compose.ComposeScreen
+import zip.estrogen.mail.ui.encryption.EncryptionScreen
 import zip.estrogen.mail.ui.compose.ComposePrefill
 import zip.estrogen.mail.ui.maillist.MailListScreen
 import zip.estrogen.mail.ui.settings.SettingsScreen
-import zip.estrogen.mail.ui.setup.SetupScreen
 import zip.estrogen.mail.ui.thread.ThreadScreen
 
 object Routes {
@@ -21,6 +22,7 @@ object Routes {
     const val THREAD = "thread/{threadId}/{messageId}"
     const val COMPOSE = "compose"
     const val SETTINGS = "settings"
+    const val ENCRYPTION = "encryption"
 
     fun thread(threadId: String, messageId: String) =
         "thread/${Uri.encode(threadId)}/${Uri.encode(messageId)}"
@@ -45,7 +47,7 @@ fun AppNavHost(
     NavHost(navController = navController, startDestination = start) {
 
         composable(Routes.SETUP) {
-            SetupScreen(
+            AuthScreen(
                 onConfigured = {
                     navController.navigate(Routes.MAIL_LIST) {
                         popUpTo(Routes.SETUP) { inclusive = true }
@@ -102,12 +104,17 @@ fun AppNavHost(
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
+                onOpenEncryption = { navController.navigate(Routes.ENCRYPTION) },
                 onSignedOut = {
                     navController.navigate(Routes.SETUP) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
             )
+        }
+
+        composable(Routes.ENCRYPTION) {
+            EncryptionScreen(onBack = { navController.popBackStack() })
         }
     }
 }

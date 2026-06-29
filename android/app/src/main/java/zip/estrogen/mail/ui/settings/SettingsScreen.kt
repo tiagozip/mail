@@ -1,5 +1,6 @@
 package zip.estrogen.mail.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Lock
@@ -58,6 +60,7 @@ import zip.estrogen.mail.ui.common.Avatar
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenEncryption: () -> Unit = {},
     onSignedOut: () -> Unit
 ) {
     val viewModel = appViewModel<SettingsViewModel>()
@@ -125,7 +128,32 @@ fun SettingsScreen(
 
             Spacer(Modifier.size(16.dp))
             SectionTitle("Encryption")
-            PgpCard(state, viewModel)
+            SettingCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenEncryption).padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (state.pgpStatus == PgpStatus.UNLOCKED) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("End-to-end encryption", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            when (state.pgpStatus) {
+                                PgpStatus.UNLOCKED -> "On — unlocked on this device"
+                                PgpStatus.LOCKED -> "Locked — tap to unlock"
+                                PgpStatus.ABSENT -> "Off — tap to set up"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
 
             Spacer(Modifier.size(16.dp))
             SectionTitle("Account")

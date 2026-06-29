@@ -70,7 +70,7 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
             )
         }
         viewModelScope.launch {
-            repository.loadMessages(folder).fold(
+            repository.refreshMessages(folder).fold(
                 onSuccess = { resp ->
                     _state.update {
                         if (it.folder != folder) it
@@ -101,7 +101,7 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
         if (current.loadingMore) return
         _state.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
-            repository.loadMessages(current.folder, cursor).fold(
+            repository.refreshMessages(current.folder, cursor).fold(
                 onSuccess = { resp ->
                     _state.update {
                         it.copy(

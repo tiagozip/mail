@@ -46,8 +46,8 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
             repository.loadMe().onSuccess { me ->
                 _state.update {
                     it.copy(
-                        from = me.user.address ?: it.from,
-                        pgpAvailable = me.user.pgpEnabled && repository.pgp.hasPrivateKey
+                        from = me.user?.address ?: it.from,
+                        pgpAvailable = me.user?.pgpEnabled == true && repository.pgp.hasPrivateKey
                     )
                 }
                 withContext(Dispatchers.Default) { repository.pgp.tryAutoUnlock() }

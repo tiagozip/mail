@@ -46,7 +46,7 @@ class SetupViewModel(private val repository: MailRepository) : ViewModel() {
             repository.validate(url, key).fold(
                 onSuccess = { me ->
                     repository.saveCredentials(key, url)
-                    val who = me.user.displayName ?: me.user.address ?: me.user.username
+                    val who = me.user?.displayName ?: me.user?.address ?: me.user?.username
                     _state.update { it.copy(loading = false, greeting = who, done = true) }
                 },
                 onFailure = { err ->
