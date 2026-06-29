@@ -169,12 +169,13 @@ function safeEqual(a, b) {
 
 async function oidcLogin(request, env) {
   const url = new URL(request.url);
+  const native = url.searchParams.get("native") === "1";
   const redirectUri = `${url.origin}/api/auth/callback`;
   const state = randomToken(16);
   const nonce = randomToken(16);
   const verifier = randomVerifier();
   const challenge = await challengeFor(verifier);
-  await env.KV.put(`oauthflow:${state}`, JSON.stringify({ verifier, nonce, redirectUri }), {
+  await env.KV.put(`oauthflow:${state}`, JSON.stringify({ verifier, nonce, redirectUri, native }), {
     expirationTtl: 600,
   });
   const dest = await authorizeUrl(env, { redirectUri, state, nonce, challenge });
@@ -221,6 +222,13 @@ async function oidcCallback(request, env) {
     }
     const user = await upsertOidcUser(env, { ...claims, sub: verified.sub });
     const token = await createSession(env, user.id, { idToken: tokens.id_token || null });
+    if (flow.native) {
+      const oneTime = randomToken(32);
+      await env.KV.put(`nativeauth:${oneTime}`, JSON.stringify({ userId: user.id }), {
+        expirationTtl: 120,
+      });
+      return redirectTo(`zip.estrogen.mail://auth?code=${oneTime}`, { "set-cookie": clearFlow });
+    }
     const headers = new Headers();
     headers.append("set-cookie", clearFlow);
     headers.append("set-cookie", sessionCookie(token, secure));
@@ -232,6 +240,27 @@ async function oidcCallback(request, env) {
       "set-cookie": clearFlow,
     });
   }
+}
+
+async function nativeExchange(request, env) {
+  const body = await readJson(request);
+  const code = String(body.code || "");
+  if (!code) return error(400, "missing code");
+  const raw = await env.KV.get(`nativeauth:${code}`);
+  if (!raw) return error(400, "invalid or expired code");
+  await env.KV.delete(`nativeauth:${code}`);
+  const { userId } = JSON.parse(raw);
+  const user = await env.DB.prepare("SELECT id, address FROM users WHERE id = ?").bind(userId).first();
+  if (!user) return error(400, "user not found");
+  const key = `emk_${randomToken(20)}`;
+  const prefix = key.slice(0, 12);
+  const keyHash = await sha256Hex(key);
+  await env.DB.prepare(
+    "INSERT INTO api_keys (id, user_id, name, key_hash, prefix, created_at) VALUES (?,?,?,?,?,?)",
+  )
+    .bind(uuid(), userId, "Android app", keyHash, prefix, now())
+    .run();
+  return json({ apiKey: key, address: user.address });
 }
 
 async function upsertOidcUser(env, claims) {
@@ -748,6 +777,7 @@ export async function handleApi(request, env, ctx) {
 
   if (path === "/api/auth/login" && method === "GET") return oidcLogin(request, env);
   if (path === "/api/auth/callback" && method === "GET") return oidcCallback(request, env);
+  if (path === "/api/auth/native/exchange" && method === "POST") return nativeExchange(request, env);
   if (path === "/api/byod/ingest" && method === "POST") return byodIngest(request, env, ctx);
 
   const auth = await authenticate(request, env);
@@ -1317,7 +1347,7 @@ export async function handleApi(request, env, ctx) {
   }
 
   if (path === "/api/pgp" && method === "GET") {
-    if (!auth?.session) return error(403, "use the web app to manage pgp keys");
+    if (!auth?.session && !auth?.viaApiKey) return error(403, "use the web app to manage pgp keys");
     const row = await env.DB.prepare(
       "SELECT pgp_enabled, pgp_public_key, pgp_private_key_enc FROM users WHERE id = ?",
     )
@@ -1330,7 +1360,7 @@ export async function handleApi(request, env, ctx) {
     });
   }
   if (path === "/api/pgp/enable" && method === "POST") {
-    if (!auth?.session) return error(403, "use the web app to manage pgp keys");
+    if (!auth?.session && !auth?.viaApiKey) return error(403, "use the web app to manage pgp keys");
     const b = await readJson(request);
     const publicKey = String(b.publicKey || "");
     const privateKeyEnc = String(b.privateKeyEnc || "");
@@ -1348,7 +1378,7 @@ export async function handleApi(request, env, ctx) {
     return json({ ok: true });
   }
   if (path === "/api/pgp" && method === "DELETE") {
-    if (!auth?.session) return error(403, "use the web app to manage pgp keys");
+    if (!auth?.session && !auth?.viaApiKey) return error(403, "use the web app to manage pgp keys");
     await env.DB.prepare(
       "UPDATE users SET pgp_public_key = NULL, pgp_private_key_enc = NULL, pgp_enabled = 0 WHERE id = ?",
     )
