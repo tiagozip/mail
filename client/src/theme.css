@@ -2985,7 +2985,7 @@ html[data-theme="nord"] {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
-  
+
   display: block;
   overflow-x: auto;
   max-width: 100%;
@@ -4056,6 +4056,11 @@ html[data-mode="dark"] .em-letter .em-shiki {
   margin: 0;
 }
 
+.em-byod-hint b {
+  font-weight: 500;
+  color: var(--text-color-kumo-default);
+}
+
 .em-byod-field {
   display: flex;
   flex-direction: column;
@@ -4079,6 +4084,11 @@ html[data-mode="dark"] .em-letter .em-shiki {
   border: 1px solid var(--color-kumo-hairline);
   border-radius: var(--em-radius-sm);
   padding: 6px 8px;
+}
+
+.em-byod-clip {
+  width: 100%;
+  min-width: 0;
 }
 
 .em-inline-code {

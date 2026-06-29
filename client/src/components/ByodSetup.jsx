@@ -1,34 +1,9 @@
-import { Button, Input } from "@cloudflare/kumo";
-import { Check, Copy, RocketLaunch, X } from "@phosphor-icons/react";
+import { Button, ClipboardText, Input } from "@cloudflare/kumo";
+import { RocketLaunch, X } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import { notify } from "../toast.js";
-
-function CopyField({ label, value }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="em-byod-field">
-      {label && <label className="em-field-label">{label}</label>}
-      <div className="em-byod-copyrow">
-        <code className="em-byod-code">{value}</code>
-        <Button
-          size="sm"
-          variant="ghost"
-          shape="square"
-          aria-label="Copy"
-          icon={copied ? Check : Copy}
-          onClick={() => {
-            navigator.clipboard?.writeText(value).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1200);
-            });
-          }}
-        />
-      </div>
-    </div>
-  );
-}
 
 const STEPS = 3;
 
@@ -174,7 +149,7 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
           <div className="em-setup-body">
             <div className="em-byod-block">
               <div className="em-byod-block-title">1. Install the Worker</div>
-              
+
               <Button
                 variant="primary"
                 icon={RocketLaunch}
@@ -190,7 +165,11 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
                 When Cloudflare asks you for <code className="em-inline-code">RELAY_CONFIG</code>,
                 copy this and paste it there.
               </p>
-              <CopyField value={created.relayConfig} />
+              <ClipboardText
+                text={created.relayConfig}
+                className="em-byod-clip"
+                tooltip={{ text: "Copy", copiedText: "Copied!", side: "top" }}
+              />
             </div>
 
             <div className="em-byod-block">
@@ -200,14 +179,13 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
               </p>
               <ul className="em-byod-steps">
                 <li>
-                  <strong>Email Routing</strong>: open <strong>Routing rules</strong>, edit the{" "}
-                  <strong>Catch-all address</strong>, set its action to{" "}
-                  <strong>Send to a Worker</strong>, and choose <strong>email-worker</strong>. This
-                  lets you receive mail.
+                  <strong>Email Routing</strong>: open <strong>Routing rules</strong>, enable{" "}
+                  <strong>Catch-all</strong> and edit the action to{" "}
+                  <strong>Send to a Worker</strong> → <strong>email-worker</strong>. Then, save.
                 </li>
                 <li>
                   <strong>Email Sending</strong>: turn it <strong>on</strong> for {created.domain}.
-                  This lets you send with a valid signature.
+                  You may need to onboard the domain first.
                 </li>
               </ul>
             </div>
@@ -221,10 +199,6 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
 
         {step === 3 && created && (
           <div className="em-setup-body">
-            <p className="em-card-sub">
-              Last step. Paste your Worker's URL and we'll send a quick verification email to{" "}
-              {created.domain} to confirm everything routes back. No DNS records needed.
-            </p>
             <p className="em-byod-hint">
               Find it in Cloudflare under <strong>Workers &amp; Pages → email-worker</strong> (the{" "}
               <code className="em-inline-code">.workers.dev</code> URL near the top).
