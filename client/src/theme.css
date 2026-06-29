@@ -417,9 +417,10 @@ html[data-theme="sakura"] {
   align-items: center;
   gap: var(--em-1);
   flex-wrap: wrap;
-  min-height: 64px;
+  min-height: calc(64px - var(--em-2));
   padding: var(--em-2) 0;
   flex: none;
+  padding-top: 0px;
 }
 
 .em-reader-topbar svg {
@@ -1399,6 +1400,22 @@ html[data-theme="sakura"] {
   display: inline-flex;
   align-items: center;
   color: var(--text-color-kumo-brand);
+}
+
+.em-split {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.em-split-main {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.em-split-caret {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  margin-left: 1px;
 }
 
 .em-center {

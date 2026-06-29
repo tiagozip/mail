@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { api } from "./api.js";
 import { notifyError } from "./toast.js";
 
 function runViewTransition(apply) {
-  if (typeof document === "undefined" || !document.startViewTransition) {
-    apply();
-    return;
-  }
-  document.startViewTransition(() => flushSync(apply));
+  apply();
 }
 
 export function useMailStore(initialUser) {

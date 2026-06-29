@@ -672,38 +672,42 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         }}
       />
       <div className="em-quickreply-actions">
-        <Button
-          size="sm"
-          variant="primary"
-          icon={PaperPlaneTilt}
-          loading={sending}
-          disabled={!canSend}
-          onClick={() => send()}
-        >
-          Send
-        </Button>
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            render={(p) => (
-              <Button
-                {...p}
-                size="sm"
-                variant="ghost"
-                shape="square"
-                aria-label="Send later"
-                icon={CaretDown}
-                disabled={!canSend}
-              />
-            )}
-          />
-          <DropdownMenu.Content style={{ zIndex: 200 }}>
-            {sendLaterPresets().map((p) => (
-              <DropdownMenu.Item key={p.key} onClick={() => send(p.sendAt)}>
-                {p.label}
-              </DropdownMenu.Item>
-            ))}
-          </DropdownMenu.Content>
-        </DropdownMenu>
+        <div className="em-split">
+          <Button
+            className="em-split-main"
+            size="sm"
+            variant="primary"
+            icon={PaperPlaneTilt}
+            loading={sending}
+            disabled={!canSend}
+            onClick={() => send()}
+          >
+            Send
+          </Button>
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={(p) => (
+                <Button
+                  {...p}
+                  className="em-split-caret"
+                  size="sm"
+                  variant="primary"
+                  shape="square"
+                  aria-label="Send later"
+                  icon={CaretDown}
+                  disabled={!canSend}
+                />
+              )}
+            />
+            <DropdownMenu.Content style={{ zIndex: 200 }}>
+              {sendLaterPresets().map((p) => (
+                <DropdownMenu.Item key={p.key} onClick={() => send(p.sendAt)}>
+                  {p.label}
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        </div>
         {canE2E && (
           <Tooltip content={`Encrypted to ${replyName}`}>
             <span className="em-quickreply-enc" aria-label="Encrypted">

@@ -718,34 +718,43 @@ export function Compose({ open, initial, user, onClose, onSent }) {
 
         <input ref={fileRef} type="file" multiple hidden onChange={onPickFiles} />
         <div className="em-compose-actions">
-          <Button variant="primary" icon={PaperPlaneTilt} loading={busy} onClick={() => onSend()}>
-            Send
-          </Button>
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              render={(p) => (
-                <Button
-                  {...p}
-                  variant="primary"
-                  shape="square"
-                  aria-label="Send later"
-                  icon={CaretDown}
-                  disabled={busy}
-                />
-              )}
-            />
-            <DropdownMenu.Content>
-              <DropdownMenu.Label>Send later</DropdownMenu.Label>
-              {sendLaterPresets().map((p) => (
-                <DropdownMenu.Item key={p.key} onClick={() => onSend(p.sendAt)}>
-                  <span className="em-snooze-item">
-                    <span>{p.label}</span>
-                    <span className="em-snooze-when">{fullDate(p.sendAt)}</span>
-                  </span>
-                </DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu>
+          <div className="em-split">
+            <Button
+              className="em-split-main"
+              variant="primary"
+              icon={PaperPlaneTilt}
+              loading={busy}
+              onClick={() => onSend()}
+            >
+              Send
+            </Button>
+            <DropdownMenu>
+              <DropdownMenu.Trigger
+                render={(p) => (
+                  <Button
+                    {...p}
+                    className="em-split-caret"
+                    variant="primary"
+                    shape="square"
+                    aria-label="Send later"
+                    icon={CaretDown}
+                    disabled={busy}
+                  />
+                )}
+              />
+              <DropdownMenu.Content>
+                <DropdownMenu.Label>Send later</DropdownMenu.Label>
+                {sendLaterPresets().map((p) => (
+                  <DropdownMenu.Item key={p.key} onClick={() => onSend(p.sendAt)}>
+                    <span className="em-snooze-item">
+                      <span>{p.label}</span>
+                      <span className="em-snooze-when">{fullDate(p.sendAt)}</span>
+                    </span>
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </div>
           <Button variant="outline" icon={Paperclip} onClick={() => fileRef.current?.click()}>
             Attach
           </Button>
