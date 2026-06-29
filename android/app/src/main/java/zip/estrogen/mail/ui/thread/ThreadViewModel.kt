@@ -61,7 +61,7 @@ class ThreadViewModel(private val repository: MailRepository) : ViewModel() {
                     resolved.lastOrNull()?.takeIf { !it.isRead }?.let { markRead(it.id) }
                     withContext(Dispatchers.Default) { repository.pgp.tryAutoUnlock() }
                     _state.update { it.copy(pgpStatus = repository.pgp.status.value) }
-                    lastId?.let { decryptIfNeeded(it) }
+                    resolved.forEach { if (it.pgp) decryptIfNeeded(it.id) }
                 },
                 onFailure = { err ->
                     _state.update { it.copy(loading = false, error = err.message ?: "Failed to load this conversation") }
@@ -116,7 +116,7 @@ class ThreadViewModel(private val repository: MailRepository) : ViewModel() {
             result.fold(
                 onSuccess = {
                     _state.update { it.copy(unlocking = false, pgpStatus = PgpStatus.UNLOCKED) }
-                    _state.value.expanded.forEach { decryptIfNeeded(it) }
+                    _state.value.messages.forEach { if (it.pgp) decryptIfNeeded(it.id) }
                 },
                 onFailure = {
                     _state.update {

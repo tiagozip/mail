@@ -79,6 +79,7 @@ import zip.estrogen.mail.ui.common.Avatar
 import zip.estrogen.mail.ui.common.fullTime
 import zip.estrogen.mail.ui.common.relativeTime
 import zip.estrogen.mail.ui.compose.ComposePrefillData
+import zip.estrogen.mail.ui.maillist.stripHtml
 import zip.estrogen.mail.ui.thread.html.HtmlBlocks
 import zip.estrogen.mail.ui.thread.html.rememberParsedHtml
 
@@ -279,21 +280,17 @@ private fun MessageCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = if (expanded) fullTime(message.date) else (message.snippet?.takeIf { it.isNotBlank() } ?: relativeTime(message.date)),
+                        text = when {
+                            expanded -> fullTime(message.date)
+                            message.pgp && decrypted != null -> stripHtml(decrypted).take(100).ifBlank { relativeTime(message.date) }
+                            message.pgp -> relativeTime(message.date)
+                            else -> message.snippet?.takeIf { it.isNotBlank() } ?: relativeTime(message.date)
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-                if (message.pgp) {
-                    Icon(
-                        imageVector = Icons.Rounded.Lock,
-                        contentDescription = "Encrypted",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
                 }
                 IconButton(onClick = onToggleStar, modifier = Modifier.size(36.dp)) {
                     Icon(
