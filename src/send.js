@@ -4,6 +4,21 @@ import { sanitizeEmailHtml, textToHtml } from "./sanitize.js";
 import { bumpContact, htmlKey, insertMessage, resolveThread, updateStorage } from "./store.js";
 import { isValidEmail, normalizeAddr, now, snippetFrom, uuid } from "./util.js";
 
+function expandHtmlBlocks(html) {
+  return String(html || "").replace(
+    /<div\b[^>]*\bdata-htmlblock="([^"]*)"[^>]*>[\s\S]*?<\/div>/gi,
+    (_m, b64) => {
+      try {
+        const bin = atob(b64);
+        const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      } catch {
+        return "";
+      }
+    },
+  );
+}
+
 async function pgpEncryptToSelf(env, userId, content) {
   const row = await env.DB.prepare(
     "SELECT pgp_public_key FROM users WHERE id = ? AND pgp_enabled = 1",
@@ -96,8 +111,9 @@ export async function sendMessage(env, user, payload) {
 
   const subject = (payload.subject || "(no subject)").slice(0, 988);
   const text = payload.text || "";
-  const html = payload.html
-    ? sanitizeEmailHtml(payload.html, { allowRemote: true })
+  const expandedHtml = expandHtmlBlocks(payload.html || "");
+  const html = expandedHtml
+    ? sanitizeEmailHtml(expandedHtml, { allowRemote: true })
     : textToHtml(text);
   const signature = user.signature ? `\n\n${user.signature}` : "";
 

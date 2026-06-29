@@ -1,5 +1,6 @@
 import { Button, Tooltip } from "@cloudflare/kumo";
 import {
+  BracketsAngle,
   Code,
   CodeBlock,
   LinkSimple,
@@ -18,6 +19,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect } from "react";
+import { HtmlBlock } from "./HtmlBlock.jsx";
 
 function ToolButton({ icon, label, active, onClick, disabled }) {
   return (
@@ -60,6 +62,7 @@ export function RichEditor({ value, onUpdate, placeholder, onEditorReady, onFile
       StarterKit.configure({ link: false }),
       Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer nofollow" } }),
       Image.configure({ allowBase64: false, HTMLAttributes: { class: "em-rt-img" } }),
+      HtmlBlock,
       Placeholder.configure({ placeholder: placeholder || "Write your message" }),
     ],
     content: value || "",
@@ -171,6 +174,12 @@ export function RichEditor({ value, onUpdate, placeholder, onEditorReady, onFile
           label="Code block"
           active={editor.isActive("codeBlock")}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        />
+        <ToolButton
+          icon={BracketsAngle}
+          label="HTML block"
+          active={editor.isActive("htmlBlock")}
+          onClick={() => editor.chain().focus().insertHtmlBlock().run()}
         />
         <span className="em-rt-sep" />
         <ToolButton icon={LinkSimple} label="Link" active={editor.isActive("link")} onClick={toggleLink} />

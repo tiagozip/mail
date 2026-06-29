@@ -2445,6 +2445,62 @@ html[data-theme="sakura"] {
   margin: var(--em-2) 0;
 }
 
+.em-htmlblock {
+  border: 1px solid var(--color-kumo-line);
+  border-radius: var(--em-radius-sm);
+  margin: var(--em-3) 0;
+  overflow: hidden;
+}
+
+.em-htmlblock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px var(--em-3);
+  background: var(--color-kumo-tint);
+  border-bottom: 1px solid var(--color-kumo-hairline);
+}
+
+.em-htmlblock-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-color-kumo-inactive);
+}
+
+.em-htmlblock-toggle {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--text-color-kumo-brand);
+}
+
+.em-htmlblock-code {
+  width: 100%;
+  min-height: 90px;
+  border: none;
+  outline: none;
+  resize: vertical;
+  background: var(--color-kumo-control);
+  color: var(--text-color-kumo-default);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  padding: var(--em-3);
+}
+
+.em-htmlblock-preview {
+  padding: var(--em-3);
+}
+
+.em-htmlblock-empty {
+  padding: var(--em-3);
+  font-size: 0.82rem;
+  color: var(--text-color-kumo-inactive);
+}
+
 .em-rt-content .ProseMirror img.ProseMirror-selectednode {
   outline: 2px solid var(--color-kumo-brand);
 }
