@@ -9,7 +9,7 @@ import { Compose } from "./Compose.jsx";
 import { E2EPrompt, shouldPromptE2E } from "./E2EPrompt.jsx";
 import { MailSidebar } from "./MailSidebar.jsx";
 import { MessageList } from "./MessageList.jsx";
-import { ScheduledView } from "./ScheduledView.jsx";
+import { ScheduledModal } from "./ScheduledView.jsx";
 import { Settings } from "./Settings.jsx";
 import { Shortcuts } from "./Shortcuts.jsx";
 import { ThreadView } from "./ThreadView.jsx";
@@ -54,6 +54,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
   const [composeInitial, setComposeInitial] = useState(null);
   const [screen, setScreen] = useState("mail");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [scheduledOpen, setScheduledOpen] = useState(false);
   const [e2ePrompt, setE2ePrompt] = useState(() => shouldPromptE2E(initialUser));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -276,7 +277,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
     compose: composeOpen,
     settings: settingsOpen,
     admin: screen === "admin",
-    scheduled: screen === "scheduled",
+    scheduled: scheduledOpen,
   };
   useEffect(() => {
     for (const k of Object.keys(navState)) {
@@ -293,8 +294,8 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
     function onPop() {
       if (composeOpen) return setComposeOpen(false);
       if (settingsOpen) return setSettingsOpen(false);
+      if (scheduledOpen) return setScheduledOpen(false);
       if (screen === "admin") return setScreen("mail");
-      if (screen === "scheduled") return setScreen("mail");
       if (store.openId) {
         store.closeMessage();
         setCursor(-1);
@@ -328,7 +329,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
           }}
           onOpenScheduled={() => {
             setSidebarOpen(false);
-            setScreen("scheduled");
+            setScheduledOpen(true);
           }}
           onSignOut={signOut}
           onNavigate={() => setSidebarOpen(false)}
@@ -337,8 +338,6 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
 
       {screen === "admin" ? (
         <Admin onBack={goBack} />
-      ) : screen === "scheduled" ? (
-        <ScheduledView onBack={goBack} />
       ) : (
         <div className="em-main">
           <div className="em-column">
@@ -374,6 +373,8 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
         onSetPalette={onSetPalette}
         onClose={goBack}
       />
+
+      <ScheduledModal open={scheduledOpen} onClose={goBack} />
 
       <Compose
         open={composeOpen}
