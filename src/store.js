@@ -108,6 +108,26 @@ export function attKey(userId, attachmentId, filename) {
   return `att/${userId}/${attachmentId}/${safe}`;
 }
 
+export async function recordChange(env, userId, messageId, kind) {
+  if (!userId || !messageId) return;
+  await env.DB.prepare("INSERT INTO mailbox_changes (user_id, message_id, kind, ts) VALUES (?,?,?,?)")
+    .bind(userId, messageId, kind, now())
+    .run();
+}
+
+export async function recordChanges(env, userId, messageIds, kind) {
+  const ids = [...new Set((messageIds || []).filter(Boolean))];
+  if (!ids.length) return;
+  const ts = now();
+  await env.DB.batch(
+    ids.map((id) =>
+      env.DB.prepare(
+        "INSERT INTO mailbox_changes (user_id, message_id, kind, ts) VALUES (?,?,?,?)",
+      ).bind(userId, id, kind, ts),
+    ),
+  );
+}
+
 export async function resolveThread(env, userId, inReplyTo, refs) {
   const candidates = [];
   if (inReplyTo) candidates.push(inReplyTo);
@@ -201,6 +221,7 @@ export async function insertMessage(env, row) {
   )
     .bind(m.id, m.user_id, m.subject, `${m.from_name} ${m.from_addr}`, m.body_text)
     .run();
+  await recordChange(env, m.user_id, m.id, "upsert");
   return m;
 }
 
@@ -227,6 +248,7 @@ export async function deleteMessageRow(env, userId, messageId) {
     env.DB.prepare("DELETE FROM messages_fts WHERE mid = ?").bind(messageId),
     env.DB.prepare("DELETE FROM messages WHERE id = ? AND user_id = ?").bind(messageId, userId),
   ]);
+  await recordChange(env, userId, messageId, "delete");
   await updateStorage(env, userId, -(freed + (msg?.size || 0)));
 }
 

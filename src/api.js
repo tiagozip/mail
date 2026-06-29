@@ -28,6 +28,8 @@ import {
   FILTER_FIELDS,
   FOLDERS,
   insertMessage,
+  recordChange,
+  recordChanges,
   updateStorage,
   validateLabelRule,
 } from "./store.js";
@@ -88,6 +90,7 @@ function listItem(row) {
     hasAttachments: !!row.has_attachments,
     pgp: !!row.pgp,
     authStatus: row.auth_status || "none",
+    snoozeUntil: row.snooze_until || null,
   };
 }
 
@@ -508,11 +511,59 @@ async function getMessage(env, user, id, allowRemote) {
   };
 }
 
+async function currentCursor(env, userId) {
+  const row = await env.DB.prepare(
+    "SELECT MAX(seq) AS seq FROM mailbox_changes WHERE user_id = ?",
+  )
+    .bind(userId)
+    .first();
+  return row?.seq || 0;
+}
+
+async function syncChanges(env, user, since, limit) {
+  const lim = clampInt(limit, 1, 500, 200);
+  const res = await env.DB.prepare(
+    "SELECT seq, message_id, kind FROM mailbox_changes WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?",
+  )
+    .bind(user.id, since, lim + 1)
+    .all();
+  let rows = res.results || [];
+  const more = rows.length > lim;
+  if (more) rows = rows.slice(0, lim);
+  if (!rows.length) return json({ upserts: [], deletes: [], cursor: since, more: false });
+
+  const cursor = rows[rows.length - 1].seq;
+  const finalKind = new Map();
+  for (const r of rows) finalKind.set(r.message_id, r.kind);
+  const upsertIds = [];
+  const deletes = [];
+  for (const [id, kind] of finalKind) {
+    if (kind === "delete") deletes.push(id);
+    else upsertIds.push(id);
+  }
+
+  let upserts = [];
+  if (upsertIds.length) {
+    const ph = upsertIds.map(() => "?").join(",");
+    const r = await env.DB.prepare(`SELECT * FROM messages WHERE user_id = ? AND id IN (${ph})`)
+      .bind(user.id, ...upsertIds)
+      .all();
+    const found = r.results || [];
+    upserts = found.map(listItem);
+    await withLabels(env, user.id, upserts);
+    await attachSenderAvatars(env, upserts);
+    const foundIds = new Set(found.map((x) => x.id));
+    for (const id of upsertIds) if (!foundIds.has(id)) deletes.push(id);
+  }
+  return json({ upserts, deletes, cursor, more });
+}
+
 async function markRead(env, user, ids, read) {
   const ph = ids.map(() => "?").join(",");
   await env.DB.prepare(`UPDATE messages SET is_read = ? WHERE user_id = ? AND id IN (${ph})`)
     .bind(read ? 1 : 0, user.id, ...ids)
     .run();
+  await recordChanges(env, user.id, ids, "upsert");
 }
 
 async function buildThread(env, user, threadId) {
@@ -619,6 +670,7 @@ async function saveDraft(request, env, user, draftId) {
           user.id,
         )
         .run();
+      await recordChange(env, user.id, draftId, "upsert");
       return json({ id: draftId });
     }
   }
@@ -659,7 +711,7 @@ export async function handleApi(request, env, ctx) {
     if (!auth) return json({ user: null });
     const me = publicUser(auth.user);
     me.addresses = await listAddresses(env, auth.user.id);
-    return json({ user: me });
+    return json({ user: me, syncCursor: await currentCursor(env, auth.user.id) });
   }
   if (!auth) return error(401, "not authenticated");
   const user = auth.user;
@@ -679,6 +731,11 @@ export async function handleApi(request, env, ctx) {
 
   if (path === "/api/folders" && method === "GET")
     return json({ counts: await folderCounts(env, user.id) });
+
+  if (path === "/api/sync" && method === "GET") {
+    const since = clampInt(url.searchParams.get("since"), 0, Number.MAX_SAFE_INTEGER, 0);
+    return syncChanges(env, user, since, url.searchParams.get("limit"));
+  }
   if (path === "/api/messages" && method === "GET") return listMessages(request, env, user);
 
   let m;
@@ -745,6 +802,7 @@ export async function handleApi(request, env, ctx) {
     await env.DB.prepare("UPDATE messages SET is_starred = ? WHERE id = ? AND user_id = ?")
       .bind(b.star !== false ? 1 : 0, m[1], user.id)
       .run();
+    await recordChange(env, user.id, m[1], "upsert");
     return json({ ok: true });
   }
   if ((m = path.match(/^\/api\/messages\/([\w-]+)\/move$/)) && method === "POST") {
@@ -753,6 +811,7 @@ export async function handleApi(request, env, ctx) {
     await env.DB.prepare("UPDATE messages SET folder = ? WHERE id = ? AND user_id = ?")
       .bind(b.folder, m[1], user.id)
       .run();
+    await recordChange(env, user.id, m[1], "upsert");
     return json({ ok: true });
   }
   if ((m = path.match(/^\/api\/messages\/([\w-]+)\/labels$/)) && method === "POST") {
@@ -773,6 +832,7 @@ export async function handleApi(request, env, ctx) {
         .bind(m[1], lid)
         .run();
     }
+    await recordChange(env, user.id, m[1], "upsert");
     return json({ ok: true });
   }
 
@@ -782,15 +842,17 @@ export async function handleApi(request, env, ctx) {
     if (!ids.length) return error(400, "no ids");
     const ph = ids.map(() => "?").join(",");
     if (b.action === "read") await markRead(env, user, ids, b.value !== false);
-    else if (b.action === "star")
+    else if (b.action === "star") {
       await env.DB.prepare(`UPDATE messages SET is_starred = ? WHERE user_id = ? AND id IN (${ph})`)
         .bind(b.value !== false ? 1 : 0, user.id, ...ids)
         .run();
-    else if (b.action === "move" && FOLDERS.includes(b.value))
+      await recordChanges(env, user.id, ids, "upsert");
+    } else if (b.action === "move" && FOLDERS.includes(b.value)) {
       await env.DB.prepare(`UPDATE messages SET folder = ? WHERE user_id = ? AND id IN (${ph})`)
         .bind(b.value, user.id, ...ids)
         .run();
-    else if (b.action === "delete") for (const id of ids) await deleteMessageRow(env, user.id, id);
+      await recordChanges(env, user.id, ids, "upsert");
+    } else if (b.action === "delete") for (const id of ids) await deleteMessageRow(env, user.id, id);
     else return error(400, "bad action");
     return json({ ok: true, count: ids.length });
   }
@@ -854,6 +916,7 @@ export async function handleApi(request, env, ctx) {
     await env.DB.prepare("UPDATE messages SET snooze_until = ? WHERE id = ? AND user_id = ?")
       .bind(until && until > now() ? until : null, m[1], user.id)
       .run();
+    await recordChange(env, user.id, m[1], "upsert");
     return json({ ok: true });
   }
 

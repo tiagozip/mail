@@ -178,3 +178,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
   body,
   tokenize = 'porter unicode61'
 );
+
+CREATE TABLE IF NOT EXISTS mailbox_changes (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mailbox_changes_user_seq ON mailbox_changes(user_id, seq);

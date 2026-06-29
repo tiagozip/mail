@@ -1,5 +1,5 @@
 import { sendMessage } from "./send.js";
-import { deleteMessageRow } from "./store.js";
+import { deleteMessageRow, recordChanges } from "./store.js";
 import { now } from "./util.js";
 
 export async function processScheduledSends(env) {
@@ -24,9 +24,19 @@ export async function processScheduledSends(env) {
 
 export async function wakeSnoozed(env) {
   const t = now();
+  const due = await env.DB.prepare(
+    "SELECT id, user_id FROM messages WHERE snooze_until IS NOT NULL AND snooze_until <= ?",
+  )
+    .bind(t)
+    .all();
+  const rows = due.results || [];
+  if (!rows.length) return;
   await env.DB.prepare(
     "UPDATE messages SET snooze_until = NULL, date = ?, received_at = ?, is_read = 0 WHERE snooze_until IS NOT NULL AND snooze_until <= ?",
   )
     .bind(t, t, t)
     .run();
+  const byUser = {};
+  for (const r of rows) (byUser[r.user_id] ||= []).push(r.id);
+  for (const [uid, ids] of Object.entries(byUser)) await recordChanges(env, uid, ids, "upsert");
 }

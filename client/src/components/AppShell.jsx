@@ -263,6 +263,7 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
   function afterMutation() {
     store.reload();
     store.refreshCounts();
+    store.syncNow();
   }
 
   function onComposeSent(resp) {
@@ -336,8 +337,6 @@ export function AppShell({ initialUser, mode, onSetMode, palette, onSetPalette }
       <div className={`em-sidebar-wrap${sidebarOpen ? " is-open" : ""}`}>
         <MailSidebar
           store={store}
-          mode={mode}
-          onToggleMode={() => onSetMode(mode === "dark" ? "light" : "dark")}
           onCompose={() => {
             setSidebarOpen(false);
             openCompose();

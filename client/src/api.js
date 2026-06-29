@@ -34,6 +34,8 @@ export const api = {
   logout: () => req("POST", "/api/auth/logout"),
 
   folders: () => req("GET", "/api/folders"),
+  sync: (since, limit) =>
+    req("GET", `/api/sync?since=${since || 0}${limit ? `&limit=${limit}` : ""}`),
   messages: (params) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params || {})) {

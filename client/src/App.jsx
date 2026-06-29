@@ -1,6 +1,7 @@
 import { Loader, Toasty, TooltipProvider } from "@cloudflare/kumo";
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
+import * as cache from "./cache.js";
 import { AppShell } from "./components/AppShell.jsx";
 import { AuthView } from "./components/AuthView.jsx";
 import * as pgp from "./pgp.js";
@@ -43,6 +44,7 @@ export function App() {
       .me()
       .then(async (d) => {
         if (d.user) {
+          await cache.initCursor(d.syncCursor);
           setUser(d.user);
           const t = d.user.settings?.theme;
           if (t === "dark" || t === "light") setMode(t);
