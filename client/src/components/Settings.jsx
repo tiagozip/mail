@@ -35,6 +35,7 @@ import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
 import { humanSize, initials, monoColor, relativeTime } from "../util.js";
+import { ByodSetup } from "./ByodSetup.jsx";
 
 const PALETTES = [
   { id: "plum", name: "Plum", canvas: "#1d171f", brand: "#bf3264" },
@@ -989,6 +990,12 @@ function DomainSetupModal({ open, existing, onClose, onDone }) {
     >
       <div className="em-modal-panel em-setup-dialog">
         <div className="em-setup-progress">Step {step} of 3</div>
+        
+        <div className="em-setup-steps">
+          <div className={`em-setup-step ${step >= 1 ? "active" : ""}`} />
+          <div className={`em-setup-step ${step >= 2 ? "active" : ""}`} />
+          <div className={`em-setup-step ${step >= 3 ? "active" : ""}`} />
+        </div>
         <div className="em-label-head">
           <h2 className="em-label-title">Add a domain</h2>
           <Button
@@ -1032,17 +1039,15 @@ function DomainSetupModal({ open, existing, onClose, onDone }) {
         {step === 2 && (
           <div className="em-setup-body">
             <p className="em-card-sub">
-              Add these DNS records for <b>{dom}</b>. The ownership record proves the domain is
-              yours. The MX/SPF/DKIM records are added automatically if you turn on Cloudflare{" "}
-              <b>Email Routing</b> + <b>Email Sending</b> for it.
+              Add these DNS records for <b>{dom}</b>.
             </p>
-            <div className="em-setup-section">Prove ownership (TXT, host _estrogen.{dom})</div>
+            <div className="em-setup-section">Add a TXT record with host '_estrogen.{dom}'</div>
             <CopyField label="TXT" value={created?.verifyToken || ""} />
-            <div className="em-setup-section">Receiving — MX records (host {dom})</div>
+            <div className="em-setup-section">Add these three MX records with host '{dom}'</div>
             <CopyField label="MX" value="route1.mx.cloudflare.net" />
             <CopyField label="MX" value="route2.mx.cloudflare.net" />
             <CopyField label="MX" value="route3.mx.cloudflare.net" />
-            <div className="em-setup-section">Sending — SPF (TXT, host {dom})</div>
+            <div className="em-setup-section">Add a TXT record with host '{dom}'</div>
             <CopyField label="TXT" value="v=spf1 include:_spf.mx.cloudflare.net ~all" />
             <div className="em-setup-section">Sending — DKIM</div>
             <p className="em-setup-note">
@@ -1118,6 +1123,7 @@ function Domains() {
   const [directory, setDirectory] = useState([]);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupExisting, setSetupExisting] = useState(null);
+  const [byodOpen, setByodOpen] = useState(false);
 
   function refresh() {
     api
@@ -1169,9 +1175,8 @@ function Domains() {
         <div className="em-card-head">
           <h2 className="em-card-title">Your domains</h2>
           <p className="em-card-sub">
-            Add your own domain to send and receive mail on it. Domains are private to you. Publish
-            one to list it in the public directory so other people here can make addresses on it
-            too.
+            Add your own domain to send and receive mail on it. "Bring your own domain" keeps it on
+            your own Cloudflare account via a relay Worker. Domains are private to you.
           </p>
         </div>
 
@@ -1248,6 +1253,9 @@ function Domains() {
           <Button variant="ghost" icon={Plus} onClick={() => openSetup(null)}>
             Add domain
           </Button>
+          <Button variant="ghost" icon={Globe} onClick={() => setByodOpen(true)}>
+            Bring your own domain
+          </Button>
         </div>
       </div>
 
@@ -1255,9 +1263,7 @@ function Domains() {
         <div className="em-card">
           <div className="em-card-head">
             <h2 className="em-card-title">Public directory</h2>
-            <p className="em-card-sub">
-              Domains other people have published. You can make addresses on these too.
-            </p>
+            <p className="em-card-sub">Domains other people have published here.</p>
           </div>
           <div className="em-alias-list">
             {directory.map((d) => (
@@ -1278,6 +1284,7 @@ function Domains() {
         onClose={() => setSetupOpen(false)}
         onDone={refresh}
       />
+      <ByodSetup open={byodOpen} onClose={() => setByodOpen(false)} onDone={refresh} />
     </>
   );
 }
@@ -1541,7 +1548,7 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
                 <div className="em-card">
                   <div className="em-card-head">
                     <h2 className="em-card-title">Storage</h2>
-                    <p className="em-card-sub">No limits. Store as much as you like.</p>
+                    <p className="em-card-sub">No limits, but fair use applies.</p>
                   </div>
                   <div className="em-stat-row">
                     <span className="em-stat-value">{humanSize(used)}</span>

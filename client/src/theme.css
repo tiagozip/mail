@@ -4034,3 +4034,69 @@ html[data-mode="dark"] .em-letter .em-shiki {
   padding: 0 4px;
   cursor: pointer;
 }
+
+.em-byod-block {
+  border: 1px solid var(--color-kumo-hairline);
+  border-radius: var(--em-radius);
+  padding: var(--em-3);
+  margin-bottom: var(--em-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-2);
+}
+
+.em-byod-block-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.em-byod-hint {
+  font-size: 0.8rem;
+  color: var(--text-color-kumo-subtle);
+  margin: 0;
+}
+
+.em-byod-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.em-byod-copyrow {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+}
+
+.em-byod-code,
+.em-byod-val {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  background: var(--color-kumo-recessed);
+  border: 1px solid var(--color-kumo-hairline);
+  border-radius: var(--em-radius-sm);
+  padding: 6px 8px;
+}
+
+.em-byod-template {
+  width: 100%;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  background: var(--color-kumo-recessed);
+  color: var(--text-color-kumo-default);
+  border: 1px solid var(--color-kumo-hairline);
+  border-radius: var(--em-radius-sm);
+  padding: var(--em-2);
+}
+
+.em-byod-actions {
+  display: flex;
+  gap: var(--em-2);
+  justify-content: flex-end;
+}
