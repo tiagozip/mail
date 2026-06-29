@@ -285,11 +285,18 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   }
 
   function onComposeSent(resp) {
-    if (resp?.hold) {
+    if (resp?.deferred) {
       store.addOptimistic(resp.optimistic);
-      clearTimeout(undoTimer.current);
-      setUndoBar({ hold: true, payload: resp.payload, optimistic: resp.optimistic });
-      undoTimer.current = setTimeout(() => commitHeldSend(resp.payload, resp.optimistic), resp.undoMs);
+      if (resp.undoMs > 0) {
+        clearTimeout(undoTimer.current);
+        setUndoBar({ hold: true, payload: resp.payload, optimistic: resp.optimistic });
+        undoTimer.current = setTimeout(
+          () => commitHeldSend(resp.payload, resp.optimistic),
+          resp.undoMs,
+        );
+      } else {
+        commitHeldSend(resp.payload, resp.optimistic);
+      }
       return;
     }
     afterMutation();

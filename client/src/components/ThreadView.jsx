@@ -58,8 +58,8 @@ const CodeHighlight = lazy(() => import("../CodeHighlight.jsx"));
 
 const ALLOWED_SCHEMAS = ["http", "https", "mailto", "cid", "tel", "data"];
 
-function blockResource() {
-  return "";
+function blockResource(url) {
+  return /^\/api\/attachments\/[\w-]+\/inline/.test(url) ? url : "";
 }
 
 function passResource(url) {
@@ -615,8 +615,8 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         };
       }
 
-      const undoMs = Math.min(120, Math.max(0, Number(user.settings?.undoSend) || 0)) * 1000;
-      if (!sendAt && undoMs > 0) {
+      if (!sendAt) {
+        const undoMs = Math.min(120, Math.max(0, Number(user.settings?.undoSend) || 0)) * 1000;
         const optimistic = {
           id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           threadId: thread.threadId,
@@ -635,17 +635,15 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           attachments: [],
           optimistic: true,
         };
-        onSent?.({ hold: true, undoMs, payload, optimistic });
+        onSent?.({ deferred: true, undoMs, payload, optimistic });
         clearReply();
         setSending(false);
         return;
       }
 
-      const resp = await api.send(sendAt ? { ...payload, sendAt, skipUndo: true } : payload);
+      const resp = await api.send({ ...payload, sendAt, skipUndo: true });
       onSent?.(resp);
-      if (sendAt || resp?.scheduled) {
-        notify("Scheduled", `Will send ${fullDate(sendAt || resp?.sendAt)}.`, "success");
-      }
+      notify("Scheduled", `Will send ${fullDate(sendAt || resp?.sendAt)}.`, "success");
       clearReply();
       if (reloadThread) reloadThread(thread.threadId);
       else openMessage({ id: store.openId, threadId: thread.threadId });

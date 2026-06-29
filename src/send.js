@@ -224,8 +224,16 @@ export async function sendMessage(env, user, payload) {
   });
 
   let attBytes = 0;
-  for (const row of [...attRows, ...inlineRows]) {
+  for (const row of attRows) {
     await env.DB.prepare("UPDATE attachments SET message_id = ?, status = 'stored' WHERE id = ?")
+      .bind(messageId, row.id)
+      .run();
+    attBytes += row.size || 0;
+  }
+  for (const row of inlineRows) {
+    await env.DB.prepare(
+      "UPDATE attachments SET message_id = ?, status = 'stored', is_inline = 1 WHERE id = ?",
+    )
       .bind(messageId, row.id)
       .run();
     attBytes += row.size || 0;

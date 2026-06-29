@@ -547,7 +547,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
       }
 
       const undoMs = Math.min(120, Math.max(0, Number(user.settings?.undoSend) || 0)) * 1000;
-      if (!sendAt && undoMs > 0) {
+      if (!sendAt) {
         const optimistic = {
           id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           threadId: `tmp-${Date.now()}`,
@@ -566,7 +566,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
           attachments: [],
           optimistic: true,
         };
-        onSent?.({ hold: true, undoMs, payload, optimistic });
+        onSent?.({ deferred: true, undoMs, payload, optimistic });
         onClose();
         return;
       }
