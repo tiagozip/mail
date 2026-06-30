@@ -1009,8 +1009,9 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
             size="sm"
             variant="ghost"
             shape="square"
-            aria-label="Star"
-            icon={Star}
+            aria-label={headerItem.isStarred ? "Unstar" : "Star"}
+            className={headerItem.isStarred ? "em-star-active" : ""}
+            icon={<Star weight={headerItem.isStarred ? "fill" : "regular"} />}
             onClick={() => toggleStar(headerItem)}
           />
         </Tooltip>

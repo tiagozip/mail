@@ -135,7 +135,10 @@ function BulkBar({ store }) {
         <Button size="sm" variant="ghost" shape="square" aria-label="Mark unread" icon={Envelope} onClick={() => bulkAction("read", false)} />
       </Tooltip>
       <Tooltip content="Star">
-        <Button size="sm" variant="ghost" shape="square" aria-label="Star" icon={Star} onClick={() => bulkAction("star", true)} />
+        <Button size="sm" variant="ghost" shape="square" aria-label="Star" icon={<Star weight="fill" />} onClick={() => bulkAction("star", true)} />
+      </Tooltip>
+      <Tooltip content="Unstar">
+        <Button size="sm" variant="ghost" shape="square" aria-label="Unstar" icon={<Star weight="regular" />} onClick={() => bulkAction("star", false)} />
       </Tooltip>
     </div>
   );

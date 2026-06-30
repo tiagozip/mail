@@ -961,6 +961,11 @@ html[data-theme="nord"] {
   color: var(--em-star);
 }
 
+.em-star-active,
+.em-star-active svg {
+  color: var(--em-star);
+}
+
 .em-empty {
   display: flex;
   flex-direction: column;
