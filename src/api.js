@@ -132,7 +132,7 @@ async function attachSenderAvatars(env, items) {
   if (!addrs.length) return items;
   const ph = addrs.map(() => "?").join(",");
   const res = await env.DB.prepare(
-    `SELECT a.address, u.avatar_url FROM addresses a JOIN users u ON u.id = a.user_id WHERE a.address IN (${ph}) AND u.avatar_url IS NOT NULL`,
+    `SELECT a.address, COALESCE(a.avatar_url, u.avatar_url) AS avatar_url FROM addresses a JOIN users u ON u.id = a.user_id WHERE a.address IN (${ph}) AND COALESCE(a.avatar_url, u.avatar_url) IS NOT NULL`,
   )
     .bind(...addrs)
     .all();
@@ -411,11 +411,17 @@ async function notifyAdminsPublicRequest(env, domain, requester) {
 
 async function listAddresses(env, userId) {
   const res = await env.DB.prepare(
-    "SELECT address, is_primary FROM addresses WHERE user_id = ? AND kind = 'standard' ORDER BY is_primary DESC, address",
+    "SELECT address, is_primary, display_name, signature, avatar_url FROM addresses WHERE user_id = ? AND kind = 'standard' ORDER BY is_primary DESC, address",
   )
     .bind(userId)
     .all();
-  return (res.results || []).map((r) => ({ address: r.address, isPrimary: !!r.is_primary }));
+  return (res.results || []).map((r) => ({
+    address: r.address,
+    isPrimary: !!r.is_primary,
+    displayName: r.display_name || "",
+    signature: r.signature || "",
+    avatar: r.avatar_url || null,
+  }));
 }
 
 function publicUser(u) {
@@ -1533,6 +1539,61 @@ export async function handleApi(request, env, ctx) {
       .bind(address, user.id, now())
       .run();
     return json({ address, isPrimary: false });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/identity$/)) && method === "PATCH") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const owned = await env.DB.prepare("SELECT 1 FROM addresses WHERE address = ? AND user_id = ?")
+      .bind(address, user.id)
+      .first();
+    if (!owned) return error(404, "not found");
+    const b = await readJson(request);
+    const displayName = String(b.displayName ?? "").slice(0, 80);
+    const signature = String(b.signature ?? "").slice(0, 2000);
+    await env.DB.prepare(
+      "UPDATE addresses SET display_name = ?, signature = ? WHERE address = ? AND user_id = ?",
+    )
+      .bind(displayName || null, signature || null, address, user.id)
+      .run();
+    return json({ address, displayName, signature });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/avatar$/)) && method === "GET") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const obj = await env.R2.get(`aliasavatar/${address}`);
+    if (!obj) return error(404, "not found");
+    const ct = (obj.httpMetadata?.contentType || "image/png").toLowerCase();
+    const headers = new Headers();
+    headers.set("content-type", AVATAR_TYPES.has(ct) ? ct : "application/octet-stream");
+    headers.set("cache-control", "private, max-age=86400");
+    return new Response(obj.body, { headers });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/avatar$/)) && method === "POST") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const owned = await env.DB.prepare("SELECT 1 FROM addresses WHERE address = ? AND user_id = ?")
+      .bind(address, user.id)
+      .first();
+    if (!owned) return error(404, "not found");
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!file || typeof file === "string") return error(400, "no file");
+    if (!AVATAR_TYPES.has(String(file.type || "").toLowerCase()))
+      return error(400, "use a PNG, JPEG, GIF, WebP, or AVIF image");
+    if (file.size > 3 * 1024 * 1024) return error(413, "image too large (max 3 MiB)");
+    await env.R2.put(`aliasavatar/${address}`, file.stream(), {
+      httpMetadata: { contentType: file.type },
+    });
+    const avatarUrl = `/api/aliases/${encodeURIComponent(address)}/avatar?v=${now()}`;
+    await env.DB.prepare("UPDATE addresses SET avatar_url = ? WHERE address = ? AND user_id = ?")
+      .bind(avatarUrl, address, user.id)
+      .run();
+    return json({ avatar: avatarUrl });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/avatar$/)) && method === "DELETE") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    await env.R2.delete(`aliasavatar/${address}`).catch(() => {});
+    await env.DB.prepare("UPDATE addresses SET avatar_url = NULL WHERE address = ? AND user_id = ?")
+      .bind(address, user.id)
+      .run();
+    return json({ ok: true });
   }
   if ((m = path.match(/^\/api\/aliases\/(.+)$/)) && method === "DELETE") {
     const address = normalizeAddr(decodeURIComponent(m[1]));

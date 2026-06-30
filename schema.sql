@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS addresses (
   enabled INTEGER NOT NULL DEFAULT 1,
   recv_count INTEGER NOT NULL DEFAULT 0,
   last_seen INTEGER,
+  display_name TEXT,
+  signature TEXT,
+  avatar_url TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_addresses_user ON addresses(user_id);

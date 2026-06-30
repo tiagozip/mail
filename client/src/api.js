@@ -75,6 +75,15 @@ export const api = {
   addAlias: (localPart, domain) => req("POST", "/api/aliases", { localPart, domain }),
   removeAlias: (address) => req("DELETE", `/api/aliases/${encodeURIComponent(address)}`),
   setPrimaryAddress: (address) => req("POST", "/api/aliases/primary", { address }),
+  setAliasIdentity: (address, body) =>
+    req("PATCH", `/api/aliases/${encodeURIComponent(address)}/identity`, body),
+  uploadAliasAvatar: (address, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return req("POST", `/api/aliases/${encodeURIComponent(address)}/avatar`, form, true);
+  },
+  deleteAliasAvatar: (address) =>
+    req("DELETE", `/api/aliases/${encodeURIComponent(address)}/avatar`),
   hiddenAliases: () => req("GET", "/api/hidden-aliases"),
   createHiddenAlias: (label) => req("POST", "/api/hidden-aliases", { label }),
   updateHiddenAlias: (address, patch) =>

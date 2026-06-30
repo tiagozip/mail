@@ -4134,6 +4134,15 @@ html[data-mode="dark"] .em-letter .em-shiki {
   color: var(--text-color-kumo-subtle);
 }
 
+.em-alias-pfp {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
 .em-folder-aliasalt {
   display: flex;
   align-items: center;

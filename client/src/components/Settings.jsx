@@ -19,6 +19,7 @@ import {
   Copy,
   Funnel,
   Globe,
+  IdentificationCard,
   Lock,
   LockKey,
   Palette,
@@ -37,6 +38,7 @@ import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
 import { humanSize, initials, monoColor, relativeTime } from "../util.js";
+import { AliasIdentity } from "./AliasIdentity.jsx";
 import { ByodSetup } from "./ByodSetup.jsx";
 
 const PALETTES = [
@@ -183,6 +185,15 @@ function Addresses({ user, setUser }) {
   const [domain, setDomain] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [identityAlias, setIdentityAlias] = useState(null);
+
+  function refreshAddresses() {
+    api
+      .aliases()
+      .then((d) => setAddresses(d.addresses || []))
+      .catch(() => {});
+    refreshUser();
+  }
 
   useEffect(() => {
     api
@@ -249,6 +260,7 @@ function Addresses({ user, setUser }) {
   }
 
   return (
+    <>
     <div className="em-card">
       <div className="em-card-head">
         <h2 className="em-card-title">Addresses</h2>
@@ -260,29 +272,42 @@ function Addresses({ user, setUser }) {
         <div className="em-alias-list">
           {addresses.map((a) => (
             <div key={a.address} className="em-alias-row">
-              <span className="em-alias-addr">{a.address}</span>
-              {a.isPrimary ? (
-                <Badge variant="purple">primary</Badge>
-              ) : (
-                <div className="em-alias-actions">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    icon={Star}
-                    onClick={() => makePrimary(a.address)}
-                  >
-                    Make primary
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    shape="square"
-                    aria-label="Remove address"
-                    icon={Trash}
-                    onClick={() => remove(a.address)}
-                  />
-                </div>
-              )}
+              <span className="em-alias-addr">
+                {a.avatar && <img className="em-avatar em-avatar-img em-alias-pfp" src={a.avatar} alt="" />}
+                <span>{a.displayName ? `${a.displayName} · ${a.address}` : a.address}</span>
+              </span>
+              <div className="em-alias-actions">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={IdentificationCard}
+                  onClick={() => setIdentityAlias(a)}
+                >
+                  Identity
+                </Button>
+                {a.isPrimary ? (
+                  <Badge variant="purple">primary</Badge>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={Star}
+                      onClick={() => makePrimary(a.address)}
+                    >
+                      Make primary
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      shape="square"
+                      aria-label="Remove address"
+                      icon={Trash}
+                      onClick={() => remove(a.address)}
+                    />
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -322,6 +347,13 @@ function Addresses({ user, setUser }) {
         </div>
       )}
     </div>
+    <AliasIdentity
+      open={!!identityAlias}
+      alias={identityAlias}
+      onClose={() => setIdentityAlias(null)}
+      onSaved={refreshAddresses}
+    />
+    </>
   );
 }
 
