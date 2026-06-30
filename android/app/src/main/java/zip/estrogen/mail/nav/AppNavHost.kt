@@ -6,13 +6,33 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import zip.estrogen.mail.MailApp
 import zip.estrogen.mail.ui.auth.AuthScreen
 import zip.estrogen.mail.ui.compose.ComposeScreen
 import zip.estrogen.mail.ui.encryption.EncryptionScreen
@@ -61,6 +81,9 @@ fun AppNavHost(
 ) {
     val navController = rememberNavController()
     val start = if (hasCredentials) Routes.MAIL_LIST else Routes.SETUP
+    val repository = (LocalContext.current.applicationContext as MailApp).repository
+    val pending by repository.pendingSend.collectAsStateWithLifecycle()
+    val outboxSnackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(composeRequested, hasCredentials) {
         if (composeRequested && hasCredentials) {
@@ -68,7 +91,11 @@ fun AppNavHost(
             onComposeConsumed()
         }
     }
+    LaunchedEffect(Unit) {
+        repository.sendStatus.collect { outboxSnackbar.showSnackbar(it) }
+    }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = start,
@@ -171,5 +198,36 @@ fun AppNavHost(
         composable(Routes.KEYS) { KeysScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.BYOD) { ByodScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SWIPE) { SwipeActionsScreen(onBack = { navController.popBackStack() }) }
+    }
+
+        pending?.let { p ->
+            OutboxBar(
+                secondsLeft = p.secondsLeft,
+                scheduled = p.scheduled,
+                onUndo = { repository.undoPendingSend() },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+        SnackbarHost(outboxSnackbar, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+private fun OutboxBar(secondsLeft: Int, scheduled: Boolean, onUndo: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.inverseSurface,
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier.fillMaxWidth().padding(16.dp)
+    ) {
+        Row(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (scheduled) "Scheduling…" else "Sending in ${secondsLeft}s",
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+                modifier = Modifier.weight(1f).padding(vertical = 8.dp)
+            )
+            TextButton(onClick = onUndo) {
+                Text("Undo", color = MaterialTheme.colorScheme.inversePrimary, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }

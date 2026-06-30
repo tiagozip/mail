@@ -54,8 +54,7 @@ data class ComposeState(
     val attachments: List<AttachmentItem> = emptyList(),
     val suggestions: List<Contact> = emptyList(),
     val sendAt: Long? = null,
-    val undoSeconds: Int = 0,
-    val holdRemaining: Int? = null
+    val undoSeconds: Int = 0
 ) {
     val canEncrypt: Boolean get() = pgpAvailable && bcc.isBlank() && attachments.isEmpty()
 }
@@ -67,9 +66,6 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
 
     private var initialized = false
     private var suggestJob: Job? = null
-    private var holdJob: Job? = null
-    private var pendingHtml: String = ""
-    private var pendingPlain: String = ""
 
     fun init(prefill: ComposePrefillData?) {
         if (initialized) return
@@ -226,118 +222,74 @@ class ComposeViewModel(private val repository: MailRepository) : ViewModel() {
             _state.update { it.copy(error = "Wait for attachments to finish uploading") }
             return
         }
-        pendingHtml = html
-        pendingPlain = plainText
-        if (s.undoSeconds > 0 && s.sendAt == null) {
-            startHold(s.undoSeconds)
-        } else {
-            dispatch()
-        }
-    }
-
-    private fun startHold(seconds: Int) {
-        holdJob?.cancel()
-        _state.update { it.copy(holdRemaining = seconds) }
-        holdJob = viewModelScope.launch {
-            var remaining = seconds
-            while (remaining > 0) {
-                delay(1000)
-                remaining--
-                _state.update { it.copy(holdRemaining = remaining) }
-            }
-            _state.update { it.copy(holdRemaining = null) }
-            dispatch()
-        }
-    }
-
-    fun undoSend() {
-        holdJob?.cancel()
-        _state.update { it.copy(holdRemaining = null) }
-    }
-
-    private fun dispatch() {
-        val s = _state.value
-        val html = pendingHtml
-        val plain = pendingPlain
         _state.update { it.copy(sending = true, error = null) }
         viewModelScope.launch {
-            val recipients = parseAddresses(s.to)
-            val plainWithSig = if (s.signature.isNotBlank()) "$plain\n\n--\n${s.signature}" else plain
-            val htmlWithSig = if (s.signature.isNotBlank()) "$html<br>--<br>${s.signature}" else html
-            val attachmentIds = s.attachments.mapNotNull { it.remoteId }
-
-            if (s.encrypt && s.canEncrypt) {
-                val ok = sendEncrypted(s, recipients, plainWithSig, attachmentIds)
-                if (!ok) return@launch
-            } else {
-                val request = SendRequest(
-                    to = recipients,
-                    cc = parseAddresses(s.cc),
-                    bcc = parseAddresses(s.bcc),
-                    subject = s.subject.ifBlank { "(no subject)" },
-                    text = plainWithSig,
-                    html = htmlWithSig,
-                    from = s.from.ifBlank { null },
-                    inReplyTo = s.inReplyTo,
-                    references = s.references,
-                    attachmentIds = attachmentIds,
-                    sendAt = s.sendAt
-                )
-                val result = repository.send(request)
-                result.fold(
-                    onSuccess = { resp ->
-                        if (resp.ok || resp.id != null) _state.update { it.copy(sending = false, sent = true, scheduled = resp.scheduled || s.sendAt != null) }
-                        else _state.update { it.copy(sending = false, error = "Send failed") }
-                    },
-                    onFailure = { err -> _state.update { it.copy(sending = false, error = err.message ?: "Send failed") } }
-                )
+            val request = buildRequest(s, html, plainText)
+            if (request == null) {
+                _state.update { it.copy(sending = false) }
+                return@launch
             }
+            val undo = if (s.sendAt != null) 0 else s.undoSeconds
+            repository.queueSend(request, undo)
+            _state.update { it.copy(sending = false, sent = true, scheduled = s.sendAt != null) }
         }
     }
 
-    private suspend fun sendEncrypted(s: ComposeState, recipients: List<String>, body: String, attachmentIds: List<String>): Boolean {
-        val unlocked = withContext(Dispatchers.Default) {
-            repository.pgp.status.value == PgpStatus.UNLOCKED || repository.pgp.tryAutoUnlock()
+    private suspend fun buildRequest(s: ComposeState, html: String, plain: String): SendRequest? {
+        val recipients = parseAddresses(s.to)
+        val plainWithSig = if (s.signature.isNotBlank()) "$plain\n\n--\n${s.signature}" else plain
+        val htmlWithSig = if (s.signature.isNotBlank()) "$html<br>--<br>${s.signature}" else html
+        val attachmentIds = s.attachments.mapNotNull { it.remoteId }
+
+        if (s.encrypt && s.canEncrypt) {
+            val unlocked = withContext(Dispatchers.Default) {
+                repository.pgp.status.value == PgpStatus.UNLOCKED || repository.pgp.tryAutoUnlock()
+            }
+            if (!unlocked) {
+                _state.update { it.copy(error = "Unlock your key in Settings to send encrypted mail") }
+                return null
+            }
+            val keys = mutableListOf<String>()
+            val missing = mutableListOf<String>()
+            for (addr in recipients + parseAddresses(s.cc)) {
+                val key = repository.lookupPublicKey(addr).getOrNull()
+                if (key.isNullOrBlank()) missing.add(addr) else keys.add(key)
+            }
+            if (missing.isNotEmpty()) {
+                _state.update { it.copy(error = "No key for ${missing.joinToString(", ")}") }
+                return null
+            }
+            val armored = withContext(Dispatchers.Default) { repository.pgp.encryptFor(keys, plainWithSig) }.getOrNull()
+            if (armored == null) {
+                _state.update { it.copy(error = "Encryption failed") }
+                return null
+            }
+            return SendRequest(
+                to = recipients,
+                cc = parseAddresses(s.cc),
+                subject = s.subject.ifBlank { "(no subject)" },
+                text = armored,
+                from = s.from.ifBlank { null },
+                inReplyTo = s.inReplyTo,
+                references = s.references,
+                sendAt = s.sendAt,
+                pgp = true
+            )
         }
-        if (!unlocked) {
-            _state.update { it.copy(sending = false, error = "Unlock your key in Settings to send encrypted mail") }
-            return false
-        }
-        val allRecipients = recipients + parseAddresses(s.cc)
-        val keys = mutableListOf<String>()
-        val missing = mutableListOf<String>()
-        for (addr in allRecipients) {
-            val key = repository.lookupPublicKey(addr).getOrNull()
-            if (key.isNullOrBlank()) missing.add(addr) else keys.add(key)
-        }
-        if (missing.isNotEmpty()) {
-            _state.update { it.copy(sending = false, error = "No key for ${missing.joinToString(", ")}") }
-            return false
-        }
-        val armored = withContext(Dispatchers.Default) { repository.pgp.encryptFor(keys, body) }.getOrNull()
-        if (armored == null) {
-            _state.update { it.copy(sending = false, error = "Encryption failed") }
-            return false
-        }
-        val request = SendRequest(
+
+        return SendRequest(
             to = recipients,
             cc = parseAddresses(s.cc),
+            bcc = parseAddresses(s.bcc),
             subject = s.subject.ifBlank { "(no subject)" },
-            text = armored,
+            text = plainWithSig,
+            html = htmlWithSig,
             from = s.from.ifBlank { null },
             inReplyTo = s.inReplyTo,
             references = s.references,
-            sendAt = s.sendAt,
-            pgp = true
+            attachmentIds = attachmentIds,
+            sendAt = s.sendAt
         )
-        repository.send(request).fold(
-            onSuccess = { resp ->
-                if (resp.ok || resp.id != null) _state.update { it.copy(sending = false, sent = true, scheduled = resp.scheduled || s.sendAt != null) }
-                else _state.update { it.copy(sending = false, error = "Send failed") }
-            },
-            onFailure = { err -> _state.update { it.copy(sending = false, error = err.message ?: "Send failed") } }
-        )
-        return true
     }
 
     private fun parseAddresses(raw: String): List<String> =

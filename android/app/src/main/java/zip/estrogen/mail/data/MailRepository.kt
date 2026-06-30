@@ -1,11 +1,19 @@
 package zip.estrogen.mail.data
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MultipartBody
 import okhttp3.ResponseBody
@@ -61,6 +69,8 @@ import zip.estrogen.mail.data.remote.ApiFactory
 import zip.estrogen.mail.data.remote.MailApi
 import zip.estrogen.mail.ui.theme.AppPalette
 import zip.estrogen.mail.ui.theme.DarkMode
+
+data class PendingSend(val secondsLeft: Int, val scheduled: Boolean)
 
 class MailRepository(
     private val settings: SettingsStore,
@@ -285,6 +295,61 @@ class MailRepository(
     }
 
     suspend fun send(request: SendRequest): Result<SendResponse> = call { it.send(request) }
+
+    private val outboxScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var outboxJob: Job? = null
+    private var queuedSend: SendRequest? = null
+
+    private val _pendingSend = MutableStateFlow<PendingSend?>(null)
+    val pendingSend = _pendingSend.asStateFlow()
+
+    private val _sendStatus = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val sendStatus: SharedFlow<String> = _sendStatus.asSharedFlow()
+
+    fun queueSend(request: SendRequest, undoSeconds: Int) {
+        outboxJob?.cancel()
+        queuedSend = request
+        val scheduled = request.sendAt != null
+        if (undoSeconds <= 0 || scheduled) {
+            flushOutbox()
+            return
+        }
+        _pendingSend.value = PendingSend(undoSeconds, scheduled)
+        outboxJob = outboxScope.launch {
+            var remaining = undoSeconds
+            while (remaining > 0) {
+                delay(1000)
+                remaining--
+                if (remaining > 0) _pendingSend.value = PendingSend(remaining, scheduled)
+            }
+            flushOutbox()
+        }
+    }
+
+    private fun flushOutbox() {
+        val request = queuedSend ?: return
+        queuedSend = null
+        val scheduled = request.sendAt != null
+        _pendingSend.value = null
+        outboxScope.launch {
+            send(request).fold(
+                onSuccess = { resp ->
+                    if (resp.ok || resp.id != null) {
+                        runCatching { syncDelta() }
+                        _sendStatus.emit(if (scheduled) "Message scheduled" else "Message sent")
+                    } else _sendStatus.emit("Send failed")
+                },
+                onFailure = { _sendStatus.emit(it.message ?: "Send failed") }
+            )
+        }
+    }
+
+    fun undoPendingSend() {
+        outboxJob?.cancel()
+        queuedSend = null
+        _pendingSend.value = null
+        outboxScope.launch { _sendStatus.emit("Send canceled") }
+    }
 
     suspend fun createDraft(body: DraftBody): Result<DraftResponse> = call { it.createDraft(body) }
     suspend fun updateDraft(id: String, body: DraftBody): Result<DraftResponse> = call { it.updateDraft(id, body) }

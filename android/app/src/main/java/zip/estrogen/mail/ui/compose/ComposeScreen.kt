@@ -118,12 +118,7 @@ fun ComposeScreen(
         viewModel.init(ComposePrefill.pending)
         ComposePrefill.pending = null
     }
-    LaunchedEffect(state.sent) {
-        if (state.sent) {
-            snackbarHostState.showSnackbar(if (state.scheduled) "Scheduled" else "Message sent")
-            onSent()
-        }
-    }
+    LaunchedEffect(state.sent) { if (state.sent) onSent() }
     LaunchedEffect(state.error) { state.error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() } }
 
     Scaffold(
@@ -142,7 +137,9 @@ fun ComposeScreen(
                         Icon(Icons.Rounded.Schedule, contentDescription = "Schedule", tint = if (state.sendAt != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (state.sending) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp).padding(end = 8.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                        }
                     } else {
                         IconButton(onClick = { viewModel.send(richState.toHtml(), richState.annotatedString.text) }, enabled = state.to.isNotBlank()) {
                             Icon(Icons.Rounded.Send, contentDescription = "Send", tint = if (state.to.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -246,10 +243,6 @@ fun ComposeScreen(
                     )
                 )
                 Spacer(Modifier.size(64.dp))
-            }
-
-            state.holdRemaining?.let { remaining ->
-                UndoBar(remaining, onUndo = viewModel::undoSend, modifier = Modifier.align(Alignment.BottomCenter))
             }
         }
     }
@@ -380,16 +373,6 @@ private fun SuggestionList(state: ComposeState, viewModel: ComposeViewModel) {
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun UndoBar(remaining: Int, onUndo: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(color = MaterialTheme.colorScheme.inverseSurface, shape = MaterialTheme.shapes.large, modifier = modifier.fillMaxWidth().padding(16.dp)) {
-        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Sending in ${remaining}s", color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.weight(1f))
-            TextButton(onClick = onUndo) { Text("Undo", color = MaterialTheme.colorScheme.inversePrimary, fontWeight = FontWeight.SemiBold) }
         }
     }
 }

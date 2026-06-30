@@ -42,10 +42,26 @@ class ThreadViewModel(private val repository: MailRepository) : ViewModel() {
     val state = _state.asStateFlow()
 
     private var loadedThread: String? = null
+    private var lastSeed: String = ""
+
+    init {
+        viewModelScope.launch {
+            repository.sendStatus.collect { status ->
+                if (status == "Message sent") reload()
+            }
+        }
+    }
+
+    private fun reload() {
+        val threadId = loadedThread ?: return
+        loadedThread = null
+        load(threadId, lastSeed)
+    }
 
     fun load(threadId: String, seedMessageId: String) {
         if (loadedThread == threadId) return
         loadedThread = threadId
+        lastSeed = seedMessageId
         _state.update { it.copy(loading = true, error = null, pgpStatus = repository.pgp.status.value) }
         viewModelScope.launch {
             repository.loadThread(threadId).fold(
