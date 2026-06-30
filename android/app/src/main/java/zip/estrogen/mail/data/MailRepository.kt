@@ -97,6 +97,8 @@ class MailRepository(
 
     var unauthorizedHandler: (() -> Unit)? = null
 
+    private val unauthorizedStreak = java.util.concurrent.atomic.AtomicInteger(0)
+
     private val _me = MutableStateFlow<MeResponse?>(null)
     val me = _me.asStateFlow()
 
@@ -108,7 +110,13 @@ class MailRepository(
             cachedApi = ApiFactory.create(
                 creds.baseUrl,
                 creds.apiKey,
-                onUnauthorized = { unauthorizedHandler?.invoke() }
+                onUnauthorized = {
+                    if (unauthorizedStreak.incrementAndGet() >= 3) {
+                        unauthorizedStreak.set(0)
+                        unauthorizedHandler?.invoke()
+                    }
+                },
+                onAuthorized = { unauthorizedStreak.set(0) }
             )
             cachedFor = signature
         }
