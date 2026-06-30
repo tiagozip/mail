@@ -84,6 +84,9 @@ import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditorDefaults
 import zip.estrogen.mail.ui.appViewModel
 import zip.estrogen.mail.ui.common.Avatar
+import zip.estrogen.mail.ui.common.Tray
+import zip.estrogen.mail.ui.common.TrayCloseIcon
+import zip.estrogen.mail.ui.common.TrayOption
 import zip.estrogen.mail.ui.common.fullTime
 import java.util.concurrent.TimeUnit
 
@@ -380,7 +383,6 @@ private fun SuggestionList(state: ComposeState, viewModel: ComposeViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScheduleSheet(onPick: (Long) -> Unit, onClear: () -> Unit, onDismiss: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState()
     val now = System.currentTimeMillis()
     val options = listOf(
         "In 1 hour" to now + TimeUnit.HOURS.toMillis(1),
@@ -389,13 +391,17 @@ private fun ScheduleSheet(onPick: (Long) -> Unit, onClear: () -> Unit, onDismiss
         "Tomorrow" to now + TimeUnit.DAYS.toMillis(1),
         "Next week" to now + TimeUnit.DAYS.toMillis(7)
     )
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
-            Text("Schedule send", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp))
+    Tray(onDismiss = onDismiss, title = "Schedule send", leadingIcon = TrayCloseIcon) {
+        Column(modifier = Modifier.padding(bottom = 12.dp)) {
             options.forEach { (label, ts) ->
-                Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().clickable { onPick(ts) }.padding(horizontal = 24.dp, vertical = 14.dp))
+                TrayOption(label = label, leading = Icons.Rounded.Schedule, onClick = { onPick(ts) })
             }
-            TextButton(onClick = onClear, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Send now instead") }
+            TrayOption(
+                label = "Send now instead",
+                leading = Icons.Rounded.Send,
+                onClick = onClear,
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }

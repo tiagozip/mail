@@ -1,5 +1,11 @@
 package zip.estrogen.mail.ui.maillist
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -25,7 +31,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.WbSunny
+import androidx.compose.material.icons.rounded.Weekend
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Inbox
@@ -34,6 +45,8 @@ import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -51,6 +64,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -83,6 +97,10 @@ import zip.estrogen.mail.ui.appViewModel
 import zip.estrogen.mail.ui.settings.icon
 import zip.estrogen.mail.ui.common.Avatar
 import zip.estrogen.mail.ui.common.MailListSkeleton
+import zip.estrogen.mail.ui.common.Tray
+import zip.estrogen.mail.ui.common.TrayBackIcon
+import zip.estrogen.mail.ui.common.TrayCloseIcon
+import zip.estrogen.mail.ui.common.TrayOption
 import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -447,27 +465,55 @@ private fun SelectionBar(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SnoozeSheet(onPick: (Long?) -> Unit, onDismiss: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState()
+    var customStep by remember { mutableStateOf(false) }
     val now = System.currentTimeMillis()
     val options = listOf(
-        "Later today" to now + TimeUnit.HOURS.toMillis(3),
-        "This evening" to now + TimeUnit.HOURS.toMillis(6),
-        "Tomorrow" to now + TimeUnit.DAYS.toMillis(1),
-        "This weekend" to now + TimeUnit.DAYS.toMillis(2),
-        "Next week" to now + TimeUnit.DAYS.toMillis(7)
+        Triple("Later today", Icons.Rounded.WbSunny, now + TimeUnit.HOURS.toMillis(3)),
+        Triple("This evening", Icons.Rounded.Bedtime, now + TimeUnit.HOURS.toMillis(6)),
+        Triple("Tomorrow", Icons.Rounded.Event, now + TimeUnit.DAYS.toMillis(1)),
+        Triple("This weekend", Icons.Rounded.Weekend, now + TimeUnit.DAYS.toMillis(2)),
+        Triple("Next week", Icons.Rounded.DateRange, now + TimeUnit.DAYS.toMillis(7))
     )
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
-            Text("Snooze until", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp))
-            options.forEach { (label, ts) ->
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(ts) }
-                        .padding(horizontal = 24.dp, vertical = 14.dp)
-                )
+    val dateState = rememberDatePickerState(initialSelectedDateMillis = now + TimeUnit.DAYS.toMillis(1))
+
+    Tray(
+        onDismiss = onDismiss,
+        title = if (customStep) "Pick a date" else "Snooze until",
+        leadingIcon = if (customStep) TrayBackIcon else TrayCloseIcon,
+        onLeading = if (customStep) ({ customStep = false }) else onDismiss,
+        trailing = if (customStep) {
+            {
+                TextButton(
+                    onClick = { dateState.selectedDateMillis?.let { onPick(it + TimeUnit.HOURS.toMillis(9)) } },
+                    enabled = dateState.selectedDateMillis != null
+                ) { Text("Snooze") }
+            }
+        } else null
+    ) {
+        AnimatedContent(
+            targetState = customStep,
+            transitionSpec = {
+                if (targetState) {
+                    (slideInHorizontally { it / 3 } + fadeIn()) togetherWith (slideOutHorizontally { -it / 3 } + fadeOut())
+                } else {
+                    (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith (slideOutHorizontally { it / 3 } + fadeOut())
+                }
+            },
+            label = "snooze-step"
+        ) { step ->
+            if (!step) {
+                Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                    options.forEach { (label, icon, ts) ->
+                        TrayOption(label = label, leading = icon, onClick = { onPick(ts) })
+                    }
+                    TrayOption(
+                        label = "Pick a date",
+                        leading = Icons.Rounded.CalendarMonth,
+                        onClick = { customStep = true }
+                    )
+                }
+            } else {
+                DatePicker(state = dateState, title = null, headline = null, showModeToggle = false)
             }
         }
     }

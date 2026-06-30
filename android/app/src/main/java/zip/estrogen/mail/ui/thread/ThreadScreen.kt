@@ -49,6 +49,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import zip.estrogen.mail.ui.common.Tray
+import zip.estrogen.mail.ui.common.TrayCloseIcon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
@@ -255,15 +257,8 @@ fun ThreadScreen(
 
     if (state.showLabelSheet) {
         val applied = state.messages.flatMap { it.labels }.map { it.id }.toSet()
-        ModalBottomSheet(onDismissRequest = viewModel::closeLabelSheet) {
-            Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
-                Text(
-                    text = "Labels",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                )
+        Tray(onDismiss = viewModel::closeLabelSheet, title = "Labels", leadingIcon = TrayCloseIcon) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                 if (state.allLabels.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
@@ -284,7 +279,6 @@ fun ThreadScreen(
                         )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
             }
         }
     }
