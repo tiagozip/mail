@@ -81,8 +81,13 @@ class EncryptionViewModel(private val repository: MailRepository) : ViewModel() 
         }
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
-            val synced = repository.fetchPgpFromServer().getOrNull()?.second
-            if (!synced.isNullOrBlank() && repository.pgp.importPrivateKey(synced).isSuccess) {
+            val fetch = repository.fetchPgpFromServer()
+            val synced = fetch.getOrNull()?.second
+            if (!synced.isNullOrBlank()) {
+                if (repository.pgp.importPrivateKey(synced).isFailure) {
+                    _state.update { it.copy(busy = false, error = "Could not load your synced key.") }
+                    return@launch
+                }
                 val unlocked = withContext(Dispatchers.Default) { repository.pgp.unlock(s.passphrase, s.rememberPassphrase) }
                 unlocked.fold(
                     onSuccess = {
@@ -92,6 +97,10 @@ class EncryptionViewModel(private val repository: MailRepository) : ViewModel() 
                     },
                     onFailure = { _state.update { it.copy(busy = false, error = "Could not unlock. Check your passphrase.") } }
                 )
+                return@launch
+            }
+            if (s.pgpEnabledOnServer || fetch.isFailure) {
+                _state.update { it.copy(busy = false, error = "Couldn't reach your encryption key. Check your connection and try again.") }
                 return@launch
             }
             val gen = withContext(Dispatchers.Default) {
