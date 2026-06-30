@@ -21,6 +21,7 @@ import zip.estrogen.mail.ui.settings.LabelsViewModel
 import zip.estrogen.mail.ui.settings.NotificationsViewModel
 import zip.estrogen.mail.ui.settings.ProfileViewModel
 import zip.estrogen.mail.ui.settings.SettingsViewModel
+import zip.estrogen.mail.ui.settings.SwipeActionsViewModel
 import zip.estrogen.mail.ui.setup.SetupViewModel
 import zip.estrogen.mail.ui.thread.ThreadViewModel
 
@@ -43,6 +44,7 @@ class AppViewModelFactory(private val repository: MailRepository) : ViewModelPro
             modelClass.isAssignableFrom(NotificationsViewModel::class.java) -> NotificationsViewModel(repository)
             modelClass.isAssignableFrom(ScheduledViewModel::class.java) -> ScheduledViewModel(repository)
             modelClass.isAssignableFrom(ByodViewModel::class.java) -> ByodViewModel(repository)
+            modelClass.isAssignableFrom(SwipeActionsViewModel::class.java) -> SwipeActionsViewModel(repository)
             else -> throw IllegalArgumentException("Unknown ViewModel ${modelClass.name}")
         } as T
     }

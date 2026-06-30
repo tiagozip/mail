@@ -35,6 +35,8 @@ class SettingsStore(private val context: Context) {
     private val keyAmoled = stringPreferencesKey("amoled")
     private val keyPgpPublicKey = stringPreferencesKey("pgp_public_key")
     private val keyNotifications = stringPreferencesKey("notifications")
+    private val keySwipeRight = stringPreferencesKey("swipe_right")
+    private val keySwipeLeft = stringPreferencesKey("swipe_left")
 
     val credentials: Flow<Credentials?> = context.dataStore.data.map { prefs ->
         val legacyKey = prefs[keyApiKey]
@@ -70,6 +72,20 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs -> prefs[keyNotifications] = if (enabled) "true" else "false" }
+    }
+
+    val swipeConfig: Flow<SwipeConfig> = context.dataStore.data.map { prefs ->
+        SwipeConfig(
+            right = prefs[keySwipeRight]?.let { SwipeAction.from(it) } ?: SwipeAction.ARCHIVE,
+            left = prefs[keySwipeLeft]?.let { SwipeAction.from(it) } ?: SwipeAction.TRASH
+        )
+    }
+
+    suspend fun setSwipe(right: SwipeAction, left: SwipeAction) {
+        context.dataStore.edit { prefs ->
+            prefs[keySwipeRight] = right.key
+            prefs[keySwipeLeft] = left.key
+        }
     }
 
     suspend fun save(apiKey: String, baseUrl: String) {

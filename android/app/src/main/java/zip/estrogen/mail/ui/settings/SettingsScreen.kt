@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.SwipeRightAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -68,6 +69,7 @@ fun SettingsScreen(
     onOpenScheduled: () -> Unit = {},
     onOpenKeys: () -> Unit = {},
     onOpenByod: () -> Unit = {},
+    onOpenSwipe: () -> Unit = {},
     onSignedOut: () -> Unit
 ) {
     val viewModel = appViewModel<SettingsViewModel>()
@@ -132,6 +134,7 @@ fun SettingsScreen(
                         onClick = onOpenEncryption
                     )
                     NavRow(Icons.Rounded.Palette, "Appearance", "Palette, dynamic color, dark mode", onOpenAppearance)
+                    NavRow(Icons.Rounded.SwipeRightAlt, "Swipe actions", "What left and right swipes do", onOpenSwipe)
                     NavRow(Icons.Rounded.Notifications, "Notifications", "New mail alerts", onOpenNotifications)
                     NavRow(Icons.Rounded.Dns, "Your domain", "Receive mail on a domain you own", onOpenByod)
                     NavRow(Icons.Rounded.Key, "API keys", "For scripts and integrations", onOpenKeys, divider = false)

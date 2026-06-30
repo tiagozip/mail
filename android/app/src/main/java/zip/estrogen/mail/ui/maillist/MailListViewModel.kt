@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import zip.estrogen.mail.data.Folder
 import zip.estrogen.mail.data.MailRepository
+import zip.estrogen.mail.data.SwipeAction
+import zip.estrogen.mail.data.SwipeConfig
 import zip.estrogen.mail.data.model.FolderCounts
 import zip.estrogen.mail.data.model.Label
 import zip.estrogen.mail.data.model.User
@@ -51,7 +53,8 @@ data class MailListUi(
     val error: String? = null,
     val snackbar: String? = null,
     val signedOut: Boolean = false,
-    val pgpUnlocked: Boolean = false
+    val pgpUnlocked: Boolean = false,
+    val swipe: SwipeConfig = SwipeConfig()
 ) {
     val selecting: Boolean get() = selected.isNotEmpty()
 }
@@ -88,6 +91,9 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
         started = true
         viewModelScope.launch {
             repository.loadMe().onSuccess { me -> _ui.update { it.copy(user = me.user) } }
+        }
+        viewModelScope.launch {
+            repository.swipeConfig.collect { cfg -> _ui.update { it.copy(swipe = cfg) } }
         }
         refreshMeta()
         refresh(initial = true)
@@ -210,6 +216,17 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
 
     fun archive(item: MailItem) = moveWithUndo(item, Folder.ARCHIVE, "Archived")
     fun trash(item: MailItem) = moveWithUndo(item, Folder.TRASH, "Moved to Trash")
+
+    fun performSwipe(item: MailItem, action: SwipeAction) {
+        when (action) {
+            SwipeAction.ARCHIVE -> archive(item)
+            SwipeAction.TRASH -> trash(item)
+            SwipeAction.READ -> viewModelScope.launch { repository.setRead(item.id, !item.isRead) }
+            SwipeAction.STAR -> toggleStar(item)
+            SwipeAction.SNOOZE -> snooze(item.id, System.currentTimeMillis() + java.util.concurrent.TimeUnit.DAYS.toMillis(1))
+            SwipeAction.NONE -> {}
+        }
+    }
 
     private fun moveWithUndo(item: MailItem, folder: Folder, label: String) {
         viewModelScope.launch {

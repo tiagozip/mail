@@ -74,7 +74,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import zip.estrogen.mail.data.Folder
+import zip.estrogen.mail.data.SwipeAction
 import zip.estrogen.mail.ui.appViewModel
+import zip.estrogen.mail.ui.settings.icon
 import zip.estrogen.mail.ui.common.Avatar
 import zip.estrogen.mail.ui.common.MailListSkeleton
 import java.util.concurrent.TimeUnit
@@ -189,8 +191,9 @@ fun MailListScreen(
                             Column(modifier = Modifier.animateItem()) {
                                 SwipeRow(
                                     selecting = ui.selecting,
-                                    onArchive = { viewModel.archive(item) },
-                                    onDelete = { viewModel.trash(item) }
+                                    rightAction = ui.swipe.right,
+                                    leftAction = ui.swipe.left,
+                                    onSwipe = { action -> viewModel.performSwipe(item, action) }
                                 ) {
                                     MailRowInteractive(
                                         item = item,
@@ -251,57 +254,64 @@ private fun MailRowInteractive(
 @Composable
 private fun SwipeRow(
     selecting: Boolean,
-    onArchive: () -> Unit,
-    onDelete: () -> Unit,
+    rightAction: SwipeAction,
+    leftAction: SwipeAction,
+    onSwipe: (SwipeAction) -> Unit,
     content: @Composable () -> Unit
 ) {
-    if (selecting) {
+    if (selecting || (rightAction == SwipeAction.NONE && leftAction == SwipeAction.NONE)) {
         content()
         return
     }
     val haptics = LocalHapticFeedback.current
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onArchive(); true }
-                SwipeToDismissBoxValue.EndToStart -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onDelete(); true }
-                SwipeToDismissBoxValue.Settled -> false
+            val action = when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> rightAction
+                SwipeToDismissBoxValue.EndToStart -> leftAction
+                SwipeToDismissBoxValue.Settled -> SwipeAction.NONE
             }
+            if (action == SwipeAction.NONE) return@rememberSwipeToDismissBoxState false
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            onSwipe(action)
+            action == SwipeAction.ARCHIVE || action == SwipeAction.TRASH || action == SwipeAction.SNOOZE
         },
         positionalThreshold = { it * 0.45f }
     )
     SwipeToDismissBox(
         state = dismissState,
-        backgroundContent = { SwipeBackground(dismissState.targetValue) },
+        backgroundContent = { SwipeBackground(dismissState.targetValue, rightAction, leftAction) },
         content = { content() }
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SwipeBackground(target: SwipeToDismissBoxValue) {
-    val archive = target == SwipeToDismissBoxValue.StartToEnd
-    val delete = target == SwipeToDismissBoxValue.EndToStart
-    val color = when {
-        archive -> MaterialTheme.colorScheme.tertiaryContainer
-        delete -> MaterialTheme.colorScheme.errorContainer
-        else -> MaterialTheme.colorScheme.surfaceContainer
+private fun SwipeBackground(target: SwipeToDismissBoxValue, rightAction: SwipeAction, leftAction: SwipeAction) {
+    val action = when (target) {
+        SwipeToDismissBoxValue.StartToEnd -> rightAction
+        SwipeToDismissBoxValue.EndToStart -> leftAction
+        SwipeToDismissBoxValue.Settled -> SwipeAction.NONE
     }
-    val onColor = when {
-        archive -> MaterialTheme.colorScheme.onTertiaryContainer
-        delete -> MaterialTheme.colorScheme.onErrorContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    val color = when (action) {
+        SwipeAction.ARCHIVE -> MaterialTheme.colorScheme.tertiaryContainer
+        SwipeAction.TRASH -> MaterialTheme.colorScheme.errorContainer
+        SwipeAction.NONE -> MaterialTheme.colorScheme.surfaceContainer
+        else -> MaterialTheme.colorScheme.primaryContainer
+    }
+    val onColor = when (action) {
+        SwipeAction.ARCHIVE -> MaterialTheme.colorScheme.onTertiaryContainer
+        SwipeAction.TRASH -> MaterialTheme.colorScheme.onErrorContainer
+        SwipeAction.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onPrimaryContainer
     }
     Box(
-        modifier = Modifier.fillMaxSize().background(color).padding(horizontal = 24.dp),
-        contentAlignment = if (archive) Alignment.CenterStart else Alignment.CenterEnd
+        modifier = Modifier.fillMaxSize().background(color).padding(horizontal = 28.dp),
+        contentAlignment = if (target == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
     ) {
-        Icon(
-            imageVector = if (archive) Icons.Rounded.Archive else Icons.Rounded.Delete,
-            contentDescription = null,
-            tint = onColor,
-            modifier = Modifier.size(26.dp)
-        )
+        if (action != SwipeAction.NONE) {
+            Icon(action.icon(), contentDescription = null, tint = onColor, modifier = Modifier.size(26.dp))
+        }
     }
 }
 

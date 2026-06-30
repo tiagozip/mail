@@ -28,6 +28,7 @@ import zip.estrogen.mail.ui.settings.LabelsScreen
 import zip.estrogen.mail.ui.settings.NotificationsScreen
 import zip.estrogen.mail.ui.settings.ProfileScreen
 import zip.estrogen.mail.ui.settings.SettingsScreen
+import zip.estrogen.mail.ui.settings.SwipeActionsScreen
 import zip.estrogen.mail.ui.thread.ThreadScreen
 
 object Routes {
@@ -46,6 +47,7 @@ object Routes {
     const val SCHEDULED = "scheduled"
     const val KEYS = "keys"
     const val BYOD = "byod"
+    const val SWIPE = "swipe"
 
     fun thread(threadId: String, messageId: String) =
         "thread/${Uri.encode(threadId)}/${Uri.encode(messageId)}"
@@ -144,6 +146,7 @@ fun AppNavHost(
                 onOpenScheduled = { navController.navigate(Routes.SCHEDULED) },
                 onOpenKeys = { navController.navigate(Routes.KEYS) },
                 onOpenByod = { navController.navigate(Routes.BYOD) },
+                onOpenSwipe = { navController.navigate(Routes.SWIPE) },
                 onSignedOut = {
                     navController.navigate(Routes.SETUP) {
                         popUpTo(0) { inclusive = true }
@@ -167,5 +170,6 @@ fun AppNavHost(
         composable(Routes.SCHEDULED) { ScheduledScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.KEYS) { KeysScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.BYOD) { ByodScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.SWIPE) { SwipeActionsScreen(onBack = { navController.popBackStack() }) }
     }
 }

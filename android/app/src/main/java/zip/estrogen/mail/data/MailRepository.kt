@@ -304,6 +304,9 @@ class MailRepository(
     suspend fun setNotificationsEnabled(enabled: Boolean) = settings.setNotificationsEnabled(enabled)
     suspend fun isNotificationsEnabled(): Boolean = settings.notificationsEnabled.first()
 
+    val swipeConfig: Flow<zip.estrogen.mail.data.SwipeConfig> = settings.swipeConfig
+    suspend fun setSwipe(right: SwipeAction, left: SwipeAction) = settings.setSwipe(right, left)
+
     suspend fun lookupPublicKey(address: String): Result<String?> = call { it.pubkey(address).publicKey }
     suspend fun fetchPgpFromServer(): Result<Pair<String?, String?>> =
         call { val r = it.pgp(); r.publicKey to r.privateKeyEnc }
