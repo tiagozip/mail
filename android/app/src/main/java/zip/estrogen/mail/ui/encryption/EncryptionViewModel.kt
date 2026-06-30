@@ -14,17 +14,12 @@ import zip.estrogen.mail.data.MailRepository
 import zip.estrogen.mail.data.pgp.BiometricGate
 import zip.estrogen.mail.data.pgp.PgpStatus
 
-enum class EncMode { NONE, GENERATE, IMPORT, UNLOCK }
-
 data class EncryptionState(
     val status: PgpStatus = PgpStatus.ABSENT,
     val pgpEnabledOnServer: Boolean = false,
     val address: String? = null,
     val displayName: String? = null,
-    val mode: EncMode = EncMode.NONE,
     val passphrase: String = "",
-    val confirm: String = "",
-    val importKey: String = "",
     val rememberPassphrase: Boolean = true,
     val requireBiometric: Boolean = false,
     val biometricAvailable: Boolean = false,
@@ -74,25 +69,31 @@ class EncryptionViewModel(private val repository: MailRepository) : ViewModel() 
         }
     }
 
-    fun setMode(mode: EncMode) = _state.update { it.copy(mode = mode, error = null, message = null) }
     fun onPassphrase(v: String) = _state.update { it.copy(passphrase = v, error = null) }
-    fun onConfirm(v: String) = _state.update { it.copy(confirm = v, error = null) }
-    fun onImportKey(v: String) = _state.update { it.copy(importKey = v, error = null) }
     fun setRemember(v: Boolean) = _state.update { it.copy(rememberPassphrase = v) }
     fun consumeMessage() = _state.update { it.copy(message = null) }
 
-    fun generate() {
+    fun setupWithPassphrase() {
         val s = _state.value
         if (s.passphrase.length < 8) {
             _state.update { it.copy(error = "Use a passphrase of at least 8 characters") }
             return
         }
-        if (s.passphrase != s.confirm) {
-            _state.update { it.copy(error = "Passphrases do not match") }
-            return
-        }
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
+            val synced = repository.fetchPgpFromServer().getOrNull()?.second
+            if (!synced.isNullOrBlank() && repository.pgp.importPrivateKey(synced).isSuccess) {
+                val unlocked = withContext(Dispatchers.Default) { repository.pgp.unlock(s.passphrase, s.rememberPassphrase) }
+                unlocked.fold(
+                    onSuccess = {
+                        repository.storeOwnPublicKey(repository.pgp.ownPublicKey)
+                        _state.update { it.copy(busy = false, passphrase = "", message = "Encryption unlocked") }
+                        refreshStatus()
+                    },
+                    onFailure = { _state.update { it.copy(busy = false, error = "Could not unlock. Check your passphrase.") } }
+                )
+                return@launch
+            }
             val gen = withContext(Dispatchers.Default) {
                 repository.pgp.generate(
                     name = s.displayName ?: s.address ?: "",
@@ -108,80 +109,16 @@ class EncryptionViewModel(private val repository: MailRepository) : ViewModel() 
                     _state.update {
                         it.copy(
                             busy = false,
-                            mode = EncMode.NONE,
                             passphrase = "",
-                            confirm = "",
                             pgpEnabledOnServer = published.isSuccess || it.pgpEnabledOnServer,
-                            message = if (published.isSuccess) "Encryption enabled and key published"
-                            else "Key created on device (could not publish to server)"
+                            message = if (published.isSuccess) "Encryption enabled" else "Key created on device"
                         )
                     }
                     refreshStatus()
                 },
-                onFailure = {
-                    _state.update { it.copy(busy = false, error = "Could not generate a key") }
-                }
+                onFailure = { _state.update { it.copy(busy = false, error = "Could not set up encryption") } }
             )
         }
-    }
-
-    fun importAndUnlock() {
-        val s = _state.value
-        if (s.importKey.isBlank()) {
-            _state.update { it.copy(error = "Paste your armored private key") }
-            return
-        }
-        if (s.passphrase.isBlank()) {
-            _state.update { it.copy(error = "Enter your passphrase") }
-            return
-        }
-        _state.update { it.copy(busy = true, error = null) }
-        viewModelScope.launch {
-            val imported = repository.pgp.importPrivateKey(s.importKey.trim())
-            if (imported.isFailure) {
-                _state.update { it.copy(busy = false, error = "That does not look like a valid private key") }
-                return@launch
-            }
-            val unlocked = withContext(Dispatchers.Default) {
-                repository.pgp.unlock(s.passphrase, s.rememberPassphrase)
-            }
-            unlocked.fold(
-                onSuccess = {
-                    repository.storeOwnPublicKey(repository.pgp.ownPublicKey)
-                    _state.update {
-                        it.copy(busy = false, mode = EncMode.NONE, passphrase = "", importKey = "", message = "Key imported and unlocked")
-                    }
-                    refreshStatus()
-                },
-                onFailure = {
-                    _state.update { it.copy(busy = false, error = "Could not unlock. Check your passphrase.") }
-                }
-            )
-        }
-    }
-
-    fun fetchFromServer() {
-        _state.update { it.copy(busy = true, error = null) }
-        viewModelScope.launch {
-            repository.fetchPgpFromServer().fold(
-                onSuccess = { (_, privateKeyEnc) ->
-                    if (privateKeyEnc.isNullOrBlank()) {
-                        _state.update { it.copy(busy = false, mode = EncMode.IMPORT, message = "No key on the server yet. Generate or paste one.") }
-                    } else {
-                        _state.update { it.copy(busy = false, mode = EncMode.UNLOCK, importKey = privateKeyEnc, message = "Key fetched. Enter your passphrase to unlock.") }
-                    }
-                },
-                onFailure = {
-                    _state.update { it.copy(busy = false, mode = EncMode.IMPORT, error = "Could not reach the server. Paste your key instead.") }
-                }
-            )
-        }
-    }
-
-    fun unlockFetched() {
-        val s = _state.value
-        if (s.importKey.isBlank()) { setMode(EncMode.IMPORT); return }
-        importAndUnlock()
     }
 
     fun unlock() {
@@ -222,7 +159,7 @@ class EncryptionViewModel(private val repository: MailRepository) : ViewModel() 
                     _state.update { it.copy(message = "Unlocked") }
                     refreshStatus()
                 } else {
-                    _state.update { it.copy(mode = EncMode.UNLOCK, error = "Enter your passphrase to unlock") }
+                    _state.update { it.copy(error = "Enter your passphrase to unlock") }
                 }
             }
         }
@@ -255,7 +192,7 @@ class EncryptionViewModel(private val repository: MailRepository) : ViewModel() 
             repository.pgp.forget()
             repository.storeOwnPublicKey(null)
             _state.update {
-                it.copy(busy = false, status = PgpStatus.ABSENT, pgpEnabledOnServer = false, fingerprint = null, mode = EncMode.NONE, message = "Encryption disabled and key removed")
+                it.copy(busy = false, status = PgpStatus.ABSENT, pgpEnabledOnServer = false, fingerprint = null, message = "Encryption disabled and key removed")
             }
         }
     }
@@ -263,7 +200,7 @@ class EncryptionViewModel(private val repository: MailRepository) : ViewModel() 
     fun removeFromDevice() {
         repository.pgp.forget()
         viewModelScope.launch { repository.storeOwnPublicKey(null) }
-        _state.update { it.copy(status = PgpStatus.ABSENT, fingerprint = null, mode = EncMode.NONE, message = "Key removed from this device") }
+        _state.update { it.copy(status = PgpStatus.ABSENT, fingerprint = null, message = "Key removed from this device") }
     }
 
     fun exportPrivateKey(): String? = repository.pgp.exportPrivateKey()

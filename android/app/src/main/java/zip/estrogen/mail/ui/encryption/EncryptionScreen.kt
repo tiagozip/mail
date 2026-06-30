@@ -1,6 +1,5 @@
 package zip.estrogen.mail.ui.encryption
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,8 +18,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.GppGood
@@ -194,60 +191,12 @@ private fun AbsentContent(state: EncryptionState, viewModel: EncryptionViewModel
     SectionCard {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Set up encryption", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            Button(onClick = { viewModel.setMode(EncMode.GENERATE) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Generate a new key")
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = viewModel::fetchFromServer, enabled = !state.busy, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.large) {
-                    Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("From server")
-                }
-                OutlinedButton(onClick = { viewModel.setMode(EncMode.IMPORT) }, enabled = !state.busy, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.large) {
-                    Text("Paste key")
-                }
-            }
-        }
-    }
-
-    AnimatedVisibility(visible = state.mode == EncMode.GENERATE) {
-        SectionCard {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Choose a passphrase", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                Text("This protects your private key. You'll need it to read encrypted mail on a new device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                PassField(state.passphrase, viewModel::onPassphrase, "Passphrase", !state.busy)
-                PassField(state.confirm, viewModel::onConfirm, "Confirm passphrase", !state.busy)
-                RememberRow(state, viewModel)
-                ErrorText(state.error)
-                Button(onClick = viewModel::generate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
-                    BusyLabel(state.busy, "Generate and enable")
-                }
-            }
-        }
-    }
-
-    AnimatedVisibility(visible = state.mode == EncMode.IMPORT || state.mode == EncMode.UNLOCK) {
-        SectionCard {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (state.mode == EncMode.UNLOCK) "Unlock your synced key" else "Import a private key", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                if (state.mode == EncMode.IMPORT) {
-                    OutlinedTextField(
-                        value = state.importKey,
-                        onValueChange = viewModel::onImportKey,
-                        label = { Text("Armored private key") },
-                        placeholder = { Text("-----BEGIN PGP PRIVATE KEY BLOCK-----") },
-                        minLines = 4,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                PassField(state.passphrase, viewModel::onPassphrase, "Passphrase", !state.busy)
-                RememberRow(state, viewModel)
-                ErrorText(state.error)
-                Button(onClick = viewModel::importAndUnlock, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
-                    BusyLabel(state.busy, "Import and unlock")
-                }
+            Text("Enter your encryption passphrase. We'll unlock your synced key, or create one if you don't have it yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            PassField(state.passphrase, viewModel::onPassphrase, "Passphrase", !state.busy)
+            RememberRow(state, viewModel)
+            ErrorText(state.error)
+            Button(onClick = viewModel::setupWithPassphrase, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
+                BusyLabel(state.busy, "Unlock encryption")
             }
         }
     }
