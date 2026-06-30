@@ -418,6 +418,9 @@ class MailRepository(
 
     suspend fun pushLatest(): Result<PushLatestResponse> = call { it.pushLatest() }
 
+    suspend fun latestUnreadInbox(): CachedMessage? =
+        withContext(Dispatchers.IO) { runCatching { messageDao.latestUnreadInbox(System.currentTimeMillis()) }.getOrNull() }
+
     val notificationsEnabled: Flow<Boolean> = settings.notificationsEnabled
     suspend fun setNotificationsEnabled(enabled: Boolean) = settings.setNotificationsEnabled(enabled)
     suspend fun isNotificationsEnabled(): Boolean = settings.notificationsEnabled.first()

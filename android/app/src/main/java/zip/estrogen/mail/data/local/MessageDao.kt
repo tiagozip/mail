@@ -26,6 +26,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun byId(id: String): CachedMessage?
 
+    @Query("SELECT * FROM messages WHERE folder = 'inbox' AND isRead = 0 AND (snoozeUntil IS NULL OR snoozeUntil < :now) ORDER BY date DESC LIMIT 1")
+    suspend fun latestUnreadInbox(now: Long): CachedMessage?
+
     @Query("SELECT * FROM messages WHERE threadId = :threadId ORDER BY date ASC")
     suspend fun byThread(threadId: String): List<CachedMessage>
 

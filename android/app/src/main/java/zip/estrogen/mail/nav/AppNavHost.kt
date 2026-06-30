@@ -79,7 +79,9 @@ object Routes {
 fun AppNavHost(
     hasCredentials: Boolean,
     composeRequested: Boolean = false,
-    onComposeConsumed: () -> Unit = {}
+    onComposeConsumed: () -> Unit = {},
+    openThread: Pair<String, String>? = null,
+    onThreadConsumed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val start = if (hasCredentials) Routes.MAIL_LIST else Routes.SETUP
@@ -91,6 +93,12 @@ fun AppNavHost(
         if (composeRequested && hasCredentials) {
             runCatching { navController.navigate(Routes.COMPOSE) }
             onComposeConsumed()
+        }
+    }
+    LaunchedEffect(openThread, hasCredentials) {
+        if (openThread != null && hasCredentials) {
+            runCatching { navController.navigate(Routes.thread(openThread.first, openThread.second)) }
+            onThreadConsumed()
         }
     }
     LaunchedEffect(Unit) {

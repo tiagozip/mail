@@ -23,7 +23,17 @@ class SyncWorker(
         val outcome = app.repository.syncDelta()
         if (outcome.isSuccess && app.repository.isNotificationsEnabled()) {
             app.repository.pushLatest().onSuccess { latest ->
-                MailNotifier.notifyNewMail(applicationContext, latest.count, latest.title, latest.body)
+                val msg = app.repository.latestUnreadInbox()?.let {
+                    MailNotifier.LatestMessage(
+                        id = it.id,
+                        threadId = it.threadId,
+                        from = it.fromAddress,
+                        sender = it.fromName ?: it.fromAddress ?: latest.title,
+                        subject = it.subject ?: latest.title,
+                        snippet = it.snippet ?: latest.body
+                    )
+                }
+                MailNotifier.notifyNewMail(applicationContext, latest.count, latest.title, latest.body, msg)
             }
         }
         return if (outcome.isSuccess) Result.success() else Result.retry()

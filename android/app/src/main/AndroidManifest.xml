@@ -68,5 +68,9 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".util.NotificationActionReceiver"
+            android:exported="false" />
     </application>
 </manifest>

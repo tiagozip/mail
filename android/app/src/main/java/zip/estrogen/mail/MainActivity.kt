@@ -29,6 +29,7 @@ import zip.estrogen.mail.util.ComposeIntent
 class MainActivity : FragmentActivity() {
 
     private var pendingComposeRequested by mutableStateOf(false)
+    private var pendingThread by mutableStateOf<Pair<String, String>?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -37,6 +38,7 @@ class MainActivity : FragmentActivity() {
         val app = application as MailApp
         consumeAuthIntent(intent)
         consumeComposeIntent(intent)
+        consumeThreadIntent(intent)
         setContent {
             val appearance by app.repository.appearance.collectAsStateWithLifecycle(initialValue = Appearance())
             val systemDark = isSystemInDarkTheme()
@@ -55,7 +57,13 @@ class MainActivity : FragmentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Root(app, pendingComposeRequested) { pendingComposeRequested = false }
+                    Root(
+                        app = app,
+                        composeRequested = pendingComposeRequested,
+                        onComposeConsumed = { pendingComposeRequested = false },
+                        openThread = pendingThread,
+                        onThreadConsumed = { pendingThread = null }
+                    )
                 }
             }
         }
@@ -66,12 +74,19 @@ class MainActivity : FragmentActivity() {
         setIntent(intent)
         consumeAuthIntent(intent)
         consumeComposeIntent(intent)
+        consumeThreadIntent(intent)
     }
 
     private fun consumeComposeIntent(intent: Intent?) {
         val prefill = ComposeIntent.parse(intent) ?: return
         ComposePrefill.pending = prefill
         pendingComposeRequested = true
+    }
+
+    private fun consumeThreadIntent(intent: Intent?) {
+        val threadId = intent?.getStringExtra("open_thread_id") ?: return
+        val messageId = intent.getStringExtra("open_message_id") ?: threadId
+        pendingThread = threadId to messageId
     }
 
     private fun consumeAuthIntent(intent: Intent?) {
@@ -90,7 +105,9 @@ class MainActivity : FragmentActivity() {
 private fun Root(
     app: MailApp,
     composeRequested: Boolean,
-    onComposeConsumed: () -> Unit
+    onComposeConsumed: () -> Unit,
+    openThread: Pair<String, String>?,
+    onThreadConsumed: () -> Unit
 ) {
     val authState by app.repository.authState.collectAsStateWithLifecycle(initialValue = AuthState.Resolving)
 
@@ -99,7 +116,9 @@ private fun Root(
         AuthState.SignedIn -> AppNavHost(
             hasCredentials = true,
             composeRequested = composeRequested,
-            onComposeConsumed = onComposeConsumed
+            onComposeConsumed = onComposeConsumed,
+            openThread = openThread,
+            onThreadConsumed = onThreadConsumed
         )
         AuthState.SignedOut -> AppNavHost(
             hasCredentials = false,
