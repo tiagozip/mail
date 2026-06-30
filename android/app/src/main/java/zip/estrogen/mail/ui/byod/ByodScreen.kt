@@ -47,6 +47,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import zip.estrogen.mail.ui.common.ConfettiOverlay
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,43 +78,54 @@ fun ByodScreen(onBack: () -> Unit) {
         state.message?.let { snackbar.showSnackbar(it); viewModel.consumeMessage() }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (state.wizardOpen) "Bring your own domain" else "Your domains",
-                        fontWeight = FontWeight.SemiBold
+    val verifiedCount = state.domains.count { it.verified }
+    var prevVerified by remember { mutableStateOf<Int?>(null) }
+    var celebrate by remember { mutableStateOf(false) }
+    LaunchedEffect(verifiedCount) {
+        if (prevVerified != null && verifiedCount > prevVerified!!) celebrate = true
+        prevVerified = verifiedCount
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            if (state.wizardOpen) "Bring your own domain" else "Your domains",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { if (state.wizardOpen) viewModel.closeWizard() else onBack() }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { if (state.wizardOpen) viewModel.closeWizard() else onBack() }) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (state.wizardOpen) {
-                Wizard(state, viewModel, clipboard::setText) { openCustomTab(context, it) }
-            } else {
-                DomainList(state, viewModel)
             }
-            Spacer(Modifier.size(24.dp))
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (state.wizardOpen) {
+                    Wizard(state, viewModel, clipboard::setText) { openCustomTab(context, it) }
+                } else {
+                    DomainList(state, viewModel)
+                }
+                Spacer(Modifier.size(24.dp))
+            }
         }
+        ConfettiOverlay(visible = celebrate, onDone = { celebrate = false })
     }
 }
 
