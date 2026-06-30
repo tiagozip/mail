@@ -48,7 +48,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import zip.estrogen.mail.data.pgp.PgpStatus
 import zip.estrogen.mail.ui.appViewModel
 import zip.estrogen.mail.ui.common.BackButton
+import zip.estrogen.mail.ui.common.ConfettiOverlay
 import zip.estrogen.mail.ui.common.TonalIconBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,37 +85,49 @@ fun EncryptionScreen(onBack: () -> Unit) {
         state.message?.let { snackbar.showSnackbar(it); viewModel.consumeMessage() }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                title = { Text("Encryption", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { BackButton(onBack) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+    var prevStatus by remember { mutableStateOf<PgpStatus?>(null) }
+    var celebrate by remember { mutableStateOf(false) }
+    LaunchedEffect(state.status) {
+        if (prevStatus != null && prevStatus != PgpStatus.UNLOCKED && state.status == PgpStatus.UNLOCKED) {
+            celebrate = true
+        }
+        prevStatus = state.status
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                TopAppBar(
+                    title = { Text("Encryption", fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = { BackButton(onBack) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface
+                    )
                 )
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            StatusHero(state.status, state.fingerprint, state.pgpEnabledOnServer)
-            when (state.status) {
-                PgpStatus.ABSENT -> AbsentContent(state, viewModel)
-                PgpStatus.LOCKED -> LockedContent(state, viewModel, activity)
-                PgpStatus.UNLOCKED -> UnlockedContent(state, viewModel, activity) {
-                    viewModel.exportPrivateKey()?.let { clipboard.setText(AnnotatedString(it)) }
-                }
             }
-            Spacer(Modifier.size(24.dp))
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                StatusHero(state.status, state.fingerprint, state.pgpEnabledOnServer)
+                when (state.status) {
+                    PgpStatus.ABSENT -> AbsentContent(state, viewModel)
+                    PgpStatus.LOCKED -> LockedContent(state, viewModel, activity)
+                    PgpStatus.UNLOCKED -> UnlockedContent(state, viewModel, activity) {
+                        viewModel.exportPrivateKey()?.let { clipboard.setText(AnnotatedString(it)) }
+                    }
+                }
+                Spacer(Modifier.size(24.dp))
+            }
         }
+        ConfettiOverlay(visible = celebrate, onDone = { celebrate = false })
     }
 }
 
