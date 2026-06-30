@@ -1302,7 +1302,31 @@ export async function handleApi(request, env, ctx) {
     const color = b.color !== undefined ? String(b.color).slice(0, 9) : row.color;
     const skipInbox = b.skipInbox !== undefined ? (b.skipInbox ? 1 : 0) : row.skip_inbox;
     let alias = row.alias_address;
-    if (b.aliasAddress !== undefined) {
+    if (b.createAlias) {
+      const localPart = String(b.localPart || "")
+        .trim()
+        .toLowerCase();
+      if (!ALIAS_RE.test(localPart)) return error(400, "invalid alias (a-z, 0-9, . _ -)");
+      const dom = String(b.domain || env.MAIL_DOMAIN)
+        .trim()
+        .toLowerCase();
+      const allowed = await verifiedDomainSet(env, user.id);
+      if (!allowed.has(dom)) return error(400, "unknown or unverified domain");
+      const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?")
+        .bind(user.id)
+        .first();
+      if ((count?.n || 0) >= ALIAS_LIMIT) return error(400, `alias limit reached (${ALIAS_LIMIT})`);
+      alias = `${localPart}@${dom}`;
+      const taken = await env.DB.prepare("SELECT user_id FROM addresses WHERE address = ?")
+        .bind(alias)
+        .first();
+      if (taken) return error(409, "that address is already taken");
+      await env.DB.prepare(
+        "INSERT INTO addresses (address, user_id, is_primary, label, created_at) VALUES (?,?,0,?,?)",
+      )
+        .bind(alias, user.id, name, now())
+        .run();
+    } else if (b.aliasAddress !== undefined) {
       if (!b.aliasAddress) alias = null;
       else {
         alias = normalizeAddr(b.aliasAddress);
