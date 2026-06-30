@@ -117,7 +117,7 @@ fun MailListScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = !ui.selecting,
+        gesturesEnabled = !drawerState.isOpen && !ui.selecting,
         drawerContent = {
             FolderDrawer(
                 user = ui.user,
