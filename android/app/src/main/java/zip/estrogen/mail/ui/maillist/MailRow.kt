@@ -92,8 +92,24 @@ fun MailRow(
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f, fill = false)
                 )
+                if (item.threadCount > 1) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .padding(horizontal = 7.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = item.threadCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
                 if (item.isSpoofed) {
                     Icon(Icons.Rounded.WarningAmber, contentDescription = "Spoofed", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(6.dp))

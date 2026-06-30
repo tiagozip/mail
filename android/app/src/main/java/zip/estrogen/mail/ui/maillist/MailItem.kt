@@ -22,7 +22,8 @@ data class MailItem(
     val authStatus: String,
     val snoozeUntil: Long?,
     val labels: List<Label>,
-    val decryptedPreview: String?
+    val decryptedPreview: String?,
+    val threadCount: Int = 1
 ) {
     val senderLabel: String
         get() = fromName?.takeIf { it.isNotBlank() }

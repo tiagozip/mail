@@ -18,6 +18,7 @@ import zip.estrogen.mail.data.Folder
 import zip.estrogen.mail.data.MailRepository
 import zip.estrogen.mail.data.SwipeAction
 import zip.estrogen.mail.data.SwipeConfig
+import zip.estrogen.mail.data.local.CachedMessage
 import zip.estrogen.mail.data.model.FolderCounts
 import zip.estrogen.mail.data.model.Label
 import zip.estrogen.mail.data.model.User
@@ -70,7 +71,8 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
     @OptIn(ExperimentalCoroutinesApi::class)
     val items = _view
         .flatMapLatest { v ->
-            when (v) {
+            val grouped = v !is ListView.SearchView
+            val source: kotlinx.coroutines.flow.Flow<List<CachedMessage>> = when (v) {
                 is ListView.FolderView -> repository.observeFolder(v.folder)
                 is ListView.LabelView -> repository.observeLabel(v.id)
                 is ListView.SearchView -> if (v.query.isBlank()) flowOf(emptyList()) else {
@@ -79,13 +81,30 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
                 }
                 ListView.Snoozed -> repository.observeSnoozed()
             }
-        }
-        .map { list ->
-            withContext(Dispatchers.Default) {
-                list.map { it.toItem(SnippetCipher.decrypt(it.decryptedSnippet)) }
+            source.map { list ->
+                withContext(Dispatchers.Default) {
+                    val mapped = list.map { it.toItem(SnippetCipher.decrypt(it.decryptedSnippet)) }
+                    if (grouped) groupConversations(mapped) else mapped
+                }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private fun groupConversations(items: List<MailItem>): List<MailItem> =
+        items.groupBy { it.threadId ?: it.id }
+            .map { (_, group) ->
+                val latest = group.maxByOrNull { it.date } ?: group.first()
+                latest.copy(
+                    threadCount = group.size,
+                    isRead = group.all { it.isRead },
+                    isStarred = group.any { it.isStarred },
+                    hasAttachments = group.any { it.hasAttachments },
+                    labels = group.flatMap { it.labels }.distinctBy { it.id }
+                )
+            }
+            .sortedByDescending { it.date }
+
+    private fun isThread(item: MailItem): Boolean = item.threadId != null && item.threadCount > 1
 
     private var started = false
 
@@ -211,7 +230,10 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
     }
 
     fun toggleStar(item: MailItem) {
-        viewModelScope.launch { repository.setStar(item.id, !item.isStarred) }
+        viewModelScope.launch {
+            if (isThread(item)) repository.setThreadStar(item.threadId!!, !item.isStarred)
+            else repository.setStar(item.id, !item.isStarred)
+        }
     }
 
     fun markRead(id: String) {
@@ -225,16 +247,27 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
         when (action) {
             SwipeAction.ARCHIVE -> archive(item)
             SwipeAction.TRASH -> trash(item)
-            SwipeAction.READ -> viewModelScope.launch { repository.setRead(item.id, !item.isRead) }
+            SwipeAction.READ -> viewModelScope.launch {
+                if (isThread(item)) repository.setThreadRead(item.threadId!!, !item.isRead)
+                else repository.setRead(item.id, !item.isRead)
+            }
             SwipeAction.STAR -> toggleStar(item)
-            SwipeAction.SNOOZE -> snooze(item.id, System.currentTimeMillis() + java.util.concurrent.TimeUnit.DAYS.toMillis(1))
+            SwipeAction.SNOOZE -> {
+                val until = System.currentTimeMillis() + java.util.concurrent.TimeUnit.DAYS.toMillis(1)
+                viewModelScope.launch {
+                    if (isThread(item)) repository.snoozeThread(item.threadId!!, until)
+                    else repository.snooze(item.id, until)
+                    _ui.update { it.copy(snackbar = "Snoozed") }
+                }
+            }
             SwipeAction.NONE -> {}
         }
     }
 
     private fun moveWithUndo(item: MailItem, folder: Folder, label: String) {
         viewModelScope.launch {
-            repository.move(item.id, folder)
+            if (isThread(item)) repository.moveThread(item.threadId!!, folder)
+            else repository.move(item.id, folder)
             _ui.update { it.copy(snackbar = label) }
             refreshMeta()
         }

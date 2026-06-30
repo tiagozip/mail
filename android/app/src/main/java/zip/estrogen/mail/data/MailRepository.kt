@@ -254,6 +254,36 @@ class MailRepository(
         Unit
     }
 
+    suspend fun moveThread(threadId: String, folder: Folder): Result<Unit> = call { api ->
+        val ids = messageDao.byThread(threadId).map { it.id }
+        ids.forEach { messageDao.setFolder(it, folder.key) }
+        if (ids.isNotEmpty()) api.bulk(BulkBody(ids, "move", folder.key))
+        Unit
+    }
+
+    suspend fun setThreadRead(threadId: String, read: Boolean): Result<Unit> = call { api ->
+        val ids = messageDao.byThread(threadId).map { it.id }
+        ids.forEach { messageDao.setRead(it, read) }
+        if (ids.isNotEmpty()) api.bulk(BulkBody(ids, "read", read.toString()))
+        Unit
+    }
+
+    suspend fun setThreadStar(threadId: String, star: Boolean): Result<Unit> = call { api ->
+        val ids = messageDao.byThread(threadId).map { it.id }
+        ids.forEach { messageDao.setStar(it, star) }
+        if (ids.isNotEmpty()) api.bulk(BulkBody(ids, "star", star.toString()))
+        Unit
+    }
+
+    suspend fun snoozeThread(threadId: String, until: Long?): Result<Unit> = call { api ->
+        val ids = messageDao.byThread(threadId).map { it.id }
+        ids.forEach { id ->
+            messageDao.setSnooze(id, until)
+            runCatching { api.snooze(id, zip.estrogen.mail.data.model.SnoozeBody(until)) }
+        }
+        Unit
+    }
+
     suspend fun send(request: SendRequest): Result<SendResponse> = call { it.send(request) }
 
     suspend fun createDraft(body: DraftBody): Result<DraftResponse> = call { it.createDraft(body) }
