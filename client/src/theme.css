@@ -4119,6 +4119,21 @@ html[data-mode="dark"] .em-letter .em-shiki {
   min-height: 120px;
 }
 
+.em-folder-aliasrow {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+}
+
+.em-folder-aliasrow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.em-folder-at {
+  color: var(--text-color-kumo-subtle);
+}
+
 .em-byod-steps {
   margin: 0;
   padding-left: 1.1rem;

@@ -145,10 +145,21 @@ export async function pruneToCap(cap = CAP) {
   } catch {}
 }
 
+let skipInboxFolderIds = new Set();
+export function setSkipInboxFolders(ids) {
+  skipInboxFolderIds = new Set(ids || []);
+}
+
+const HIDDEN_IN_FOLDER = ["trash", "spam", "drafts"];
+
 export function matchView(item, view, nowTs) {
   const snoozed = item.snoozeUntil && item.snoozeUntil > nowTs;
   if (view.kind === "folder" && view.folder === "snoozed") return !!snoozed;
   if (snoozed) return false;
+  if (view.kind === "userfolder")
+    return item.folderId === view.folderId && !HIDDEN_IN_FOLDER.includes(item.folder);
+  if (view.kind === "folder" && view.folder === "inbox")
+    return item.folder === "inbox" && !(item.folderId && skipInboxFolderIds.has(item.folderId));
   if (view.kind === "folder") return item.folder === view.folder;
   if (view.kind === "starred") return item.isStarred && item.folder !== "trash";
   if (view.kind === "label") return (item.labels || []).some((l) => l.id === view.labelId);

@@ -5,6 +5,7 @@ import {
   Clock,
   ClockCountdown,
   FileText,
+  Folder,
   Gear,
   PaperPlaneTilt,
   PencilSimple,
@@ -19,6 +20,7 @@ import {
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import { FOLDER_LABELS, initials, monoColor } from "../util.js";
+import { FolderSetup } from "./FolderSetup.jsx";
 import { LabelModal } from "./LabelModal.jsx";
 
 const FOLDERS = [
@@ -36,6 +38,7 @@ function activeKey(view) {
   if (view.kind === "folder") return view.folder;
   if (view.kind === "starred") return "starred";
   if (view.kind === "label") return `label:${view.labelId}`;
+  if (view.kind === "userfolder") return `folder:${view.folderId}`;
   return null;
 }
 
@@ -47,9 +50,11 @@ export function MailSidebar({
   onSignOut,
   onNavigate,
 }) {
-  const { user, view, goView, counts, labels, refreshLabels } = store;
+  const { user, view, goView, counts, labels, refreshLabels, userFolders, refreshCounts } = store;
   const [modalOpen, setModalOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(null);
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [editFolder, setEditFolder] = useState(null);
   const active = activeKey(view);
 
   function navigate(v) {
@@ -127,6 +132,51 @@ export function MailSidebar({
         </button>
       </div>
 
+      <div className="em-nav-list">
+        {(userFolders || []).map((f) => {
+          const on = active === `folder:${f.id}`;
+          return (
+            <div
+              key={f.id}
+              className={`em-nav-item em-nav-labelrow${on ? " is-active" : ""}`}
+            >
+              <button
+                type="button"
+                className="em-nav-labelmain"
+                onClick={() => navigate({ kind: "userfolder", folderId: f.id, name: f.name })}
+              >
+                <Folder size={18} weight={on ? "fill" : "regular"} style={{ color: f.color }} />
+                <span className="em-nav-label">{f.name}</span>
+                {f.unread > 0 && <span className="em-nav-badge">{f.unread}</span>}
+              </button>
+              <button
+                type="button"
+                className="em-label-edit"
+                aria-label={`Edit ${f.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditFolder(f);
+                  setFolderModalOpen(true);
+                }}
+              >
+                <PencilSimple size={14} />
+              </button>
+            </div>
+          );
+        })}
+        <button
+          type="button"
+          className="em-nav-item em-nav-muted"
+          onClick={() => {
+            setEditFolder(null);
+            setFolderModalOpen(true);
+          }}
+        >
+          <Plus size={18} />
+          <span className="em-nav-label">Add folder</span>
+        </button>
+      </div>
+
       <div className="em-nav-foot">
         <DropdownMenu>
           <DropdownMenu.Trigger
@@ -174,6 +224,14 @@ export function MailSidebar({
         label={editLabel}
         onClose={() => setModalOpen(false)}
         onSaved={refreshLabels}
+      />
+
+      <FolderSetup
+        open={folderModalOpen}
+        folder={editFolder}
+        user={user}
+        onClose={() => setFolderModalOpen(false)}
+        onSaved={refreshCounts}
       />
     </div>
   );

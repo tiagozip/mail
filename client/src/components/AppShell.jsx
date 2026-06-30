@@ -29,6 +29,7 @@ function pathFor(view, openId) {
   if (!view) return "/inbox";
   if (view.kind === "starred") return "/starred";
   if (view.kind === "label") return `/label/${view.labelId}`;
+  if (view.kind === "userfolder") return `/folder/${view.folderId}`;
   if (view.kind === "search") return `/search/${encodeURIComponent(view.q)}`;
   return `/${view.folder || "inbox"}`;
 }
@@ -38,6 +39,8 @@ function parsePath(pathname) {
   if (seg[0] === "message" && seg[1]) return { openId: decodeURIComponent(seg[1]) };
   if (seg[0] === "label" && seg[1])
     return { view: { kind: "label", labelId: decodeURIComponent(seg[1]) } };
+  if (seg[0] === "folder" && seg[1])
+    return { view: { kind: "userfolder", folderId: decodeURIComponent(seg[1]) } };
   if (seg[0] === "search" && seg[1])
     return { view: { kind: "search", q: decodeURIComponent(seg.slice(1).join("/")) } };
   if (seg[0] === "starred") return { view: { kind: "starred" } };
@@ -77,10 +80,18 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   const gPressed = useRef(false);
   const undoTimer = useRef(null);
 
-  const openCompose = useCallback((initial) => {
-    setComposeInitial(initial || null);
-    setComposeOpen(true);
-  }, []);
+  const openCompose = useCallback(
+    (initial) => {
+      let init = initial || null;
+      if (!init?.from && store.view?.kind === "userfolder") {
+        const f = (store.userFolders || []).find((x) => x.id === store.view.folderId);
+        if (f?.alias) init = { ...(init || {}), from: f.alias };
+      }
+      setComposeInitial(init);
+      setComposeOpen(true);
+    },
+    [store.view, store.userFolders],
+  );
 
   const openDraft = useCallback(
     async (item) => {

@@ -267,7 +267,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     if (!open) return;
     const init = initial || {};
     const html = plainBodyToHtml(init.body || "");
-    setFrom(primary);
+    setFrom(init.from && addresses.some((a) => a.address === init.from) ? init.from : primary);
     setTo(init.to || "");
     setCc(init.cc || "");
     setBcc(init.bcc || "");

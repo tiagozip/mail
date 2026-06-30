@@ -472,6 +472,8 @@ function pickFromAddress(message, user) {
   const selves = new Set(
     (user?.addresses?.map((a) => a.address) || []).map((a) => a.toLowerCase()),
   );
+  const dt = message.deliveredTo?.toLowerCase();
+  if (dt && selves.has(dt)) return message.deliveredTo;
   const candidates = [...(message.to || []), ...(message.cc || [])];
   const match = candidates.find((p) => p.address && selves.has(p.address.toLowerCase()));
   return match?.address || user?.address;

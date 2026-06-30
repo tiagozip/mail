@@ -22,6 +22,7 @@ export function useMailStore(initialUser) {
   const [view, setView] = useState({ kind: "folder", folder: "inbox" });
   const [counts, setCounts] = useState(null);
   const [labels, setLabels] = useState([]);
+  const [userFolders, setUserFolders] = useState([]);
 
   const [messages, setMessages] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
@@ -66,7 +67,11 @@ export function useMailStore(initialUser) {
   const refreshCounts = useCallback(() => {
     api
       .folders()
-      .then((d) => setCounts(d.counts))
+      .then((d) => {
+        setCounts(d.counts);
+        setUserFolders(d.folders || []);
+        cache.setSkipInboxFolders((d.folders || []).filter((f) => f.skipInbox).map((f) => f.id));
+      })
       .catch(() => {});
   }, []);
 
@@ -83,6 +88,7 @@ export function useMailStore(initialUser) {
     if (v.kind === "search") p.q = v.q;
     else if (v.kind === "starred") p.starred = 1;
     else if (v.kind === "label") p.label = v.labelId;
+    else if (v.kind === "userfolder") p.folderId = v.folderId;
     else p.folder = v.folder;
     return p;
   }, []);
@@ -535,6 +541,7 @@ export function useMailStore(initialUser) {
     refreshCounts,
     labels,
     refreshLabels,
+    userFolders,
     messages,
     nextCursor,
     listLoading,

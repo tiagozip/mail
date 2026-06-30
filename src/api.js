@@ -91,6 +91,8 @@ function listItem(row) {
     id: row.id,
     threadId: row.thread_id,
     folder: row.folder,
+    folderId: row.folder_id || null,
+    deliveredTo: row.delivered_to || null,
     from: { address: row.from_addr, name: row.from_name },
     to: JSON.parse(row.to_json || "[]"),
     subject: row.subject,
@@ -455,6 +457,7 @@ async function listMessages(request, env, user) {
   const folder = url.searchParams.get("folder") || "inbox";
   const q = (url.searchParams.get("q") || "").trim();
   const labelId = url.searchParams.get("label");
+  const folderParam = url.searchParams.get("folderId");
   const starred = url.searchParams.get("starred") === "1";
   const limit = clampInt(url.searchParams.get("limit"), 1, 100, 50);
   const cursor = url.searchParams.get("cursor");
@@ -551,7 +554,10 @@ async function listMessages(request, env, user) {
     where.push("m.snooze_until > ?");
     binds.push(nowTs);
   } else {
-    if (starred) {
+    if (folderParam) {
+      where.push("m.folder_id = ? AND m.folder NOT IN ('trash', 'spam', 'drafts')");
+      binds.push(folderParam);
+    } else if (starred) {
       where.push("m.is_starred = 1 AND m.folder != 'trash'");
     } else if (labelId) {
       where.push("m.id IN (SELECT message_id FROM message_labels WHERE label_id = ?)");
@@ -559,6 +565,12 @@ async function listMessages(request, env, user) {
     } else {
       where.push("m.folder = ?");
       binds.push(folder);
+      if (folder === "inbox") {
+        where.push(
+          "(m.folder_id IS NULL OR m.folder_id NOT IN (SELECT id FROM folders WHERE user_id = ? AND skip_inbox = 1))",
+        );
+        binds.push(user.id);
+      }
     }
     where.push("(m.snooze_until IS NULL OR m.snooze_until <= ?)");
     binds.push(nowTs);
@@ -871,8 +883,31 @@ export async function handleApi(request, env, ctx) {
     );
   }
 
-  if (path === "/api/folders" && method === "GET")
-    return json({ counts: await folderCounts(env, user.id) });
+  if (path === "/api/folders" && method === "GET") {
+    const fres = await env.DB.prepare(
+      "SELECT id, name, color, alias_address, skip_inbox, position FROM folders WHERE user_id = ? ORDER BY position, name",
+    )
+      .bind(user.id)
+      .all();
+    const fcounts = await env.DB.prepare(
+      "SELECT folder_id, COUNT(*) AS unread FROM messages WHERE user_id = ? AND folder_id IS NOT NULL AND is_read = 0 AND folder NOT IN ('trash','spam','drafts') GROUP BY folder_id",
+    )
+      .bind(user.id)
+      .all();
+    const unreadBy = {};
+    for (const c of fcounts.results || []) unreadBy[c.folder_id] = c.unread;
+    return json({
+      counts: await folderCounts(env, user.id),
+      folders: (fres.results || []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        color: f.color,
+        alias: f.alias_address || null,
+        skipInbox: !!f.skip_inbox,
+        unread: unreadBy[f.id] || 0,
+      })),
+    });
+  }
 
   if (path === "/api/sync" && method === "GET") {
     const since = clampInt(url.searchParams.get("since"), 0, Number.MAX_SAFE_INTEGER, 0);
@@ -1168,6 +1203,109 @@ export async function handleApi(request, env, ctx) {
   }
   if ((m = path.match(/^\/api\/labels\/([\w-]+)$/)) && method === "DELETE") {
     await env.DB.prepare("DELETE FROM labels WHERE id = ? AND user_id = ?")
+      .bind(m[1], user.id)
+      .run();
+    return json({ ok: true });
+  }
+
+  if (path === "/api/folders" && method === "POST") {
+    const b = await readJson(request);
+    const name = String(b.name || "")
+      .trim()
+      .slice(0, 40);
+    if (!name) return error(400, "name required");
+    const color = String(b.color || "#8b7fd6").slice(0, 9);
+    const skipInbox = b.skipInbox ? 1 : 0;
+    let alias = null;
+    if (b.createAlias) {
+      const localPart = String(b.localPart || "")
+        .trim()
+        .toLowerCase();
+      if (!ALIAS_RE.test(localPart)) return error(400, "invalid alias (a-z, 0-9, . _ -)");
+      const domain = String(b.domain || env.MAIL_DOMAIN)
+        .trim()
+        .toLowerCase();
+      const allowed = await verifiedDomainSet(env, user.id);
+      if (!allowed.has(domain)) return error(400, "unknown or unverified domain");
+      const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?")
+        .bind(user.id)
+        .first();
+      if ((count?.n || 0) >= ALIAS_LIMIT) return error(400, `alias limit reached (${ALIAS_LIMIT})`);
+      alias = `${localPart}@${domain}`;
+      const taken = await env.DB.prepare("SELECT user_id FROM addresses WHERE address = ?")
+        .bind(alias)
+        .first();
+      if (taken) return error(409, "that address is already taken");
+      await env.DB.prepare(
+        "INSERT INTO addresses (address, user_id, is_primary, label, created_at) VALUES (?,?,0,?,?)",
+      )
+        .bind(alias, user.id, name, now())
+        .run();
+    } else if (b.aliasAddress) {
+      alias = normalizeAddr(b.aliasAddress);
+      const owned = await env.DB.prepare(
+        "SELECT 1 FROM addresses WHERE address = ? AND user_id = ?",
+      )
+        .bind(alias, user.id)
+        .first();
+      if (!owned) return error(400, "you don't own that alias");
+    }
+    const id = uuid();
+    await env.DB.prepare(
+      "INSERT INTO folders (id, user_id, name, color, alias_address, skip_inbox, position, created_at) VALUES (?,?,?,?,?,?,?,?)",
+    )
+      .bind(id, user.id, name, color, alias, skipInbox, now(), now())
+      .run();
+    if (alias) {
+      await env.DB.prepare(
+        "UPDATE messages SET folder_id = ? WHERE user_id = ? AND delivered_to = ? AND folder_id IS NULL",
+      )
+        .bind(id, user.id, alias)
+        .run();
+    }
+    return json({ id, name, color, alias, skipInbox: !!skipInbox, unread: 0 });
+  }
+  if ((m = path.match(/^\/api\/folders\/([\w-]+)$/)) && (method === "PUT" || method === "PATCH")) {
+    const b = await readJson(request);
+    const row = await env.DB.prepare("SELECT * FROM folders WHERE id = ? AND user_id = ?")
+      .bind(m[1], user.id)
+      .first();
+    if (!row) return error(404, "not found");
+    const name = b.name !== undefined ? String(b.name).trim().slice(0, 40) || row.name : row.name;
+    const color = b.color !== undefined ? String(b.color).slice(0, 9) : row.color;
+    const skipInbox = b.skipInbox !== undefined ? (b.skipInbox ? 1 : 0) : row.skip_inbox;
+    let alias = row.alias_address;
+    if (b.aliasAddress !== undefined) {
+      if (!b.aliasAddress) alias = null;
+      else {
+        alias = normalizeAddr(b.aliasAddress);
+        const owned = await env.DB.prepare(
+          "SELECT 1 FROM addresses WHERE address = ? AND user_id = ?",
+        )
+          .bind(alias, user.id)
+          .first();
+        if (!owned) return error(400, "you don't own that alias");
+      }
+    }
+    await env.DB.prepare(
+      "UPDATE folders SET name = ?, color = ?, skip_inbox = ?, alias_address = ? WHERE id = ? AND user_id = ?",
+    )
+      .bind(name, color, skipInbox, alias, m[1], user.id)
+      .run();
+    if (alias) {
+      await env.DB.prepare(
+        "UPDATE messages SET folder_id = ? WHERE user_id = ? AND delivered_to = ? AND folder_id IS NULL",
+      )
+        .bind(m[1], user.id, alias)
+        .run();
+    }
+    return json({ id: m[1], name, color, alias, skipInbox: !!skipInbox });
+  }
+  if ((m = path.match(/^\/api\/folders\/([\w-]+)$/)) && method === "DELETE") {
+    await env.DB.prepare("UPDATE messages SET folder_id = NULL WHERE folder_id = ? AND user_id = ?")
+      .bind(m[1], user.id)
+      .run();
+    await env.DB.prepare("DELETE FROM folders WHERE id = ? AND user_id = ?")
       .bind(m[1], user.id)
       .run();
     return json({ ok: true });

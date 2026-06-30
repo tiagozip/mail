@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS messages (
   in_reply_to TEXT,
   refs TEXT NOT NULL DEFAULT '',
   folder TEXT NOT NULL DEFAULT 'inbox',
+  folder_id TEXT,
+  delivered_to TEXT,
   from_addr TEXT NOT NULL DEFAULT '',
   from_name TEXT NOT NULL DEFAULT '',
   to_json TEXT NOT NULL DEFAULT '[]',
@@ -98,6 +100,19 @@ CREATE TABLE IF NOT EXISTS labels (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_labels_user ON labels(user_id);
+
+CREATE TABLE IF NOT EXISTS folders (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#8b7fd6',
+  alias_address TEXT,
+  skip_inbox INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_folders_user ON folders(user_id);
+CREATE INDEX IF NOT EXISTS idx_folders_alias ON folders(alias_address);
 
 CREATE TABLE IF NOT EXISTS message_labels (
   message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
