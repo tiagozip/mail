@@ -74,7 +74,7 @@ fun MailRow(
         Spacer(Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (unread) {
                     Box(
                         modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)
@@ -105,7 +105,7 @@ fun MailRow(
                         )
                     }
                 }
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
                 if (item.isSpoofed) {
                     Icon(Icons.Rounded.WarningAmber, contentDescription = "Spoofed", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(6.dp))
@@ -115,6 +115,7 @@ fun MailRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.weight(1f))
             }
 
             Spacer(Modifier.size(2.dp))
