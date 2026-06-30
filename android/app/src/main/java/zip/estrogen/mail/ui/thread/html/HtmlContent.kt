@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import zip.estrogen.mail.ui.common.ImageViewer
 
 @Composable
 fun rememberParsedHtml(html: String): ParsedHtml {
@@ -60,8 +61,9 @@ fun HtmlBlocks(
     allowImages: Boolean,
     modifier: Modifier = Modifier
 ) {
+    var viewerUrl by remember { mutableStateOf<String?>(null) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        parsed.blocks.forEach { RenderBlock(it, allowImages) }
+        parsed.blocks.forEach { RenderBlock(it, allowImages) { viewerUrl = it } }
         if (parsed.quoted.isNotEmpty()) {
             var expanded by remember(parsed) { mutableStateOf(false) }
             QuotedToggle(expanded = expanded, onToggle = { expanded = !expanded })
@@ -80,6 +82,9 @@ fun HtmlBlocks(
                 }
             }
         }
+    }
+    viewerUrl?.let { url ->
+        ImageViewer(model = url, onDismiss = { viewerUrl = null })
     }
 }
 
@@ -109,7 +114,7 @@ fun QuotedToggle(expanded: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun RenderBlock(block: HtmlBlock, allowImages: Boolean) {
+private fun RenderBlock(block: HtmlBlock, allowImages: Boolean, onImageClick: (String) -> Unit = {}) {
     when (block) {
         is HtmlBlock.Paragraph -> Text(
             text = block.text,
@@ -172,7 +177,7 @@ private fun RenderBlock(block: HtmlBlock, allowImages: Boolean) {
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
-        is HtmlBlock.Image -> ImageBlock(block, allowImages)
+        is HtmlBlock.Image -> ImageBlock(block, allowImages, onImageClick)
         HtmlBlock.Rule -> androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         is HtmlBlock.Table -> Column(
             modifier = Modifier
@@ -212,14 +217,14 @@ private fun QuotedBlock(block: HtmlBlock) {
 }
 
 @Composable
-private fun ImageBlock(block: HtmlBlock.Image, allowImages: Boolean) {
+private fun ImageBlock(block: HtmlBlock.Image, allowImages: Boolean, onImageClick: (String) -> Unit = {}) {
     var loadLocal by remember(block.src) { mutableStateOf(false) }
     val show = allowImages || loadLocal || !block.remote
     if (show) {
         AsyncImage(
             model = block.src,
             contentDescription = block.alt.ifBlank { null },
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onImageClick(block.src) }
         )
     } else {
         Row(

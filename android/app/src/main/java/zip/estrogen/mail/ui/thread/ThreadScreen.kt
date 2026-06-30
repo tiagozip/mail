@@ -74,7 +74,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import zip.estrogen.mail.MailApp
+import zip.estrogen.mail.ui.common.ImageViewer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -706,28 +711,54 @@ private fun EncryptedNotice(title: String, detail: String) {
 
 @Composable
 private fun AttachmentRow(attachment: Attachment, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val creds by (context.applicationContext as MailApp).repository.credentials
+        .collectAsStateWithLifecycle(initialValue = null)
+    val isImage = attachment.mime?.startsWith("image/") == true && !attachment.pgp && creds != null
+    val model = remember(attachment.id, isImage, creds?.baseUrl) {
+        if (isImage && creds != null) {
+            ImageRequest.Builder(context)
+                .data("${creds!!.baseUrl.trimEnd('/')}/api/attachments/${attachment.id}")
+                .addHeader("Authorization", "Bearer ${creds!!.apiKey}")
+                .addHeader("X-API-Key", creds!!.apiKey)
+                .crossfade(true)
+                .build()
+        } else null
+    }
+    var showViewer by remember { mutableStateOf(false) }
+
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            .clickable { if (model != null) showViewer = true else onClick() }
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Rounded.Description,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(18.dp)
+            if (model != null) {
+                AsyncImage(
+                    model = model,
+                    contentDescription = attachment.filename,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        if (attachment.mime?.startsWith("image/") == true) Icons.Rounded.Image else Icons.Rounded.Description,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -745,6 +776,10 @@ private fun AttachmentRow(attachment: Attachment, onClick: () -> Unit) {
                 )
             }
         }
+    }
+
+    if (showViewer && model != null) {
+        ImageViewer(model = model, onDismiss = { showViewer = false })
     }
 }
 
