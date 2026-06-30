@@ -1817,9 +1817,26 @@ export async function handleApi(request, env, ctx) {
   ) {
     if (!user.is_admin) return error(403, "admin only");
     const approve = m[2] === "approve";
+    const target = await env.DB.prepare(
+      "SELECT d.domain, u.address AS owner_addr FROM domains d LEFT JOIN users u ON u.id = d.owner_id WHERE d.id = ?",
+    )
+      .bind(m[1])
+      .first();
     await env.DB.prepare("UPDATE domains SET public = ?, public_pending = 0 WHERE id = ?")
       .bind(approve ? 1 : 0, m[1])
       .run();
+    if (approve && target?.owner_addr) {
+      ctx.waitUntil(
+        env.EMAIL
+          .send({
+            to: target.owner_addr,
+            from: { email: `noreply@${env.MAIL_DOMAIN}`, name: "estrogen.mail" },
+            subject: `${target.domain} is now in the public directory`,
+            text: `Your domain ${target.domain} has been approved and is now listed in the estrogen.delivery public directory. Anyone here can create addresses on it.`,
+          })
+          .catch(() => {}),
+      );
+    }
     return json({ ok: true });
   }
 

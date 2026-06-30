@@ -29,8 +29,6 @@ function PublicDomains() {
     }
   }
 
-  if (!list || list.length === 0) return null;
-
   return (
     <div className="em-card">
       <div className="em-card-head">
@@ -40,8 +38,13 @@ function PublicDomains() {
           it. Reject removes it from the directory.
         </p>
       </div>
-      <div className="em-alias-list">
-        {list.map((d) => (
+      {!list ? (
+        <Loader size="sm" />
+      ) : list.length === 0 ? (
+        <p className="em-card-sub">No domains have requested to be public yet.</p>
+      ) : (
+        <div className="em-alias-list">
+          {list.map((d) => (
           <div key={d.id} className="em-domain-row">
             <div className="em-domain-main">
               <span className="em-alias-addr">{d.domain}</span>
@@ -69,9 +72,10 @@ function PublicDomains() {
                 {d.pending ? "Reject" : "Unpublish"}
               </Button>
             </div>
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
