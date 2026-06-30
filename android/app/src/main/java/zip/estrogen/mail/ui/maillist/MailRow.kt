@@ -53,7 +53,7 @@ fun MailRow(
             .fillMaxWidth()
             .background(container)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(contentAlignment = Alignment.Center) {
             Avatar(
@@ -132,20 +132,21 @@ fun MailRow(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(Modifier.size(2.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = item.preview,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                if (item.hasAttachments) {
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Icons.Rounded.AttachFile, contentDescription = "Attachment", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+            if (item.preview.isNotBlank() || item.hasAttachments) {
+                Spacer(Modifier.size(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = item.preview,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (item.hasAttachments) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.Rounded.AttachFile, contentDescription = "Attachment", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                    }
                 }
             }
 
