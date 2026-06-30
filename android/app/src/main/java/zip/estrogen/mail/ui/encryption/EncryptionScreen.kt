@@ -67,6 +67,8 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import zip.estrogen.mail.data.pgp.PgpStatus
 import zip.estrogen.mail.ui.appViewModel
+import zip.estrogen.mail.ui.common.BackButton
+import zip.estrogen.mail.ui.common.TonalIconBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,11 +90,7 @@ fun EncryptionScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Encryption", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                },
+                navigationIcon = { BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -123,80 +121,69 @@ fun EncryptionScreen(onBack: () -> Unit) {
 
 @Composable
 private fun StatusHero(status: PgpStatus, fingerprint: String?, enabledOnServer: Boolean) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = MaterialTheme.shapes.large
+    val on = status == PgpStatus.UNLOCKED
+    val heroContainer = when (status) {
+        PgpStatus.UNLOCKED -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerLow
+    }
+    val onHero = when (status) {
+        PgpStatus.UNLOCKED -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(heroContainer)
+            .padding(24.dp)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        TonalIconBadge(
+            icon = when (status) {
+                PgpStatus.UNLOCKED -> Icons.Rounded.GppGood
+                PgpStatus.LOCKED -> Icons.Rounded.Lock
+                PgpStatus.ABSENT -> Icons.Rounded.LockOpen
+            },
+            container = if (on) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f) else MaterialTheme.colorScheme.secondaryContainer,
+            tint = if (on) onHero else MaterialTheme.colorScheme.onSecondaryContainer,
+            size = 56.dp,
+            shape = CircleShape
+        )
+        Spacer(Modifier.size(16.dp))
+        Text(
+            when (status) {
+                PgpStatus.UNLOCKED -> "End-to-end encryption is on"
+                PgpStatus.LOCKED -> "Encryption is locked"
+                PgpStatus.ABSENT -> "Encryption is off"
+            },
+            style = MaterialTheme.typography.headlineSmall,
+            color = onHero
+        )
+        Spacer(Modifier.size(4.dp))
+        Text(
+            when (status) {
+                PgpStatus.UNLOCKED -> "Mail is decrypted on this device only."
+                PgpStatus.LOCKED -> "Unlock to read encrypted mail."
+                PgpStatus.ABSENT -> "Set up a key to send and read encrypted mail."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = onHero.copy(alpha = 0.82f)
+        )
+        if (!fingerprint.isNullOrBlank()) {
+            Spacer(Modifier.size(18.dp))
+            Text("KEY FINGERPRINT", style = MaterialTheme.typography.labelMedium, color = onHero.copy(alpha = 0.7f))
+            Spacer(Modifier.size(4.dp))
+            Text(
+                fingerprint.chunked(4).joinToString(" "),
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                color = onHero
+            )
+        }
+        if (enabledOnServer) {
+            Spacer(Modifier.size(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .padding(0.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (status == PgpStatus.UNLOCKED) MaterialTheme.colorScheme.primaryContainer
-                                else MaterialTheme.colorScheme.surfaceContainerHighest
-                            )
-                    )
-                    Icon(
-                        imageVector = when (status) {
-                            PgpStatus.UNLOCKED -> Icons.Rounded.GppGood
-                            PgpStatus.LOCKED -> Icons.Rounded.Lock
-                            PgpStatus.ABSENT -> Icons.Rounded.LockOpen
-                        },
-                        contentDescription = null,
-                        tint = if (status == PgpStatus.UNLOCKED) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        when (status) {
-                            PgpStatus.UNLOCKED -> "End-to-end encryption is on"
-                            PgpStatus.LOCKED -> "Encryption is locked"
-                            PgpStatus.ABSENT -> "Encryption is off"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        when (status) {
-                            PgpStatus.UNLOCKED -> "Mail is decrypted on this device only"
-                            PgpStatus.LOCKED -> "Unlock to read encrypted mail"
-                            PgpStatus.ABSENT -> "Set up a key to send and read encrypted mail"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            if (!fingerprint.isNullOrBlank()) {
-                Spacer(Modifier.size(14.dp))
-                Text("Key fingerprint", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    fingerprint.chunked(4).joinToString(" "),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            if (enabledOnServer) {
-                Spacer(Modifier.size(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.GppGood, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Public key published — others can encrypt to you", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                Icon(Icons.Rounded.GppGood, contentDescription = null, tint = onHero, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Public key published", style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.82f))
             }
         }
     }
@@ -207,23 +194,18 @@ private fun AbsentContent(state: EncryptionState, viewModel: EncryptionViewModel
     SectionCard {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Set up encryption", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            Text(
-                "Generate a new key on this device, or sync the one you already use on the web.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(onClick = { viewModel.setMode(EncMode.GENERATE) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField()) {
+            Button(onClick = { viewModel.setMode(EncMode.GENERATE) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
                 Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Generate a new key")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = viewModel::fetchFromServer, enabled = !state.busy, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = viewModel::fetchFromServer, enabled = !state.busy, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.large) {
                     Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("From server")
                 }
-                OutlinedButton(onClick = { viewModel.setMode(EncMode.IMPORT) }, enabled = !state.busy, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { viewModel.setMode(EncMode.IMPORT) }, enabled = !state.busy, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.large) {
                     Text("Paste key")
                 }
             }
@@ -239,7 +221,7 @@ private fun AbsentContent(state: EncryptionState, viewModel: EncryptionViewModel
                 PassField(state.confirm, viewModel::onConfirm, "Confirm passphrase", !state.busy)
                 RememberRow(state, viewModel)
                 ErrorText(state.error)
-                Button(onClick = viewModel::generate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField()) {
+                Button(onClick = viewModel::generate, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
                     BusyLabel(state.busy, "Generate and enable")
                 }
             }
@@ -263,7 +245,7 @@ private fun AbsentContent(state: EncryptionState, viewModel: EncryptionViewModel
                 PassField(state.passphrase, viewModel::onPassphrase, "Passphrase", !state.busy)
                 RememberRow(state, viewModel)
                 ErrorText(state.error)
-                Button(onClick = viewModel::importAndUnlock, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField()) {
+                Button(onClick = viewModel::importAndUnlock, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
                     BusyLabel(state.busy, "Import and unlock")
                 }
             }
@@ -276,7 +258,7 @@ private fun LockedContent(state: EncryptionState, viewModel: EncryptionViewModel
     SectionCard {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.biometricAvailable && state.hasRemembered) {
-                FilledTonalButton(onClick = { activity?.let(viewModel::unlockWithBiometric) }, modifier = Modifier.fillMaxWidth().heightField()) {
+                FilledTonalButton(onClick = { activity?.let(viewModel::unlockWithBiometric) }, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
                     Icon(Icons.Rounded.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Unlock with biometrics")
@@ -286,7 +268,7 @@ private fun LockedContent(state: EncryptionState, viewModel: EncryptionViewModel
             PassField(state.passphrase, viewModel::onPassphrase, "Passphrase", !state.busy)
             RememberRow(state, viewModel)
             ErrorText(state.error)
-            Button(onClick = viewModel::unlock, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField()) {
+            Button(onClick = viewModel::unlock, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightField(), shape = MaterialTheme.shapes.large) {
                 BusyLabel(state.busy, "Unlock")
             }
             TextButton(onClick = viewModel::removeFromDevice, modifier = Modifier.fillMaxWidth()) {
@@ -327,7 +309,7 @@ private fun UnlockedContent(
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Back up your key", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Text("Copy your encrypted private key somewhere safe. Without it and your passphrase, encrypted mail can't be recovered.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = onBackup, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onBackup, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
                 Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Copy private key")
@@ -337,7 +319,7 @@ private fun UnlockedContent(
 
     SectionCard {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = viewModel::lock, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = viewModel::lock, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
                 Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Lock now")
@@ -397,8 +379,8 @@ private fun SectionCard(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = MaterialTheme.shapes.large
+        shape = MaterialTheme.shapes.extraLarge
     ) { content() }
 }
 
-private fun Modifier.heightField(): Modifier = this.then(Modifier.height(52.dp))
+private fun Modifier.heightField(): Modifier = this.then(Modifier.height(54.dp))

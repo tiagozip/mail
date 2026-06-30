@@ -68,7 +68,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Notifications", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") } },
+                navigationIcon = { zip.estrogen.mail.ui.common.BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface)
             )
         }
@@ -82,10 +82,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 shape = MaterialTheme.shapes.large
             ) {
                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("New mail notifications", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                        Text("Checks for new mail in the background and notifies you", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Text("New mail notifications", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                     Switch(
                         checked = enabled,
                         onCheckedChange = { value ->

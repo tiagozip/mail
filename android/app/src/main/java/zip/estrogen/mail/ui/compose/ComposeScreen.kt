@@ -2,6 +2,7 @@ package zip.estrogen.mail.ui.compose
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,6 +70,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -271,8 +273,8 @@ fun ComposeScreen(
 @Composable
 private fun FormatToolbar(state: com.mohamedrejeb.richeditor.model.RichTextState, onLink: () -> Unit) {
     val span = state.currentSpanStyle
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             ToolbarButton(Icons.Rounded.FormatBold, "Bold", span.fontWeight == FontWeight.Bold) {
                 state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold))
             }
@@ -298,11 +300,21 @@ private fun FormatToolbar(state: com.mohamedrejeb.richeditor.model.RichTextState
 
 @Composable
 private fun ToolbarButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
+    val bg = if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+    Box(
+        modifier = Modifier
+            .padding(2.dp)
+            .size(42.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(bg)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
         Icon(
             icon,
             contentDescription = label,
-            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            tint = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
         )
     }
 }

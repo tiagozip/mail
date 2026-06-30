@@ -197,7 +197,7 @@ fun AliasesScreen(onBack: () -> Unit) {
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp))
+    zip.estrogen.mail.ui.common.SectionLabel(text)
 }
 
 @Composable

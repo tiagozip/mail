@@ -58,9 +58,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Appearance", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
-                },
+                navigationIcon = { zip.estrogen.mail.ui.common.BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface)
             )
         }
@@ -104,14 +102,14 @@ fun AppearanceScreen(onBack: () -> Unit) {
                 Column(modifier = Modifier.padding(4.dp)) {
                     ToggleRow(
                         title = "Dynamic color",
-                        subtitle = if (viewModel.dynamicSupported) "Match colors to your wallpaper" else "Needs Android 12 or newer",
+                        subtitle = if (viewModel.dynamicSupported) null else "Needs Android 12 or newer",
                         checked = appearance.dynamicColor && viewModel.dynamicSupported,
                         enabled = viewModel.dynamicSupported,
                         onCheckedChange = viewModel::setDynamicColor
                     )
                     ToggleRow(
                         title = "Pure black (AMOLED)",
-                        subtitle = "True black background in dark mode",
+                        subtitle = null,
                         checked = appearance.amoled,
                         enabled = true,
                         onCheckedChange = viewModel::setAmoled
@@ -161,11 +159,13 @@ private fun PaletteSwatch(palette: AppPalette, selected: Boolean, enabled: Boole
 }
 
 @Composable
-private fun ToggleRow(title: String, subtitle: String, checked: Boolean, enabled: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun ToggleRow(title: String, subtitle: String?, checked: Boolean, enabled: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!subtitle.isNullOrBlank()) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
@@ -173,5 +173,5 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, enabled
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp))
+    zip.estrogen.mail.ui.common.SectionLabel(text)
 }

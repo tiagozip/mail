@@ -75,11 +75,11 @@ fun AuthScreen(onConfigured: () -> Unit) {
                 .padding(horizontal = 28.dp, vertical = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(48.dp))
             Box(
                 modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
+                    .size(104.dp)
+                    .clip(MaterialTheme.shapes.extraLarge)
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
@@ -87,18 +87,18 @@ fun AuthScreen(onConfigured: () -> Unit) {
                     imageVector = Icons.Rounded.MailLock,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(50.dp)
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(28.dp))
             Text(
                 text = "Estrogen Mail",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
                 text = "Encrypted mail that's yours.\nSign in with your passkey.",
                 style = MaterialTheme.typography.bodyLarge,

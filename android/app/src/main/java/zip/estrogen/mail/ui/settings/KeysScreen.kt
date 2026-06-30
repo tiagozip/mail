@@ -95,7 +95,7 @@ class KeysViewModel(private val repository: MailRepository) : ViewModel() {
                     _state.update { it.copy(showCreate = false, freshKey = key.key, message = "Key created") }
                     load()
                 },
-                onFailure = { _state.update { it.copy(showCreate = false, message = "Manage keys in the web app — the app can't mint keys") } }
+                onFailure = { _state.update { it.copy(showCreate = false, message = "Manage keys in the web app. The app can't mint keys.") } }
             )
         }
     }
@@ -121,7 +121,7 @@ fun KeysScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("API keys", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") } },
+                navigationIcon = { zip.estrogen.mail.ui.common.BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface)
             )
         }

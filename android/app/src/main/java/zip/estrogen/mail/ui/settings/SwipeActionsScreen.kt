@@ -82,7 +82,7 @@ fun SwipeActionsScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Swipe actions", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") } },
+                navigationIcon = { zip.estrogen.mail.ui.common.BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface)
             )
         }
@@ -110,7 +110,7 @@ fun SwipeActionsScreen(onBack: () -> Unit) {
 
 @Composable
 private fun DirectionCard(title: String, headerIcon: ImageVector, selected: SwipeAction, onSelect: (SwipeAction) -> Unit) {
-    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+    zip.estrogen.mail.ui.common.SectionLabel(title)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),

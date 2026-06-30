@@ -270,7 +270,7 @@ fun ThreadScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No labels yet — create them in Settings",
+                            text = "No labels yet. Create them in Settings.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -341,9 +341,9 @@ private fun MessageCard(
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = MaterialTheme.shapes.large
+        shape = MaterialTheme.shapes.extraLarge
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle)
@@ -352,9 +352,9 @@ private fun MessageCard(
                     url = message.from.avatar,
                     seed = message.from.address ?: sender,
                     label = sender,
-                    size = 44.dp
+                    size = 46.dp
                 )
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = sender,
@@ -460,22 +460,36 @@ private fun MessageBody(
 private fun ReplyBar(onReply: () -> Unit, onReplyAll: () -> Unit, onForward: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surface) {
         Row(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            FilledTonalButton(onClick = onReply, modifier = Modifier.weight(1f).height(48.dp)) {
-                Icon(Icons.AutoMirrored.Rounded.Reply, contentDescription = null, modifier = Modifier.size(18.dp))
+            FilledTonalButton(
+                onClick = onReply,
+                modifier = Modifier.weight(1f).height(54.dp),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Icon(Icons.AutoMirrored.Rounded.Reply, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Reply")
+                Text("Reply", style = MaterialTheme.typography.titleSmall)
             }
-            OutlinedIconButton(onClick = onReplyAll, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.AutoMirrored.Rounded.ReplyAll, contentDescription = "Reply all")
-            }
-            OutlinedIconButton(onClick = onForward, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Rounded.Forward, contentDescription = "Forward")
-            }
+            ReplyBarAction(Icons.AutoMirrored.Rounded.ReplyAll, "Reply all", onReplyAll)
+            ReplyBarAction(Icons.Rounded.Forward, "Forward", onForward)
         }
+    }
+}
+
+@Composable
+private fun ReplyBarAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(54.dp)
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -632,13 +646,19 @@ private fun UnlockPrompt(
 @Composable
 private fun EncryptedNotice(title: String, detail: String) {
     Surface(
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
+            zip.estrogen.mail.ui.common.TonalIconBadge(
+                icon = Icons.Rounded.Lock,
+                container = MaterialTheme.colorScheme.primaryContainer,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                size = 40.dp,
+                shape = androidx.compose.foundation.shape.CircleShape
+            )
+            Spacer(Modifier.width(14.dp))
             Column {
                 Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

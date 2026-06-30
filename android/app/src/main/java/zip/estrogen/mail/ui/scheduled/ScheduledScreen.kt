@@ -84,7 +84,7 @@ fun ScheduledScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Scheduled", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") } },
+                navigationIcon = { zip.estrogen.mail.ui.common.BackButton(onBack) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface)
             )
         }
@@ -92,22 +92,27 @@ fun ScheduledScreen(onBack: () -> Unit) {
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 state.loading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.primary)
-                state.sends.isEmpty() -> Column(
-                    modifier = Modifier.align(Alignment.Center).padding(40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Rounded.Schedule, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.size(12.dp))
-                    Text("No scheduled messages", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                state.sends.isEmpty() -> zip.estrogen.mail.ui.common.EmptyState(
+                    icon = Icons.Rounded.Schedule,
+                    title = "Nothing scheduled",
+                    detail = "Messages you schedule to send later will wait here until it's time.",
+                    modifier = Modifier.align(Alignment.Center)
+                )
                 else -> LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(state.sends, key = { it.id }) { send ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                            shape = MaterialTheme.shapes.large
+                            shape = MaterialTheme.shapes.extraLarge
                         ) {
-                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                                zip.estrogen.mail.ui.common.TonalIconBadge(
+                                    icon = Icons.Rounded.Schedule,
+                                    container = MaterialTheme.colorScheme.primaryContainer,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    size = 44.dp
+                                )
+                                Spacer(Modifier.width(14.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         send.subject.ifBlank { "(no subject)" },
