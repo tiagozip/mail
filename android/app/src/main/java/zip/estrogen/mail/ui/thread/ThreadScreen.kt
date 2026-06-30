@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -91,6 +93,8 @@ import zip.estrogen.mail.ui.common.relativeTime
 import zip.estrogen.mail.ui.compose.ComposePrefillData
 import zip.estrogen.mail.ui.maillist.stripHtml
 import zip.estrogen.mail.ui.thread.html.HtmlBlocks
+import zip.estrogen.mail.ui.thread.html.QuotedToggle
+import zip.estrogen.mail.ui.thread.html.isAttribution
 import zip.estrogen.mail.ui.thread.html.rememberParsedHtml
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -442,11 +446,7 @@ private fun MessageBody(
     if (message.hasHtml && !html.isNullOrBlank()) {
         BodyContent(content = html, isHtml = true, message = message)
     } else {
-        Text(
-            text = message.bodyText?.takeIf { it.isNotBlank() } ?: "(empty message)",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        PlainBody(message.bodyText?.takeIf { it.isNotBlank() } ?: "(empty message)")
     }
 }
 
@@ -487,6 +487,53 @@ private fun ReplyBarAction(icon: androidx.compose.ui.graphics.vector.ImageVector
     }
 }
 
+@Composable
+private fun PlainBody(text: String) {
+    val split = remember(text) { splitQuotedPlain(text) }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (split.first.isNotBlank()) {
+            Text(
+                text = split.first,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        val quoted = split.second
+        if (quoted != null) {
+            var expanded by remember(text) { mutableStateOf(false) }
+            QuotedToggle(expanded = expanded, onToggle = { expanded = !expanded })
+            AnimatedVisibility(visible = expanded) {
+                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(2.dp))
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = quoted,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun splitQuotedPlain(text: String): Pair<String, String?> {
+    val lines = text.lines()
+    val boundary = lines.indexOfFirst { it.isNotBlank() && isAttribution(it) }
+    if (boundary < 0) return text.trimEnd() to null
+    val primary = lines.subList(0, boundary).joinToString("\n").trimEnd()
+    val quoted = lines.subList(boundary, lines.size)
+        .joinToString("\n") { it.replaceFirst(Regex("^(>+ ?)+"), "") }
+        .trim()
+    return primary to quoted.ifBlank { null }
+}
+
 private fun looksLikeHtml(text: String): Boolean {
     val t = text.lowercase()
     return t.contains("</") || t.contains("<p") || t.contains("<div") || t.contains("<br") ||
@@ -496,11 +543,7 @@ private fun looksLikeHtml(text: String): Boolean {
 @Composable
 private fun BodyContent(content: String, isHtml: Boolean, message: FullMessage) {
     if (!isHtml) {
-        Text(
-            text = content,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        PlainBody(content)
         return
     }
     val parsed = rememberParsedHtml(content)

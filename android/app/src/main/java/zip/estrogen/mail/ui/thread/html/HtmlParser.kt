@@ -29,9 +29,26 @@ sealed interface HtmlBlock {
 
 data class ParsedHtml(
     val blocks: List<HtmlBlock>,
+    val quoted: List<HtmlBlock>,
     val hasRemoteImages: Boolean,
     val trackersBlocked: Int
 )
+
+private val attributionPatterns = listOf(
+    Regex("(?i)^on\\b.{3,}\\bwrote:\\s*$"),
+    Regex("(?i)^le\\b.{3,}\\bécrit\\s*:\\s*$"),
+    Regex("(?i)^am\\b.{3,}schrieb\\b.{0,40}:\\s*$"),
+    Regex("(?i)^-{2,}\\s*original message\\s*-{2,}"),
+    Regex("(?i)^_{5,}\\s*$"),
+    Regex("(?i)^>+")
+)
+
+internal fun isAttribution(raw: String): Boolean {
+    val t = raw.trim()
+    if (t.isEmpty()) return false
+    if (attributionPatterns.any { it.containsMatchIn(t) }) return true
+    return Regex("(?i)^from:\\s").containsMatchIn(t) && Regex("(?i)\\b(sent|date|to):").containsMatchIn(t)
+}
 
 private data class InlineStyle(
     val bold: Boolean = false,
@@ -68,12 +85,35 @@ object HtmlParser {
         }
         val hasRemote = doc.select("img").any { it.attr("src").startsWith("http") }
 
+        val quoted = mutableListOf<HtmlBlock>()
+        val quoteRoot = doc.selectFirst(
+            "div.gmail_quote_container, div.gmail_quote, blockquote.gmail_quote, blockquote[type=cite], #divRplyFwdMsg, #appendonsend"
+        )
+        if (quoteRoot != null) {
+            val prev = quoteRoot.previousElementSibling()
+            if (prev != null && isAttribution(prev.text())) {
+                parseInto(prev, quoted, linkColor)
+                prev.remove()
+            }
+            parseInto(quoteRoot, quoted, linkColor)
+            quoteRoot.remove()
+        }
+
         val blocks = mutableListOf<HtmlBlock>()
         parseInto(doc.body(), blocks, linkColor)
-        val cleaned = blocks.ifEmpty {
-            listOf(HtmlBlock.Paragraph(AnnotatedString(doc.body().text())))
+
+        if (quoted.isEmpty()) {
+            val cut = blocks.indexOfFirst { it is HtmlBlock.Paragraph && isAttribution(it.text.text) }
+            if (cut >= 0) {
+                quoted.addAll(blocks.subList(cut, blocks.size).toList())
+                while (blocks.size > cut) blocks.removeAt(blocks.size - 1)
+            }
         }
-        return ParsedHtml(cleaned, hasRemote, trackers)
+
+        val cleaned = if (blocks.isEmpty() && quoted.isEmpty()) {
+            listOf(HtmlBlock.Paragraph(AnnotatedString(doc.body().text())))
+        } else blocks
+        return ParsedHtml(cleaned, quoted, hasRemote, trackers)
     }
 
     private fun parseInto(element: Element, out: MutableList<HtmlBlock>, linkColor: Color) {

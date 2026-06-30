@@ -1,5 +1,6 @@
 package zip.estrogen.mail.ui.thread.html
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -19,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,7 +45,7 @@ import coil.compose.AsyncImage
 fun rememberParsedHtml(html: String): ParsedHtml {
     val linkColor = MaterialTheme.colorScheme.primary
     val state = produceState(
-        initialValue = ParsedHtml(emptyList(), hasRemoteImages = false, trackersBlocked = 0),
+        initialValue = ParsedHtml(emptyList(), emptyList(), hasRemoteImages = false, trackersBlocked = 0),
         key1 = html,
         key2 = linkColor
     ) {
@@ -60,6 +62,49 @@ fun HtmlBlocks(
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         parsed.blocks.forEach { RenderBlock(it, allowImages) }
+        if (parsed.quoted.isNotEmpty()) {
+            var expanded by remember(parsed) { mutableStateOf(false) }
+            QuotedToggle(expanded = expanded, onToggle = { expanded = !expanded })
+            AnimatedVisibility(visible = expanded) {
+                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(2.dp))
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        parsed.quoted.forEach { QuotedBlock(it) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuotedToggle(expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.MoreHoriz,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = if (expanded) "Hide quoted text" else "Show quoted text",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
