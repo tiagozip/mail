@@ -7,12 +7,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -32,9 +37,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LargeTopAppBar
-import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +45,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -65,7 +68,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -96,7 +98,6 @@ fun MailListScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbarHost = remember { SnackbarHostState() }
     var showSnooze by remember { mutableStateOf(false) }
 
@@ -132,7 +133,6 @@ fun MailListScreen(
         }
     ) {
         Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             snackbarHost = { SnackbarHost(snackbarHost) },
             topBar = {
                 when {
@@ -150,10 +150,8 @@ fun MailListScreen(
                         onQuery = viewModel::setQuery,
                         onClose = viewModel::closeSearch
                     )
-                    else -> NormalBar(
-                        title = view.title,
+                    else -> GmailSearchBar(
                         user = ui.user,
-                        scrollBehavior = scrollBehavior,
                         onMenu = { scope.launch { drawerState.open() } },
                         onSearch = viewModel::openSearch,
                         onAccount = onOpenSettings
@@ -186,30 +184,49 @@ fun MailListScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 96.dp)
                     ) {
+                        item(key = "__header") {
+                            Text(
+                                text = view.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .animateItem()
+                                    .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 8.dp)
+                            )
+                        }
                         items(items, key = { it.id }) { item ->
                             val selected = item.id in ui.selected
-                            Column(modifier = Modifier.animateItem()) {
+                            Box(
+                                modifier = Modifier
+                                    .animateItem()
+                                    .padding(horizontal = 12.dp, vertical = 3.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                            ) {
                                 SwipeRow(
                                     selecting = ui.selecting,
                                     rightAction = ui.swipe.right,
                                     leftAction = ui.swipe.left,
                                     onSwipe = { action -> viewModel.performSwipe(item, action) }
                                 ) {
-                                    MailRowInteractive(
-                                        item = item,
-                                        selected = selected,
-                                        onTap = {
-                                            if (ui.selecting) viewModel.toggleSelect(item.id)
-                                            else {
-                                                viewModel.markRead(item.id)
-                                                onOpenThread(item.threadId ?: item.id, item.id)
-                                            }
-                                        },
-                                        onLongPress = { viewModel.toggleSelect(item.id) },
-                                        onToggleStar = { viewModel.toggleStar(item) }
-                                    )
+                                    Surface(
+                                        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                                        else MaterialTheme.colorScheme.surfaceContainerLow
+                                    ) {
+                                        MailRowInteractive(
+                                            item = item,
+                                            selected = selected,
+                                            onTap = {
+                                                if (ui.selecting) viewModel.toggleSelect(item.id)
+                                                else {
+                                                    viewModel.markRead(item.id)
+                                                    onOpenThread(item.threadId ?: item.id, item.id)
+                                                }
+                                            },
+                                            onLongPress = { viewModel.toggleSelect(item.id) },
+                                            onToggleStar = { viewModel.toggleStar(item) }
+                                        )
+                                    }
                                 }
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                             }
                         }
                         if (ui.loadingMore) item { CenteredSpinner(small = true) }
@@ -317,33 +334,40 @@ private fun SwipeBackground(target: SwipeToDismissBoxValue, rightAction: SwipeAc
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NormalBar(
-    title: String,
+private fun GmailSearchBar(
     user: zip.estrogen.mail.data.model.User?,
-    scrollBehavior: TopAppBarScrollBehavior,
     onMenu: () -> Unit,
     onSearch: () -> Unit,
     onAccount: () -> Unit
 ) {
-    LargeTopAppBar(
-        title = { Text(title, fontWeight = FontWeight.Bold) },
-        navigationIcon = {
-            IconButton(onClick = onMenu) { Icon(Icons.Rounded.Menu, contentDescription = "Folders") }
-        },
-        actions = {
-            IconButton(onClick = onSearch) { Icon(Icons.Rounded.Search, contentDescription = "Search") }
-            IconButton(onClick = onAccount) {
-                Avatar(url = user?.avatarUrl, seed = user?.address ?: "me", label = user?.displayName ?: user?.username, size = 32.dp)
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Box(modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Surface(
+                onClick = onSearch,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(start = 4.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onMenu) {
+                        Icon(Icons.Rounded.Menu, contentDescription = "Folders", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(
+                        text = "Search in mail",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onAccount) {
+                        Avatar(url = user?.avatarUrl, seed = user?.address ?: "me", label = user?.displayName ?: user?.username, size = 32.dp)
+                    }
+                }
             }
-            Spacer(Modifier.width(6.dp))
-        },
-        scrollBehavior = scrollBehavior,
-        colors = TopAppBarDefaults.largeTopAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            scrolledContainerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface
-        )
-    )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

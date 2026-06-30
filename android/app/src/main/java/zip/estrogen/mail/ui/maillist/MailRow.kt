@@ -44,15 +44,11 @@ fun MailRow(
 ) {
     val unread = !item.isRead
     val subject = item.subject?.takeIf { it.isNotBlank() } ?: "(no subject)"
-    val container =
-        if (selected) MaterialTheme.colorScheme.secondaryContainer
-        else MaterialTheme.colorScheme.surface
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(container)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(contentAlignment = Alignment.Center) {
