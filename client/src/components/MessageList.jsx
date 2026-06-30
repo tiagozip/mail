@@ -341,7 +341,7 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
           <input
             ref={searchRef}
             className="em-floatbar-input"
-            placeholder="Search"
+            placeholder="Search · try from: or is:unread"
             aria-label="Search mail"
             value={query}
             onChange={(e) => setQuery(e.target.value)}

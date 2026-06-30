@@ -464,22 +464,89 @@ async function listMessages(request, env, user) {
 
   const nowTs = now();
   if (q) {
-    const term = q.replace(/[^\w\s@.-]/g, " ").trim();
-    if (!term) return json({ messages: [], nextCursor: null });
-    let ftsIds;
-    try {
-      ftsIds = await env.DB.prepare(
-        "SELECT mid FROM messages_fts WHERE uid = ? AND messages_fts MATCH ? LIMIT 300",
-      )
-        .bind(user.id, `"${term}"*`)
-        .all();
-    } catch {
+    const ops = { is: [] };
+    const opRe = /(\w+):("[^"]+"|[^\s]+)/g;
+    let mt;
+    while ((mt = opRe.exec(q))) {
+      const key = mt[1].toLowerCase();
+      const val = mt[2].replace(/^"|"$/g, "");
+      if (key === "is") ops.is.push(val.toLowerCase());
+      else ops[key] = val;
+    }
+    const text = q.replace(opRe, " ").replace(/\s+/g, " ").trim();
+    const like = (s) => `%${String(s).replace(/[%_\\]/g, "\\$&")}%`;
+    const FOLDERS_OK = new Set(["inbox", "sent", "drafts", "archive", "spam", "trash", "snoozed"]);
+
+    if (ops.from) {
+      where.push("(m.from_addr LIKE ? ESCAPE '\\' OR m.from_name LIKE ? ESCAPE '\\')");
+      binds.push(like(ops.from), like(ops.from));
+    }
+    if (ops.to) {
+      where.push("(m.to_json LIKE ? ESCAPE '\\' OR m.cc_json LIKE ? ESCAPE '\\')");
+      binds.push(like(ops.to), like(ops.to));
+    }
+    if (ops.subject) {
+      where.push("m.subject LIKE ? ESCAPE '\\'");
+      binds.push(like(ops.subject));
+    }
+    if (ops.has && /attach/.test(ops.has.toLowerCase())) where.push("m.has_attachments = 1");
+    for (const v of ops.is) {
+      if (v === "unread") where.push("m.is_read = 0");
+      else if (v === "read") where.push("m.is_read = 1");
+      else if (v === "starred" || v === "star") where.push("m.is_starred = 1");
+    }
+    const parseDay = (s) => {
+      const t = Date.parse(String(s).replace(/\//g, "-"));
+      return Number.isNaN(t) ? null : t;
+    };
+    if (ops.after) {
+      const t = parseDay(ops.after);
+      if (t !== null) {
+        where.push("m.date >= ?");
+        binds.push(t);
+      }
+    }
+    if (ops.before) {
+      const t = parseDay(ops.before);
+      if (t !== null) {
+        where.push("m.date < ?");
+        binds.push(t);
+      }
+    }
+    if (ops.label) {
+      where.push(
+        "m.id IN (SELECT ml.message_id FROM message_labels ml JOIN labels l ON l.id = ml.label_id WHERE l.user_id = ? AND lower(l.name) = ?)",
+      );
+      binds.push(user.id, ops.label.toLowerCase());
+    }
+    const inFolder = (ops.in || "").toLowerCase();
+    if (FOLDERS_OK.has(inFolder)) {
+      where.push("m.folder = ?");
+      binds.push(inFolder);
+    } else {
+      where.push("m.folder NOT IN ('trash', 'spam')");
+    }
+
+    if (text) {
+      const term = text.replace(/[^\w\s@.-]/g, " ").trim();
+      if (!term) return json({ messages: [], nextCursor: null });
+      let ftsIds;
+      try {
+        ftsIds = await env.DB.prepare(
+          "SELECT mid FROM messages_fts WHERE uid = ? AND messages_fts MATCH ? LIMIT 300",
+        )
+          .bind(user.id, `"${term}"*`)
+          .all();
+      } catch {
+        return json({ messages: [], nextCursor: null });
+      }
+      const ids = (ftsIds.results || []).map((r) => r.mid);
+      if (!ids.length) return json({ messages: [], nextCursor: null });
+      where.push(`m.id IN (${ids.map(() => "?").join(",")})`);
+      binds.push(...ids);
+    } else if (where.length === 1) {
       return json({ messages: [], nextCursor: null });
     }
-    const ids = (ftsIds.results || []).map((r) => r.mid);
-    if (!ids.length) return json({ messages: [], nextCursor: null });
-    where.push(`m.id IN (${ids.map(() => "?").join(",")})`);
-    binds.push(...ids);
   } else if (folder === "snoozed") {
     where.push("m.snooze_until > ?");
     binds.push(nowTs);
