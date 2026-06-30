@@ -52,6 +52,9 @@ class MailApp : Application() {
         secureStore = SecureStore(this)
         pgp = PgpManager(secureStore)
         repository = MailRepository(settings, pgp, AppDatabase.get(this))
+        repository.unauthorizedHandler = {
+            appScope.launch { runCatching { repository.signOut() } }
+        }
         bootstrapDevCredentials()
     }
 

@@ -73,7 +73,10 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
             when (v) {
                 is ListView.FolderView -> repository.observeFolder(v.folder)
                 is ListView.LabelView -> repository.observeLabel(v.id)
-                is ListView.SearchView -> if (v.query.isBlank()) flowOf(emptyList()) else repository.search(v.query)
+                is ListView.SearchView -> if (v.query.isBlank()) flowOf(emptyList()) else {
+                    val parsed = SearchQueryParser.parse(v.query)
+                    repository.search(parsed.text).map { list -> list.filter { parsed.matches(it) } }
+                }
                 ListView.Snoozed -> repository.observeSnoozed()
             }
         }
@@ -146,9 +149,10 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
     fun setQuery(q: String) {
         _ui.update { it.copy(query = q) }
         _view.value = ListView.SearchView(q)
-        if (q.length >= 2) {
+        val text = SearchQueryParser.parse(q).text
+        if (text.length >= 2) {
             viewModelScope.launch {
-                repository.searchRemote(q)
+                repository.searchRemote(text)
                 decryptPreviews()
             }
         }

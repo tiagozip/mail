@@ -83,6 +83,8 @@ class MailRepository(
     private var cachedApi: MailApi? = null
     private var cachedFor: String? = null
 
+    var unauthorizedHandler: (() -> Unit)? = null
+
     private val _me = MutableStateFlow<MeResponse?>(null)
     val me = _me.asStateFlow()
 
@@ -91,7 +93,11 @@ class MailRepository(
             ?: throw IllegalStateException("Not configured")
         val signature = "${creds.baseUrl}::${creds.apiKey}"
         if (cachedApi == null || cachedFor != signature) {
-            cachedApi = ApiFactory.create(creds.baseUrl, creds.apiKey)
+            cachedApi = ApiFactory.create(
+                creds.baseUrl,
+                creds.apiKey,
+                onUnauthorized = { unauthorizedHandler?.invoke() }
+            )
             cachedFor = signature
         }
         return cachedApi ?: throw IllegalStateException("Client unavailable")

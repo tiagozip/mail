@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.automirrored.rounded.ReplyAll
+import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -46,6 +48,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
@@ -66,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -76,6 +80,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import zip.estrogen.mail.data.Folder
 import zip.estrogen.mail.data.model.Attachment
 import zip.estrogen.mail.data.model.FullMessage
+import zip.estrogen.mail.data.model.Label
 import zip.estrogen.mail.data.pgp.PgpStatus
 import zip.estrogen.mail.ui.appViewModel
 import zip.estrogen.mail.ui.common.Avatar
@@ -154,6 +159,12 @@ fun ThreadScreen(
                         enabled = state.messages.isNotEmpty()
                     ) {
                         Icon(Icons.Rounded.Delete, contentDescription = "Delete")
+                    }
+                    IconButton(
+                        onClick = { viewModel.openLabelSheet() },
+                        enabled = state.messages.isNotEmpty()
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = "Labels")
                     }
                     Box {
                         IconButton(onClick = { menuOpen = true }, enabled = lastMessage != null) {
@@ -240,6 +251,72 @@ fun ThreadScreen(
                 }
             }
         }
+    }
+
+    if (state.showLabelSheet) {
+        val applied = state.messages.flatMap { it.labels }.map { it.id }.toSet()
+        ModalBottomSheet(onDismissRequest = viewModel::closeLabelSheet) {
+            Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
+                Text(
+                    text = "Labels",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+                if (state.allLabels.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No labels yet — create them in Settings",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    state.allLabels.forEach { label ->
+                        LabelRow(
+                            label = label,
+                            checked = label.id in applied,
+                            onToggle = { viewModel.toggleLabel(label) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabelRow(label: Label, checked: Boolean, onToggle: () -> Unit) {
+    val dotColor = runCatching { Color(android.graphics.Color.parseColor(label.color)) }
+        .getOrDefault(MaterialTheme.colorScheme.primary)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(dotColor)
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = label.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Checkbox(checked = checked, onCheckedChange = { onToggle() })
     }
 }
 

@@ -16,6 +16,7 @@ import zip.estrogen.mail.data.Folder
 import zip.estrogen.mail.data.MailRepository
 import zip.estrogen.mail.data.model.Attachment
 import zip.estrogen.mail.data.model.FullMessage
+import zip.estrogen.mail.data.model.Label
 import zip.estrogen.mail.data.pgp.PgpEngine
 import zip.estrogen.mail.data.pgp.PgpStatus
 import java.io.File
@@ -30,7 +31,9 @@ data class ThreadState(
     val pgpStatus: PgpStatus = PgpStatus.ABSENT,
     val unlocking: Boolean = false,
     val unlockError: String? = null,
-    val actionMessage: String? = null
+    val actionMessage: String? = null,
+    val allLabels: List<Label> = emptyList(),
+    val showLabelSheet: Boolean = false
 )
 
 class ThreadViewModel(private val repository: MailRepository) : ViewModel() {
@@ -59,6 +62,7 @@ class ThreadViewModel(private val repository: MailRepository) : ViewModel() {
                         )
                     }
                     resolved.lastOrNull()?.takeIf { !it.isRead }?.let { markRead(it.id) }
+                    loadLabels()
                     withContext(Dispatchers.Default) { repository.pgp.tryAutoUnlock() }
                     _state.update { it.copy(pgpStatus = repository.pgp.status.value) }
                     resolved.forEach { if (it.pgp) decryptIfNeeded(it.id) }
@@ -190,6 +194,48 @@ class ThreadViewModel(private val repository: MailRepository) : ViewModel() {
         }
         runCatching { context.startActivity(Intent.createChooser(intent, "Open with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             .onFailure { _state.update { it.copy(actionMessage = "No app can open this file") } }
+    }
+
+    private fun loadLabels() {
+        viewModelScope.launch {
+            repository.labels().onSuccess { labels ->
+                _state.update { it.copy(allLabels = labels) }
+            }
+        }
+    }
+
+    fun openLabelSheet() {
+        _state.update { it.copy(showLabelSheet = true) }
+    }
+
+    fun closeLabelSheet() {
+        _state.update { it.copy(showLabelSheet = false) }
+    }
+
+    fun toggleLabel(label: Label) {
+        val messages = _state.value.messages
+        if (messages.isEmpty()) return
+        val hasLabel = messages.any { msg -> msg.labels.any { it.id == label.id } }
+        _state.update { s ->
+            s.copy(
+                messages = s.messages.map { msg ->
+                    when {
+                        hasLabel -> msg.copy(labels = msg.labels.filterNot { it.id == label.id })
+                        msg.labels.any { it.id == label.id } -> msg
+                        else -> msg.copy(labels = msg.labels + label)
+                    }
+                }
+            )
+        }
+        viewModelScope.launch {
+            messages.forEach { msg ->
+                if (hasLabel) {
+                    repository.setLabels(msg.id, add = emptyList(), remove = listOf(label.id))
+                } else {
+                    repository.setLabels(msg.id, add = listOf(label.id), remove = emptyList())
+                }
+            }
+        }
     }
 
     fun consumeActionMessage() {

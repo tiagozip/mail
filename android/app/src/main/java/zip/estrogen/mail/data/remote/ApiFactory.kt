@@ -16,7 +16,7 @@ object ApiFactory {
         coerceInputValues = true
     }
 
-    fun client(apiKey: String): OkHttpClient {
+    fun client(apiKey: String, onUnauthorized: () -> Unit = {}): OkHttpClient {
         val authInterceptor = Interceptor { chain ->
             val request = chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $apiKey")
@@ -25,15 +25,26 @@ object ApiFactory {
                 .build()
             chain.proceed(request)
         }
+        val unauthorizedInterceptor = Interceptor { chain ->
+            val response = chain.proceed(chain.request())
+            if (response.code == 401) onUnauthorized()
+            response
+        }
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor(unauthorizedInterceptor)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
 
-    fun create(baseUrl: String, apiKey: String, client: OkHttpClient = client(apiKey)): MailApi {
+    fun create(
+        baseUrl: String,
+        apiKey: String,
+        onUnauthorized: () -> Unit = {},
+        client: OkHttpClient = client(apiKey, onUnauthorized)
+    ): MailApi {
         val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
         return Retrofit.Builder()
             .baseUrl(normalized)
