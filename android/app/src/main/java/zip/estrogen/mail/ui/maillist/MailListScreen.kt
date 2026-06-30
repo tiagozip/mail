@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -194,13 +194,21 @@ fun MailListScreen(
                                     .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 8.dp)
                             )
                         }
-                        items(items, key = { it.id }) { item ->
+                        itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
                             val selected = item.id in ui.selected
+                            val big = 22.dp
+                            val small = 4.dp
+                            val shape = RoundedCornerShape(
+                                topStart = if (index == 0) big else small,
+                                topEnd = if (index == 0) big else small,
+                                bottomStart = if (index == items.lastIndex) big else small,
+                                bottomEnd = if (index == items.lastIndex) big else small
+                            )
                             Box(
                                 modifier = Modifier
                                     .animateItem()
-                                    .padding(horizontal = 12.dp, vertical = 3.dp)
-                                    .clip(RoundedCornerShape(24.dp))
+                                    .padding(horizontal = 12.dp, vertical = 1.dp)
+                                    .clip(shape)
                             ) {
                                 SwipeRow(
                                     selecting = ui.selecting,

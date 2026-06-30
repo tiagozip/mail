@@ -49,9 +49,9 @@ fun MailRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.align(Alignment.CenterVertically)) {
             Avatar(
                 url = item.fromAvatar,
                 seed = item.fromAddress ?: item.senderLabel,
@@ -154,7 +154,7 @@ fun MailRow(
             }
         }
 
-        IconButton(onClick = onToggleStar, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onToggleStar, modifier = Modifier.size(36.dp).align(Alignment.CenterVertically)) {
             Icon(
                 imageVector = if (item.isStarred) Icons.Rounded.Star else Icons.Outlined.StarBorder,
                 contentDescription = if (item.isStarred) "Unstar" else "Star",
