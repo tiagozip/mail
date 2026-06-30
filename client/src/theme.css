@@ -4099,6 +4099,21 @@ html[data-mode="dark"] .em-letter .em-shiki {
   padding: 1px 5px;
 }
 
+.em-reader-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 240px;
+}
+
+.em-editor-loading {
+  display: flex;
+  align-items: center;
+  padding: var(--em-3);
+  min-height: 120px;
+}
+
 .em-byod-steps {
   margin: 0;
   padding-left: 1.1rem;

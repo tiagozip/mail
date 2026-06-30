@@ -1,18 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader } from "@cloudflare/kumo";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { useMailStore } from "../store.js";
 import { notify, notifyError } from "../toast.js";
 import { recipientLine } from "../util.js";
-import { Admin } from "./Admin.jsx";
 import { Compose } from "./Compose.jsx";
 import { E2EPrompt, shouldPromptE2E } from "./E2EPrompt.jsx";
 import { MailSidebar } from "./MailSidebar.jsx";
 import { MessageList } from "./MessageList.jsx";
 import { ScheduledModal } from "./ScheduledView.jsx";
 import { Settings } from "./Settings.jsx";
-import { Shortcuts } from "./Shortcuts.jsx";
-import { ThreadView } from "./ThreadView.jsx";
+
+const Admin = lazy(() => import("./Admin.jsx").then((m) => ({ default: m.Admin })));
+const Shortcuts = lazy(() => import("./Shortcuts.jsx").then((m) => ({ default: m.Shortcuts })));
+const ThreadView = lazy(() => import("./ThreadView.jsx").then((m) => ({ default: m.ThreadView })));
+
+const readerFallback = (
+  <div className="em-reader-loading">
+    <Loader size="sm" />
+  </div>
+);
 
 const PATH_FOLDERS = ["inbox", "sent", "drafts", "archive", "spam", "trash"];
 
@@ -396,19 +404,23 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
       </div>
 
       {screen === "admin" ? (
-        <Admin onBack={goBack} />
+        <Suspense fallback={readerFallback}>
+          <Admin onBack={goBack} />
+        </Suspense>
       ) : (
         <div className="em-main">
           <div className="em-column">
             {readerOpen ? (
-              <ThreadView
-                key="reader"
-                store={store}
-                onReply={startReply}
-                onForward={startForward}
-                onBack={closeReader}
-                onSent={onComposeSent}
-              />
+              <Suspense fallback={readerFallback}>
+                <ThreadView
+                  key="reader"
+                  store={store}
+                  onReply={startReply}
+                  onForward={startForward}
+                  onBack={closeReader}
+                  onSent={onComposeSent}
+                />
+              </Suspense>
             ) : (
               <MessageList
                 key="list"
@@ -450,7 +462,11 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
           </button>
         </div>
       )}
-      {showHelp && <Shortcuts onClose={() => setShowHelp(false)} />}
+      {showHelp && (
+        <Suspense fallback={null}>
+          <Shortcuts onClose={() => setShowHelp(false)} />
+        </Suspense>
+      )}
       {e2ePrompt && !user.pgpEnabled && (
         <E2EPrompt user={user} setUser={setUser} onClose={() => setE2ePrompt(false)} />
       )}

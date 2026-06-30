@@ -13,7 +13,7 @@ import {
   Trash,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
@@ -26,7 +26,9 @@ import {
   plainBodyToHtml,
   sendLaterPresets,
 } from "../util.js";
-import { RichEditor } from "./RichEditor.jsx";
+const RichEditor = lazy(() =>
+  import("./RichEditor.jsx").then((m) => ({ default: m.RichEditor })),
+);
 
 function attIcon(mime) {
   const m = mime || "";
@@ -663,18 +665,20 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
           />
-          <RichEditor
-            placeholder="Write your message"
-            value={bodyHtml}
-            onEditorReady={(ed) => {
-              editorRef.current = ed;
-            }}
-            onUpdate={({ html, text }) => {
-              setBodyHtml(html);
-              setBodyText(text);
-            }}
-            onFiles={handleFiles}
-          />
+          <Suspense fallback={<div className="em-editor-loading"><Loader size="sm" /></div>}>
+            <RichEditor
+              placeholder="Write your message"
+              value={bodyHtml}
+              onEditorReady={(ed) => {
+                editorRef.current = ed;
+              }}
+              onUpdate={({ html, text }) => {
+                setBodyHtml(html);
+                setBodyText(text);
+              }}
+              onFiles={handleFiles}
+            />
+          </Suspense>
           {dropImages && (
             <div className="em-img-choose">
               <span className="em-img-choose-label">

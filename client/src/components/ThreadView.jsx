@@ -52,7 +52,9 @@ import {
   snoozePresets,
   splitQuoted,
 } from "../util.js";
-import { RichEditor } from "./RichEditor.jsx";
+const RichEditor = lazy(() =>
+  import("./RichEditor.jsx").then((m) => ({ default: m.RichEditor })),
+);
 
 const CodeHighlight = lazy(() => import("../CodeHighlight.jsx"));
 
@@ -670,17 +672,19 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           onChange={(e) => setCc(e.target.value)}
         />
       )}
-      <RichEditor
-        placeholder={canE2E ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`}
-        onUpdate={({ html: h, text: t }) => {
-          setHtml(h);
-          setText(t);
-        }}
-        onEditorReady={(ed) => {
-          editorRef.current = ed;
-        }}
-        onFiles={handleFiles}
-      />
+      <Suspense fallback={<div className="em-editor-loading"><Loader size="sm" /></div>}>
+        <RichEditor
+          placeholder={canE2E ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`}
+          onUpdate={({ html: h, text: t }) => {
+            setHtml(h);
+            setText(t);
+          }}
+          onEditorReady={(ed) => {
+            editorRef.current = ed;
+          }}
+          onFiles={handleFiles}
+        />
+      </Suspense>
       {dropImages && (
         <div className="em-img-choose">
           <span className="em-img-choose-label">
