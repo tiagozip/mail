@@ -1,8 +1,9 @@
-import { Button, Checkbox, Loader, Tooltip } from "@cloudflare/kumo";
+import { Button, Checkbox, DropdownMenu, Loader, Tooltip } from "@cloudflare/kumo";
 import {
   Archive,
   Envelope,
   EnvelopeOpen,
+  Folder,
   List,
   MagnifyingGlass,
   NotePencil,
@@ -116,7 +117,7 @@ function Row({
 }
 
 function BulkBar({ store }) {
-  const { selectedIds, bulkAction, selectAll } = store;
+  const { selectedIds, bulkAction, selectAll, userFolders } = store;
   return (
     <div className="em-bulkbar">
       <Checkbox checked onCheckedChange={() => selectAll(false)} aria-label="Clear selection" />
@@ -140,6 +141,23 @@ function BulkBar({ store }) {
       <Tooltip content="Unstar">
         <Button size="sm" variant="ghost" shape="square" aria-label="Unstar" icon={<Star weight="regular" />} onClick={() => bulkAction("star", false)} />
       </Tooltip>
+      {(userFolders || []).length > 0 && (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={(p) => (
+              <Button {...p} size="sm" variant="ghost" shape="square" aria-label="Move to folder" icon={Folder} />
+            )}
+          />
+          <DropdownMenu.Content>
+            {userFolders.map((f) => (
+              <DropdownMenu.Item key={f.id} onClick={() => bulkAction("movefolder", f.id)}>
+                <span className="em-label-dot" style={{ background: f.color }} />
+                {f.name}
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   FilePdf,
   FileText,
   FileZip,
+  Folder,
   Image,
   Lock,
   LockKeyOpen,
@@ -835,6 +836,8 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
     messages,
     toggleStar,
     moveMessage,
+    moveToFolder,
+    userFolders,
     snooze,
     setReadState,
     deleteForever,
@@ -1067,6 +1070,27 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
                 ))}
               </DropdownMenu.SubContent>
             </DropdownMenu.Sub>
+            {(userFolders || []).length > 0 && (
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger icon={Folder}>Move to folder</DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent>
+                  {userFolders.map((f) => (
+                    <DropdownMenu.Item key={f.id} onClick={() => moveToFolder(headerItem, f.id)}>
+                      <span className="em-label-dot" style={{ background: f.color }} />
+                      {f.name}
+                    </DropdownMenu.Item>
+                  ))}
+                  {headerItem.folderId && (
+                    <>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item onClick={() => moveMessage(headerItem, "inbox")}>
+                        Remove from folder
+                      </DropdownMenu.Item>
+                    </>
+                  )}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+            )}
             <DropdownMenu.Separator />
             <DropdownMenu.Item icon={Printer} onClick={() => printMessage(last)}>
               Print

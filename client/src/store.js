@@ -440,6 +440,26 @@ export function useMailStore(initialUser) {
     [removeFromList, openId, refreshCounts, loadList, view],
   );
 
+  const moveToFolder = useCallback(
+    (item, folderId) => {
+      threadCache.current.delete(item.threadId);
+      cache.putMessages([{ ...item, folder: "inbox", folderId }]);
+      removeFromList([item.id]);
+      if (openId === item.id) {
+        setOpenId(null);
+        setThread(null);
+      }
+      api
+        .moveToFolder(item.id, folderId)
+        .then(() => refreshCounts())
+        .catch((e) => {
+          notifyError(e);
+          loadList(view);
+        });
+    },
+    [removeFromList, openId, refreshCounts, loadList, view],
+  );
+
   const snooze = useCallback(
     (item, until) => {
       threadCache.current.delete(item.threadId);
@@ -493,9 +513,11 @@ export function useMailStore(initialUser) {
           cache.putMessages(next.filter((m) => idSet.has(m.id)));
           return next;
         });
-      } else if (action === "move") {
+      } else if (action === "move" || action === "movefolder") {
+        const patch =
+          action === "movefolder" ? { folder: "inbox", folderId: value } : { folder: value };
         setMessages((prev) => {
-          cache.putMessages(prev.filter((m) => idSet.has(m.id)).map((m) => ({ ...m, folder: value })));
+          cache.putMessages(prev.filter((m) => idSet.has(m.id)).map((m) => ({ ...m, ...patch })));
           return prev;
         });
         for (const id of ids) threadCache.current.delete(messages.find((m) => m.id === id)?.threadId);
@@ -567,6 +589,7 @@ export function useMailStore(initialUser) {
     toggleStar,
     setReadState,
     moveMessage,
+    moveToFolder,
     snooze,
     deleteForever,
     bulkAction,

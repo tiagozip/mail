@@ -53,6 +53,7 @@ export const api = {
   setRead: (id, read) => req("POST", `/api/messages/${id}/read`, { read }),
   setStar: (id, star) => req("POST", `/api/messages/${id}/star`, { star }),
   moveMessage: (id, folder) => req("POST", `/api/messages/${id}/move`, { folder }),
+  moveToFolder: (id, folderId) => req("POST", `/api/messages/${id}/move`, { folderId }),
   setLabels: (id, add, remove) => req("POST", `/api/messages/${id}/labels`, { add, remove }),
   deleteMessage: (id) => req("DELETE", `/api/messages/${id}`),
   bulk: (ids, action, value) => req("POST", "/api/messages/bulk", { ids, action, value }),

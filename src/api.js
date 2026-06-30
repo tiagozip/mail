@@ -984,10 +984,24 @@ export async function handleApi(request, env, ctx) {
   }
   if ((m = path.match(/^\/api\/messages\/([\w-]+)\/move$/)) && method === "POST") {
     const b = await readJson(request);
-    if (!FOLDERS.includes(b.folder)) return error(400, "bad folder");
-    await env.DB.prepare("UPDATE messages SET folder = ? WHERE id = ? AND user_id = ?")
-      .bind(b.folder, m[1], user.id)
-      .run();
+    if (b.folderId) {
+      const owned = await env.DB.prepare("SELECT 1 FROM folders WHERE id = ? AND user_id = ?")
+        .bind(b.folderId, user.id)
+        .first();
+      if (!owned) return error(400, "unknown folder");
+      await env.DB.prepare(
+        "UPDATE messages SET folder_id = ?, folder = 'inbox' WHERE id = ? AND user_id = ?",
+      )
+        .bind(b.folderId, m[1], user.id)
+        .run();
+    } else {
+      if (!FOLDERS.includes(b.folder)) return error(400, "bad folder");
+      await env.DB.prepare(
+        "UPDATE messages SET folder = ?, folder_id = NULL WHERE id = ? AND user_id = ?",
+      )
+        .bind(b.folder, m[1], user.id)
+        .run();
+    }
     await recordChange(env, user.id, m[1], "upsert");
     return json({ ok: true });
   }
@@ -1024,8 +1038,21 @@ export async function handleApi(request, env, ctx) {
         .bind(b.value !== false ? 1 : 0, user.id, ...ids)
         .run();
       await recordChanges(env, user.id, ids, "upsert");
+    } else if (b.action === "movefolder" && b.value) {
+      const owned = await env.DB.prepare("SELECT 1 FROM folders WHERE id = ? AND user_id = ?")
+        .bind(b.value, user.id)
+        .first();
+      if (!owned) return error(400, "unknown folder");
+      await env.DB.prepare(
+        `UPDATE messages SET folder_id = ?, folder = 'inbox' WHERE user_id = ? AND id IN (${ph})`,
+      )
+        .bind(b.value, user.id, ...ids)
+        .run();
+      await recordChanges(env, user.id, ids, "upsert");
     } else if (b.action === "move" && FOLDERS.includes(b.value)) {
-      await env.DB.prepare(`UPDATE messages SET folder = ? WHERE user_id = ? AND id IN (${ph})`)
+      await env.DB.prepare(
+        `UPDATE messages SET folder = ?, folder_id = NULL WHERE user_id = ? AND id IN (${ph})`,
+      )
         .bind(b.value, user.id, ...ids)
         .run();
       await recordChanges(env, user.id, ids, "upsert");
