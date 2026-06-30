@@ -14,6 +14,7 @@ import {
   Tray,
   Trash,
 } from "@phosphor-icons/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as cache from "../cache.js";
@@ -230,6 +231,12 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
   }, [messages]);
 
   const threads = useMemo(() => groupThreads(messages), [messages]);
+  const rowVirtualizer = useVirtualizer({
+    count: threads.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 76,
+    overscan: 8,
+  });
   const selfAddresses = useMemo(
     () => (store.user?.addresses?.map((a) => a.address) || [store.user?.address]).filter(Boolean),
     [store.user],
@@ -312,20 +319,40 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
           })()
         ) : (
           <>
-            {threads.map((item) => (
-              <Row
-                key={item.id}
-                item={item}
-                active={item._members?.some((m) => m.id === openId)}
-                selected={selectedIds.has(item.id)}
-                selfAddresses={selfAddresses}
-                decSnippet={decSnippets[item.id]}
-                onOpen={item.isDraft && onOpenDraft ? onOpenDraft : openMessage}
-                onPrefetch={prefetchThread}
-                onToggleSelect={toggleSelect}
-                onToggleStar={toggleStar}
-              />
-            ))}
+            <div
+              className="em-vlist"
+              style={{ height: rowVirtualizer.getTotalSize(), position: "relative" }}
+            >
+              {rowVirtualizer.getVirtualItems().map((v) => {
+                const item = threads[v.index];
+                return (
+                  <div
+                    key={item.id}
+                    data-index={v.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${v.start}px)`,
+                    }}
+                  >
+                    <Row
+                      item={item}
+                      active={item._members?.some((m) => m.id === openId)}
+                      selected={selectedIds.has(item.id)}
+                      selfAddresses={selfAddresses}
+                      decSnippet={decSnippets[item.id]}
+                      onOpen={item.isDraft && onOpenDraft ? onOpenDraft : openMessage}
+                      onPrefetch={prefetchThread}
+                      onToggleSelect={toggleSelect}
+                      onToggleStar={toggleStar}
+                    />
+                  </div>
+                );
+              })}
+            </div>
             {nextCursor && (
               <div className="em-loadmore">
                 {loadingMore ? <Loader size="sm" /> : <Button variant="ghost" size="sm" onClick={loadMore}>Load more</Button>}
