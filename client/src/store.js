@@ -7,7 +7,11 @@ function runViewTransition(apply) {
   apply();
 }
 
-const SYNC_INTERVAL = 25000;
+const POLL_ACTIVE_MIN = 5000;
+const POLL_ACTIVE_MAX = 30000;
+const POLL_HIDDEN = 60000;
+const POLL_DECAY = 1.6;
+const ACTIVITY_THROTTLE = 5000;
 
 function sortMessages(list) {
   return list.sort((a, b) => b.date - a.date || (a.id < b.id ? 1 : -1));
@@ -216,16 +220,44 @@ export function useMailStore(initialUser) {
     refreshCounts();
     refreshLabels();
     syncNow();
-    const timer = setInterval(syncNow, SYNC_INTERVAL);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") syncNow();
+
+    let delay = POLL_ACTIVE_MIN;
+    let timer;
+    let lastActivity = 0;
+    const active = () => document.visibilityState === "visible";
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(tick, active() ? delay : POLL_HIDDEN);
     };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", syncNow);
+    async function tick() {
+      await syncNow();
+      if (active()) delay = Math.min(POLL_ACTIVE_MAX, Math.round(delay * POLL_DECAY));
+      schedule();
+    }
+    const reactivate = () => {
+      delay = POLL_ACTIVE_MIN;
+      if (active()) syncNow();
+      schedule();
+    };
+    const onActivity = () => {
+      const t = Date.now();
+      if (t - lastActivity < ACTIVITY_THROTTLE) return;
+      lastActivity = t;
+      delay = POLL_ACTIVE_MIN;
+      schedule();
+    };
+
+    schedule();
+    document.addEventListener("visibilitychange", reactivate);
+    window.addEventListener("focus", reactivate);
+    window.addEventListener("pointerdown", onActivity, { passive: true });
+    window.addEventListener("keydown", onActivity);
     return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", syncNow);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", reactivate);
+      window.removeEventListener("focus", reactivate);
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("keydown", onActivity);
     };
   }, [refreshCounts, refreshLabels, syncNow]);
 
