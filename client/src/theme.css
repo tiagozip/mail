@@ -4134,6 +4134,36 @@ html[data-mode="dark"] .em-letter .em-shiki {
   color: var(--text-color-kumo-subtle);
 }
 
+.em-folder-aliasalt {
+  display: flex;
+  align-items: center;
+  gap: var(--em-3);
+  flex-wrap: wrap;
+  margin-top: var(--em-2);
+}
+
+.em-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-color-kumo-brand);
+}
+
+.em-link-btn:hover {
+  text-decoration: underline;
+}
+
+.em-link-muted {
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-folder-nonenote {
+  font-size: 0.8rem;
+  color: var(--text-color-kumo-subtle);
+}
+
 .em-byod-steps {
   margin: 0;
   padding-left: 1.1rem;

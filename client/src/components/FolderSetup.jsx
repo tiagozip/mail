@@ -161,82 +161,94 @@ export function FolderSetup({ open, folder, user, onClose, onSaved }) {
           </div>
 
           <div className="em-label-field">
-            <span className="em-label-fieldlabel">Address for this folder</span>
-            <p className="em-byod-hint">
-              Mail sent here lands in the folder, and replies go out from this address, like a
-              separate mailbox.
-            </p>
-            <div className="em-rule-match">
-              {!editing && (
-                <button
-                  type="button"
-                  className={`em-rule-toggle${aliasMode === "new" ? " is-active" : ""}`}
-                  onClick={() => setAliasMode("new")}
-                >
-                  New address
-                </button>
-              )}
-              <button
-                type="button"
-                className={`em-rule-toggle${aliasMode === "existing" ? " is-active" : ""}`}
-                onClick={() => setAliasMode("existing")}
-              >
-                Existing alias
-              </button>
-              <button
-                type="button"
-                className={`em-rule-toggle${aliasMode === "none" ? " is-active" : ""}`}
-                onClick={() => setAliasMode("none")}
-              >
-                None
-              </button>
-            </div>
+            <span className="em-label-fieldlabel">Address</span>
 
             {aliasMode === "new" && !editing && (
-              <div className="em-folder-aliasrow">
-                <Input
-                  size="sm"
-                  placeholder="address"
-                  aria-label="Alias local part"
-                  value={effectiveLocal}
-                  onChange={(e) => {
-                    setLocalTouched(true);
-                    setLocalPart(e.target.value);
-                  }}
-                />
-                <span className="em-folder-at">@</span>
-                <Select aria-label="Domain" size="sm" value={domain} onValueChange={setDomain}>
-                  {domains.map((d) => (
-                    <Select.Option key={d} value={d}>
-                      {d}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </div>
+              <>
+                <div className="em-folder-aliasrow">
+                  <Input
+                    size="sm"
+                    placeholder="address"
+                    aria-label="Alias local part"
+                    value={effectiveLocal}
+                    onChange={(e) => {
+                      setLocalTouched(true);
+                      setLocalPart(e.target.value);
+                    }}
+                  />
+                  <span className="em-folder-at">@</span>
+                  <Select aria-label="Domain" size="sm" value={domain} onValueChange={setDomain}>
+                    {domains.map((d) => (
+                      <Select.Option key={d} value={d}>
+                        {d}
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="em-folder-aliasalt">
+                  {usableAliases.length > 0 && (
+                    <button type="button" className="em-link-btn" onClick={() => setAliasMode("existing")}>
+                      Use an existing alias
+                    </button>
+                  )}
+                  <button type="button" className="em-link-btn em-link-muted" onClick={() => setAliasMode("none")}>
+                    No address
+                  </button>
+                </div>
+              </>
             )}
 
             {aliasMode === "existing" && (
-              <Select
-                aria-label="Existing alias"
-                size="sm"
-                value={existingAlias}
-                onValueChange={setExistingAlias}
-              >
-                {usableAliases.length === 0 ? (
-                  <Select.Option value="">No aliases yet</Select.Option>
-                ) : (
-                  usableAliases.map((a) => (
-                    <Select.Option key={a.address} value={a.address}>
-                      {a.address}
-                    </Select.Option>
-                  ))
-                )}
-              </Select>
+              <>
+                <Select
+                  aria-label="Existing alias"
+                  size="sm"
+                  value={existingAlias}
+                  onValueChange={setExistingAlias}
+                >
+                  {usableAliases.length === 0 ? (
+                    <Select.Option value="">No aliases yet</Select.Option>
+                  ) : (
+                    usableAliases.map((a) => (
+                      <Select.Option key={a.address} value={a.address}>
+                        {a.address}
+                      </Select.Option>
+                    ))
+                  )}
+                </Select>
+                <div className="em-folder-aliasalt">
+                  {!editing && (
+                    <button type="button" className="em-link-btn" onClick={() => setAliasMode("new")}>
+                      Create a new address
+                    </button>
+                  )}
+                  <button type="button" className="em-link-btn em-link-muted" onClick={() => setAliasMode("none")}>
+                    No address
+                  </button>
+                </div>
+              </>
             )}
 
             {aliasMode === "none" && (
-              <div className="em-rule-empty">No address. You'll file mail here manually.</div>
+              <div className="em-folder-aliasalt">
+                <span className="em-folder-nonenote">No address, you'll file mail here yourself.</span>
+                {!editing && (
+                  <button type="button" className="em-link-btn" onClick={() => setAliasMode("new")}>
+                    Add one
+                  </button>
+                )}
+                {usableAliases.length > 0 && (
+                  <button type="button" className="em-link-btn" onClick={() => setAliasMode("existing")}>
+                    Pick an alias
+                  </button>
+                )}
+              </div>
             )}
+
+            <p className="em-byod-hint">
+              Mail to this address lands in the folder, and replies send from it, like a separate
+              mailbox.
+            </p>
           </div>
 
           <label className="em-domain-public">
