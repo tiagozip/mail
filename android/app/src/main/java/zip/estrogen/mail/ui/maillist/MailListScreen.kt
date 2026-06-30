@@ -197,7 +197,7 @@ fun MailListScreen(
                         itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
                             val selected = item.id in ui.selected
                             val big = 22.dp
-                            val small = 12.dp
+                            val small = 6.dp
                             val shape = RoundedCornerShape(
                                 topStart = if (index == 0) big else small,
                                 topEnd = if (index == 0) big else small,
