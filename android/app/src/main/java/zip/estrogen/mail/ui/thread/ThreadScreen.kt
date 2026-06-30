@@ -164,7 +164,7 @@ fun ThreadScreen(
                                 text = { Text("Reply") },
                                 onClick = {
                                     menuOpen = false
-                                    lastMessage?.let { onReply(buildReply(it, all = false)) }
+                                    lastMessage?.let { onReply(buildReply(it, all = false, quotedSource(it, state.decrypted[it.id]))) }
                                 },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Reply, null) }
                             )
@@ -172,7 +172,7 @@ fun ThreadScreen(
                                 text = { Text("Reply all") },
                                 onClick = {
                                     menuOpen = false
-                                    lastMessage?.let { onReply(buildReply(it, all = true)) }
+                                    lastMessage?.let { onReply(buildReply(it, all = true, quotedSource(it, state.decrypted[it.id]))) }
                                 },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ReplyAll, null) }
                             )
@@ -180,7 +180,7 @@ fun ThreadScreen(
                                 text = { Text("Forward") },
                                 onClick = {
                                     menuOpen = false
-                                    lastMessage?.let { onReply(buildForward(it)) }
+                                    lastMessage?.let { onReply(buildForward(it, quotedSource(it, state.decrypted[it.id]))) }
                                 },
                                 leadingIcon = { Icon(Icons.Rounded.Forward, null) }
                             )
@@ -196,10 +196,11 @@ fun ThreadScreen(
         bottomBar = {
             val last = state.messages.lastOrNull()
             if (last != null && !state.loading && state.error == null) {
+                val body = quotedSource(last, state.decrypted[last.id])
                 ReplyBar(
-                    onReply = { onReply(buildReply(last, all = false)) },
-                    onReplyAll = { onReply(buildReply(last, all = true)) },
-                    onForward = { onReply(buildForward(last)) }
+                    onReply = { onReply(buildReply(last, all = false, body)) },
+                    onReplyAll = { onReply(buildReply(last, all = true, body)) },
+                    onForward = { onReply(buildForward(last, body)) }
                 )
             }
         }
@@ -233,9 +234,6 @@ fun ThreadScreen(
                             onToggle = { viewModel.toggle(message.id) },
                             onToggleStar = { viewModel.toggleStar(message) },
                             onUnlock = viewModel::unlock,
-                            onReply = { onReply(buildReply(message, all = false)) },
-                            onReplyAll = { onReply(buildReply(message, all = true)) },
-                            onForward = { onReply(buildForward(message)) },
                             onOpenAttachment = { viewModel.openAttachment(context, it) }
                         )
                     }
@@ -258,9 +256,6 @@ private fun MessageCard(
     onToggle: () -> Unit,
     onToggleStar: () -> Unit,
     onUnlock: (String, Boolean) -> Unit,
-    onReply: () -> Unit,
-    onReplyAll: () -> Unit,
-    onForward: () -> Unit,
     onOpenAttachment: (Attachment) -> Unit
 ) {
     val sender = message.from.name?.takeIf { it.isNotBlank() }
@@ -631,11 +626,30 @@ private fun humanSize(bytes: Long): String {
     return if (unit == 0) "$bytes B" else String.format("%.1f %s", value, units[unit])
 }
 
-private fun buildReply(message: FullMessage, all: Boolean): ComposePrefillData {
+private fun quotedSource(message: FullMessage, decrypted: String?): String {
+    val raw = decrypted?.takeIf { it.isNotBlank() }
+        ?: message.bodyText?.takeIf { it.isNotBlank() }
+        ?: message.snippet.orEmpty()
+    return htmlToText(raw)
+}
+
+private fun htmlToText(raw: String): String {
+    if (!raw.contains('<')) return raw.trim()
+    return raw
+        .replace(Regex("(?i)<br\\s*/?>"), "\n")
+        .replace(Regex("(?i)</(p|div|li|h[1-6]|tr)>"), "\n")
+        .replace(Regex("<[^>]*>"), "")
+        .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<")
+        .replace("&gt;", ">").replace("&#39;", "'").replace("&quot;", "\"")
+        .replace(Regex("\n{3,}"), "\n\n")
+        .trim()
+}
+
+private fun buildReply(message: FullMessage, all: Boolean, body: String): ComposePrefillData {
     val to = message.from.address.orEmpty()
     val cc = if (all) message.cc.mapNotNull { it.address }.joinToString(", ") else ""
     val subject = ensurePrefix(message.subject, "Re: ")
-    val quoted = quote(message)
+    val quoted = quote(message, body)
     return ComposePrefillData(
         to = to,
         cc = cc,
@@ -646,18 +660,17 @@ private fun buildReply(message: FullMessage, all: Boolean): ComposePrefillData {
     )
 }
 
-private fun buildForward(message: FullMessage): ComposePrefillData {
+private fun buildForward(message: FullMessage, body: String): ComposePrefillData {
     val subject = ensurePrefix(message.subject, "Fwd: ")
-    val quoted = quote(message)
+    val quoted = quote(message, body)
     return ComposePrefillData(
         subject = subject,
         body = "\n\n$quoted"
     )
 }
 
-private fun quote(message: FullMessage): String {
+private fun quote(message: FullMessage, body: String): String {
     val who = message.from.name ?: message.from.address ?: "sender"
-    val body = message.bodyText?.takeIf { it.isNotBlank() } ?: message.snippet.orEmpty()
     val lines = body.lineSequence().joinToString("\n") { "> $it" }
     return "On ${fullTime(message.date)}, $who wrote:\n$lines"
 }
