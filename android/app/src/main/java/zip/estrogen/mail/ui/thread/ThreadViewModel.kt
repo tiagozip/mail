@@ -172,6 +172,10 @@ class ThreadViewModel(private val repository: MailRepository) : ViewModel() {
         }
         viewModelScope.launch {
             ids.forEach { repository.move(it, folder) }
+            val label = if (folder == Folder.TRASH) "Moved to Trash" else "Archived"
+            repository.postUndoable(label) {
+                ids.forEach { repository.move(it, Folder.INBOX) }
+            }
             onDone()
         }
     }

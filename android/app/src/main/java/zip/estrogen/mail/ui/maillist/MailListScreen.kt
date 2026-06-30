@@ -43,8 +43,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -104,7 +106,15 @@ fun MailListScreen(
     LaunchedEffect(Unit) { viewModel.start() }
     LaunchedEffect(ui.signedOut) { if (ui.signedOut) onSignedOut() }
     LaunchedEffect(ui.snackbar) {
-        ui.snackbar?.let { snackbarHost.showSnackbar(it); viewModel.consumeSnackbar() }
+        ui.snackbar?.let { msg ->
+            val result = snackbarHost.showSnackbar(
+                message = msg.text,
+                actionLabel = if (msg.undo != null) "Undo" else null,
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) msg.undo?.invoke()
+            viewModel.consumeSnackbar()
+        }
     }
 
     val shouldLoadMore by remember {
@@ -117,7 +127,7 @@ fun MailListScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = !drawerState.isOpen && !ui.selecting,
+        gesturesEnabled = false,
         drawerContent = {
             FolderDrawer(
                 user = ui.user,

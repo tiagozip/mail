@@ -72,6 +72,8 @@ import zip.estrogen.mail.ui.theme.DarkMode
 
 data class PendingSend(val secondsLeft: Int, val scheduled: Boolean)
 
+data class UndoAction(val message: String, val onUndo: suspend () -> Unit)
+
 class MailRepository(
     private val settings: SettingsStore,
     val pgp: PgpManager,
@@ -349,6 +351,13 @@ class MailRepository(
         queuedSend = null
         _pendingSend.value = null
         outboxScope.launch { _sendStatus.emit("Send canceled") }
+    }
+
+    private val _undoAction = MutableSharedFlow<UndoAction>(extraBufferCapacity = 4)
+    val undoAction: SharedFlow<UndoAction> = _undoAction.asSharedFlow()
+
+    fun postUndoable(message: String, onUndo: suspend () -> Unit) {
+        outboxScope.launch { _undoAction.emit(UndoAction(message, onUndo)) }
     }
 
     suspend fun createDraft(body: DraftBody): Result<DraftResponse> = call { it.createDraft(body) }

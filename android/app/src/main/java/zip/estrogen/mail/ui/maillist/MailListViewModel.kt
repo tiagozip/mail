@@ -25,6 +25,8 @@ import zip.estrogen.mail.data.model.User
 import zip.estrogen.mail.data.pgp.PgpStatus
 import zip.estrogen.mail.data.pgp.SnippetCipher
 
+data class SnackbarMessage(val text: String, val undo: (() -> Unit)? = null)
+
 sealed interface ListView {
     data class FolderView(val folder: Folder) : ListView
     data class LabelView(val id: String, val name: String) : ListView
@@ -52,7 +54,7 @@ data class MailListUi(
     val loadingMore: Boolean = false,
     val nextCursor: String? = null,
     val error: String? = null,
-    val snackbar: String? = null,
+    val snackbar: SnackbarMessage? = null,
     val signedOut: Boolean = false,
     val pgpUnlocked: Boolean = false,
     val swipe: SwipeConfig = SwipeConfig()
@@ -257,18 +259,34 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
                 viewModelScope.launch {
                     if (isThread(item)) repository.snoozeThread(item.threadId!!, until)
                     else repository.snooze(item.id, until)
-                    _ui.update { it.copy(snackbar = "Snoozed") }
+                    _ui.update { it.copy(snackbar = SnackbarMessage("Snoozed") { unsnoozeItem(item) }) }
                 }
             }
             SwipeAction.NONE -> {}
         }
     }
 
+    private fun unsnoozeItem(item: MailItem) {
+        viewModelScope.launch {
+            if (isThread(item)) repository.snoozeThread(item.threadId!!, null)
+            else repository.snooze(item.id, null)
+        }
+    }
+
     private fun moveWithUndo(item: MailItem, folder: Folder, label: String) {
+        val origin = (_view.value as? ListView.FolderView)?.folder ?: Folder.INBOX
         viewModelScope.launch {
             if (isThread(item)) repository.moveThread(item.threadId!!, folder)
             else repository.move(item.id, folder)
-            _ui.update { it.copy(snackbar = label) }
+            _ui.update {
+                it.copy(snackbar = SnackbarMessage(label) {
+                    viewModelScope.launch {
+                        if (isThread(item)) repository.moveThread(item.threadId!!, origin)
+                        else repository.move(item.id, origin)
+                        refreshMeta()
+                    }
+                })
+            }
             refreshMeta()
         }
     }
@@ -276,7 +294,10 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
     fun snooze(id: String, until: Long?) {
         viewModelScope.launch {
             repository.snooze(id, until)
-            _ui.update { it.copy(snackbar = if (until != null) "Snoozed" else "Unsnoozed") }
+            _ui.update {
+                if (until != null) it.copy(snackbar = SnackbarMessage("Snoozed") { snooze(id, null) })
+                else it.copy(snackbar = SnackbarMessage("Unsnoozed"))
+            }
         }
     }
 
@@ -294,16 +315,44 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
         if (ids.isEmpty()) return
         viewModelScope.launch {
             ids.forEach { repository.snooze(it, until) }
-            _ui.update { it.copy(selected = emptySet(), snackbar = "Snoozed") }
+            _ui.update {
+                it.copy(selected = emptySet(), snackbar = SnackbarMessage("Snoozed ${ids.size}") {
+                    viewModelScope.launch { ids.forEach { id -> repository.snooze(id, null) } }
+                })
+            }
         }
     }
 
     fun selectionAction(action: String, value: String? = null) {
         val ids = _ui.value.selected.toList()
         if (ids.isEmpty()) return
+        val origin = (_view.value as? ListView.FolderView)?.folder ?: Folder.INBOX
         viewModelScope.launch {
             repository.bulk(ids, action, value)
-            _ui.update { it.copy(selected = emptySet(), snackbar = "Done") }
+            val undo: (() -> Unit)? = when (action) {
+                "move" -> {
+                    {
+                        viewModelScope.launch {
+                            repository.bulk(ids, "move", origin.key)
+                            refreshMeta()
+                        }
+                    }
+                }
+                "read", "star" -> {
+                    val reverted = if (value == "true") "false" else "true"
+                    {
+                        viewModelScope.launch { repository.bulk(ids, action, reverted) }
+                    }
+                }
+                else -> null
+            }
+            val label = when (action) {
+                "move" -> if (value == "trash") "Moved to Trash" else "Archived"
+                "read" -> if (value == "true") "Marked read" else "Marked unread"
+                "star" -> if (value == "true") "Starred" else "Unstarred"
+                else -> "Done"
+            }
+            _ui.update { it.copy(selected = emptySet(), snackbar = SnackbarMessage(label, undo)) }
             refreshMeta()
         }
     }
