@@ -394,12 +394,13 @@ export function useMailStore(initialUser) {
   const toggleStar = useCallback(
     (item) => {
       const next = !item.isStarred;
-      patchMessage(item.id, { isStarred: next });
-      api
-        .setStar(item.id, next)
+      const ids = item._members?.length ? item._members.map((m) => m.id) : [item.id];
+      for (const id of ids) patchMessage(id, { isStarred: next });
+      const req = ids.length > 1 ? api.bulk(ids, "star", next) : api.setStar(ids[0], next);
+      req
         .then(() => refreshCounts())
         .catch((e) => {
-          patchMessage(item.id, { isStarred: item.isStarred });
+          for (const id of ids) patchMessage(id, { isStarred: item.isStarred });
           notifyError(e);
         });
     },

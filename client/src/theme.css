@@ -931,6 +931,16 @@ html[data-theme="nord"] {
   flex: none;
 }
 
+.em-selectall {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--em-2);
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-color-kumo-subtle);
+  user-select: none;
+}
+
 .em-star-btn {
   background: none;
   border: none;
@@ -940,7 +950,7 @@ html[data-theme="nord"] {
   display: flex;
   align-items: center;
   border-radius: var(--em-radius-sm);
-  opacity: 0;
+  opacity: 0.55;
   transition:
     color var(--em-fast),
     opacity var(--em-fast),
