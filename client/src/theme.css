@@ -932,13 +932,17 @@ html[data-theme="nord"] {
 }
 
 .em-selectall {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--em-2);
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  border-radius: var(--em-radius-sm);
   cursor: pointer;
   font-size: 0.82rem;
-  color: var(--text-color-kumo-subtle);
-  user-select: none;
+  color: var(--text-color-kumo-brand);
+}
+
+.em-selectall:hover {
+  background: var(--color-kumo-fill);
 }
 
 .em-star-btn {

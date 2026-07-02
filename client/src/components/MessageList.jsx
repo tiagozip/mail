@@ -294,15 +294,10 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
           icon={List}
           onClick={onMenu}
         />
-        {threads.length > 0 && (
-          <label className="em-selectall">
-            <Checkbox
-              aria-label="Select all"
-              checked={selecting}
-              onCheckedChange={() => selectAll(!selecting)}
-            />
-            <span>{selecting ? `${selectedIds.size} selected` : "Select all"}</span>
-          </label>
+        {selecting && selectedIds.size < messages.length && (
+          <button type="button" className="em-selectall" onClick={() => selectAll(true)}>
+            Select all {messages.length}
+          </button>
         )}
       </div>
 
