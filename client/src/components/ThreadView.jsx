@@ -678,6 +678,18 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
 
   return (
     <div className="em-quickreply">
+      {addresses.length > 1 && (
+        <label className="em-reply-from em-reply-from-top">
+          <span>From</span>
+          <Select aria-label="From address" size="sm" value={fromAddr} onValueChange={setFromPick}>
+            {addresses.map((a) => (
+              <Select.Option key={a.address} value={a.address}>
+                {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
+              </Select.Option>
+            ))}
+          </Select>
+        </label>
+      )}
       {showCc && (
         <input
           className="em-quickreply-cc"
@@ -812,23 +824,6 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         <Button size="sm" variant="ghost" icon={Paperclip} onClick={() => fileInput.current?.click()}>
           Attach
         </Button>
-        {addresses.length > 1 && (
-          <label className="em-reply-from">
-            <span>From</span>
-            <Select
-              aria-label="From address"
-              size="sm"
-              value={fromAddr}
-              onValueChange={setFromPick}
-            >
-              {addresses.map((a) => (
-                <Select.Option key={a.address} value={a.address}>
-                  {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
-                </Select.Option>
-              ))}
-            </Select>
-          </label>
-        )}
         {!showCc && (
           <button type="button" className="em-quote-toggle" onClick={() => setShowCc(true)}>
             Cc
