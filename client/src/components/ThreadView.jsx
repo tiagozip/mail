@@ -470,14 +470,17 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
 }
 
 function pickFromAddress(message, user) {
-  const selves = new Set(
-    (user?.addresses?.map((a) => a.address) || []).map((a) => a.toLowerCase()),
+  const byLower = new Map(
+    (user?.addresses?.map((a) => a.address) || []).map((a) => [a.toLowerCase(), a]),
   );
   const dt = message.deliveredTo?.toLowerCase();
-  if (dt && selves.has(dt)) return message.deliveredTo;
+  if (dt && byLower.has(dt)) return byLower.get(dt);
   const candidates = [...(message.to || []), ...(message.cc || [])];
-  const match = candidates.find((p) => p.address && selves.has(p.address.toLowerCase()));
-  return match?.address || user?.address;
+  for (const p of candidates) {
+    const c = p.address?.toLowerCase();
+    if (c && byLower.has(c)) return byLower.get(c);
+  }
+  return user?.address;
 }
 
 function QuickReply({ store, last, onReply, onForward, onSent }) {
