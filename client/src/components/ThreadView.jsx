@@ -1,4 +1,4 @@
-import { Button, DropdownMenu, Input, Loader, Tooltip } from "@cloudflare/kumo";
+import { Button, DropdownMenu, Input, Loader, Select, Tooltip } from "@cloudflare/kumo";
 import {
   Archive,
   ArrowBendDoubleUpLeft,
@@ -506,6 +506,13 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   const replyTo = lastExternalSender.from?.address;
   const replyName = lastExternalSender.from?.name || replyTo || "sender";
 
+  const addresses = user.addresses?.length ? user.addresses : [{ address: user.address }];
+  const [fromPick, setFromPick] = useState("");
+  const fromAddr =
+    fromPick && addresses.some((a) => a.address === fromPick)
+      ? fromPick
+      : pickFromAddress(lastExternalSender, user);
+
   useEffect(() => {
     if (!user.pgpEnabled || !replyTo) {
       setRecipKey(null);
@@ -586,7 +593,6 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     if ((!body && !atts.length && !hasImg) || !replyTo) return;
     setSending(true);
     const subj = lastExternalSender.subject || "";
-    const fromAddr = pickFromAddress(lastExternalSender, user);
     const base = {
       from: fromAddr,
       to: [replyTo],
@@ -626,7 +632,13 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           threadId: thread.threadId,
           folder: "sent",
-          from: { address: fromAddr, name: user.displayName || user.username },
+          from: {
+            address: fromAddr,
+            name:
+              addresses.find((a) => a.address === fromAddr)?.displayName ||
+              user.displayName ||
+              user.username,
+          },
           to: [{ address: replyTo, name: "" }],
           cc: ccAddrs.map((a) => ({ address: a, name: "" })),
           subject: base.subject,
@@ -800,6 +812,23 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         <Button size="sm" variant="ghost" icon={Paperclip} onClick={() => fileInput.current?.click()}>
           Attach
         </Button>
+        {addresses.length > 1 && (
+          <label className="em-reply-from">
+            <span>From</span>
+            <Select
+              aria-label="From address"
+              size="sm"
+              value={fromAddr}
+              onValueChange={setFromPick}
+            >
+              {addresses.map((a) => (
+                <Select.Option key={a.address} value={a.address}>
+                  {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
+                </Select.Option>
+              ))}
+            </Select>
+          </label>
+        )}
         {!showCc && (
           <button type="button" className="em-quote-toggle" onClick={() => setShowCc(true)}>
             Cc

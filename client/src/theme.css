@@ -931,6 +931,14 @@ html[data-theme="nord"] {
   flex: none;
 }
 
+.em-reply-from {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--em-2);
+  font-size: 0.8rem;
+  color: var(--text-color-kumo-subtle);
+}
+
 .em-selectall {
   background: none;
   border: none;
@@ -1196,18 +1204,21 @@ html[data-theme="nord"] {
 .em-letter {
   max-width: 100%;
   overflow-x: auto;
-  border-radius: var(--em-radius-sm);
-  color: var(--text-color-kumo-default);
+  border-radius: var(--em-radius);
+  background: #ffffff;
+  color: #1b1b1b;
+  color-scheme: light;
+  padding: 16px 18px;
   font-size: 0.9rem;
   line-height: 1.6;
 }
 
 .em-letter-inner {
-  color: var(--text-color-kumo-default);
+  color: #1b1b1b;
 }
 
 .em-letter-inner a {
-  color: var(--text-color-kumo-link);
+  color: #0b57d0;
 }
 
 .em-letter-inner img {
