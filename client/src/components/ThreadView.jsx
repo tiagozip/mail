@@ -591,6 +591,19 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     editorRef.current?.commands.clearContent();
   }
 
+  async function saveManualKey() {
+    const key = manualKey.trim();
+    if (!replyTo || !key) return;
+    try {
+      await api.addPgpKey(replyTo, key);
+      setRecipKey(key);
+      setManualKey("");
+      notify("Key saved", `Saved ${replyName}'s key to your keyring.`, "success");
+    } catch (err) {
+      notifyError(err);
+    }
+  }
+
   async function send(sendAt, doEncrypt) {
     const body = text.trim();
     const hasImg = /<img/i.test(html);
@@ -704,6 +717,11 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
               <Lock size={13} weight="fill" /> Encrypted to {replyName}
               {(ccAddrs.length > 0 || atts.length > 0) && (
                 <span className="em-encrypt-warn"> · remove Cc/attachments to encrypt</span>
+              )}
+              {!recipKey && manualKey.trim() && (
+                <button type="button" className="em-linkbtn em-encrypt-save" onClick={saveManualKey}>
+                  Save to keyring
+                </button>
               )}
             </div>
           ) : (

@@ -340,6 +340,19 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   const bccFilled = parseRecipients(bcc).length > 0;
   const keysReady = recipientAddrs.length > 0 && recipientAddrs.every((addr) => !!keyMap[addr]);
   const canE2E = user.pgpEnabled === true && keysReady && !bccFilled && !pendingAtts;
+  const pgpDefault = user.settings?.pgpDefault === true;
+  const missingKeys = recipientAddrs.filter((addr) => !keyMap[addr]);
+  const encryptReason = !user.pgpEnabled
+    ? "Set up your own key in Encryption settings first."
+    : bccFilled
+      ? "Encryption is off while a Bcc is set."
+      : pendingAtts
+        ? "Encryption is off with attachments."
+        : !recipientAddrs.length
+          ? "Add a recipient with a saved key to encrypt."
+          : missingKeys.length
+            ? `No saved key for ${missingKeys[0]}${missingKeys.length > 1 ? ` +${missingKeys.length - 1}` : ""}.`
+            : "";
 
   async function saveDraft() {
     const payload = {
@@ -483,17 +496,18 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     );
   }
 
-  async function onSend(sendAt) {
+  async function onSend(sendAt, doEncrypt) {
     const recipients = parseRecipients(to);
     if (!recipients.length) {
       notify("Add a recipient", "The To field is empty.", "warning");
       return;
     }
+    const e2e = doEncrypt && canE2E;
     setBusy(true);
     try {
       let payload;
       let plain = bodyText;
-      if (canE2E) {
+      if (e2e) {
         await lookupKeys(recipientAddrs);
         const recipientKeys = recipientAddrs.map((addr) => keyCache.current.get(addr));
         if (recipientKeys.some((k) => !k)) {
@@ -560,8 +574,8 @@ export function Compose({ open, initial, user, onClose, onSent }) {
           subject: subject || "(no subject)",
           snippet: plain.replace(/\s+/g, " ").trim().slice(0, 140),
           bodyText: plain,
-          bodyHtml: !canE2E && (bodyText.trim() || /<img/i.test(bodyHtml)) ? bodyHtml : null,
-          hasHtml: !canE2E && bodyHtml ? 1 : 0,
+          bodyHtml: !e2e && (bodyText.trim() || /<img/i.test(bodyHtml)) ? bodyHtml : null,
+          hasHtml: !e2e && bodyHtml ? 1 : 0,
           date: Date.now(),
           isRead: 1,
           pgp: 0,
@@ -574,7 +588,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
       }
 
       const resp = await api.send(sendAt ? { ...payload, sendAt, skipUndo: true } : payload);
-      announce(resp, recipients, canE2E, sendAt);
+      announce(resp, recipients, e2e, sendAt);
       onSent?.(resp);
       onClose();
     } catch (e) {
@@ -746,11 +760,12 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             <Button
               className="em-split-main"
               variant="primary"
-              icon={PaperPlaneTilt}
+              icon={pgpDefault ? Lock : PaperPlaneTilt}
               loading={busy}
-              onClick={() => onSend()}
+              disabled={pgpDefault && !canE2E}
+              onClick={() => onSend(undefined, pgpDefault)}
             >
-              Send
+              {pgpDefault ? "Send encrypted" : "Send"}
             </Button>
             <DropdownMenu>
               <DropdownMenu.Trigger
@@ -760,17 +775,22 @@ export function Compose({ open, initial, user, onClose, onSent }) {
                     className="em-split-caret"
                     variant="primary"
                     shape="square"
-                    aria-label="Send later"
+                    aria-label="More send options"
                     icon={CaretDown}
                     disabled={busy}
                   />
                 )}
               />
               <DropdownMenu.Content>
+                {pgpDefault && (
+                  <DropdownMenu.Item icon={PaperPlaneTilt} onClick={() => onSend(undefined, false)}>
+                    Send without encryption
+                  </DropdownMenu.Item>
+                )}
                 <DropdownMenu.Group>
                   <DropdownMenu.Label>Send later</DropdownMenu.Label>
                   {sendLaterPresets().map((p) => (
-                    <DropdownMenu.Item key={p.key} onClick={() => onSend(p.sendAt)}>
+                    <DropdownMenu.Item key={p.key} onClick={() => onSend(p.sendAt, pgpDefault)}>
                       <span className="em-snooze-item">
                         <span>{p.label}</span>
                         <span className="em-snooze-when">{fullDate(p.sendAt)}</span>
@@ -788,13 +808,18 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             Save draft
           </Button>
           <div className="em-spacer" />
-          {user.pgpEnabled === true && canE2E && (
+          {pgpDefault && canE2E && (
             <span
               className="em-e2e-chip is-on"
               title="Only the recipients can read this. The server never sees it."
             >
               <Lock size={13} weight="fill" />
               End-to-end encrypted
+            </span>
+          )}
+          {pgpDefault && !canE2E && encryptReason && (
+            <span className="em-e2e-chip" title={encryptReason}>
+              {encryptReason}
             </span>
           )}
           <Button variant="secondary-destructive" icon={Trash} onClick={onDiscard}>

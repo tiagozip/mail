@@ -968,6 +968,11 @@ html[data-theme="nord"] {
   color: var(--text-color-kumo-danger);
 }
 
+.em-encrypt-save {
+  margin-left: auto;
+  font-size: 0.78rem;
+}
+
 .em-encrypt-key {
   min-height: 80px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
