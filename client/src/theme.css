@@ -946,7 +946,7 @@ html[data-theme="nord"] {
 }
 
 .em-encrypt-toggle.is-on {
-  color: var(--em-star, #e6b450);
+  color: var(--text-color-kumo-brand);
 }
 
 .em-encrypt-box {

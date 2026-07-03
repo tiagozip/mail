@@ -532,7 +532,8 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     .split(/[,\s]+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const [encrypt, setEncrypt] = useState(false);
+  const pgpDefault = user.settings?.pgpDefault === true;
+  const [encrypt, setEncrypt] = useState(pgpDefault);
   const [manualKey, setManualKey] = useState("");
   const effectiveKey =
     recipKey || (/-----BEGIN PGP PUBLIC KEY BLOCK-----/.test(manualKey) ? manualKey.trim() : null);
@@ -681,7 +682,8 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   const canSend =
     (!!text.trim() || atts.length > 0 || /<img/i.test(html)) &&
     !!replyTo &&
-    !atts.some((a) => a.pending);
+    !atts.some((a) => a.pending) &&
+    !(encrypt && !canE2E);
 
   return (
     <div className="em-quickreply">
@@ -697,7 +699,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           </Select>
         </label>
       )}
-      {encrypt && (
+      {pgpDefault && encrypt && (
         <div className="em-encrypt-box">
           {effectiveKey ? (
             <div className="em-encrypt-status">
@@ -821,12 +823,12 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
             className="em-split-main"
             size="sm"
             variant="primary"
-            icon={PaperPlaneTilt}
+            icon={canE2E ? Lock : PaperPlaneTilt}
             loading={sending}
             disabled={!canSend}
             onClick={() => send()}
           >
-            Send
+            {canE2E ? "Send encrypted" : "Send"}
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
@@ -855,14 +857,16 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         <Button size="sm" variant="ghost" icon={Paperclip} onClick={() => fileInput.current?.click()}>
           Attach
         </Button>
-        <button
-          type="button"
-          className={`em-quote-toggle em-encrypt-toggle${encrypt ? " is-on" : ""}`}
-          onClick={() => setEncrypt((v) => !v)}
-          title="PGP-encrypt this message so only the recipient can read it"
-        >
-          <Lock size={13} weight={encrypt ? "fill" : "regular"} /> Encrypt
-        </button>
+        {pgpDefault && (
+          <button
+            type="button"
+            className={`em-quote-toggle em-encrypt-toggle${encrypt ? " is-on" : ""}`}
+            onClick={() => setEncrypt((v) => !v)}
+            title="PGP-encrypt this message so only the recipient can read it"
+          >
+            <Lock size={13} weight={encrypt ? "fill" : "regular"} /> Encrypt
+          </button>
+        )}
         {!showCc && (
           <button type="button" className="em-quote-toggle" onClick={() => setShowCc(true)}>
             Cc

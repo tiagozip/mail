@@ -528,11 +528,27 @@ function Encryption({ user, setUser }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
+  const [pgpDefault, setPgpDefault] = useState(user.settings?.pgpDefault === true);
 
   async function refreshUser() {
     const d = await api.me();
     if (d.user) setUser(d.user);
     return d.user;
+  }
+
+  async function togglePgpDefault(v) {
+    setPgpDefault(v);
+    try {
+      const d = await api.saveSettings({
+        displayName: user.displayName,
+        signature: user.signature,
+        settings: { ...user.settings, pgpDefault: v },
+      });
+      if (d.user) setUser(d.user);
+    } catch (err) {
+      setPgpDefault(!v);
+      notifyError(err);
+    }
   }
 
   async function enable(e) {
@@ -584,6 +600,7 @@ function Encryption({ user, setUser }) {
   }
 
   return (
+    <>
     <div className="em-card">
       <div className="em-card-head">
         <h2 className="em-card-title">End-to-end encryption</h2>
@@ -666,6 +683,25 @@ function Encryption({ user, setUser }) {
         </Button>
       )}
     </div>
+
+    <div className="em-card">
+      <div className="em-card-head">
+        <h2 className="em-card-title">Encrypt outgoing mail</h2>
+        <p className="em-card-sub">
+          When on, replies default to PGP-encrypted: you encrypt to the recipient's public key and
+          they decrypt it in their own client. You can still turn it off per message.
+        </p>
+      </div>
+      <label className="em-domain-public">
+        <Switch
+          aria-label="Encrypt outgoing by default"
+          checked={pgpDefault}
+          onCheckedChange={togglePgpDefault}
+        />
+        <span>Encrypt outgoing messages by default</span>
+      </label>
+    </div>
+    </>
   );
 }
 
