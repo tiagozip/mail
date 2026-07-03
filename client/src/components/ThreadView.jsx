@@ -533,11 +533,10 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     .map((s) => s.trim())
     .filter(Boolean);
   const pgpDefault = user.settings?.pgpDefault === true;
-  const [encrypt, setEncrypt] = useState(pgpDefault);
   const [manualKey, setManualKey] = useState("");
   const effectiveKey =
     recipKey || (/-----BEGIN PGP PUBLIC KEY BLOCK-----/.test(manualKey) ? manualKey.trim() : null);
-  const canE2E = encrypt && !!effectiveKey && !ccAddrs.length && !atts.length;
+  const canEncrypt = !!effectiveKey && !ccAddrs.length && !atts.length;
 
   async function uploadFiles(files) {
     for (const file of files) {
@@ -592,10 +591,11 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     editorRef.current?.commands.clearContent();
   }
 
-  async function send(sendAt) {
+  async function send(sendAt, doEncrypt) {
     const body = text.trim();
     const hasImg = /<img/i.test(html);
     if ((!body && !atts.length && !hasImg) || !replyTo) return;
+    const e2e = doEncrypt && canEncrypt;
     setSending(true);
     const subj = lastExternalSender.subject || "";
     const base = {
@@ -609,7 +609,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     try {
       let payload;
       let plain = body;
-      if (canE2E) {
+      if (e2e) {
         if (!ownKeyRef.current && user.pgpEnabled) {
           const own = await api.getPgp();
           ownKeyRef.current = own?.publicKey || null;
@@ -652,8 +652,8 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           subject: base.subject,
           snippet: plain.replace(/\s+/g, " ").trim().slice(0, 140),
           bodyText: plain,
-          bodyHtml: !canE2E && (body || hasImg) ? html : null,
-          hasHtml: !canE2E && html ? 1 : 0,
+          bodyHtml: !e2e && (body || hasImg) ? html : null,
+          hasHtml: !e2e && html ? 1 : 0,
           date: Date.now(),
           isRead: 1,
           pgp: 0,
@@ -682,8 +682,8 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   const canSend =
     (!!text.trim() || atts.length > 0 || /<img/i.test(html)) &&
     !!replyTo &&
-    !atts.some((a) => a.pending) &&
-    !(encrypt && !canE2E);
+    !atts.some((a) => a.pending);
+  const mainDisabled = !canSend || (pgpDefault && !canEncrypt);
 
   return (
     <div className="em-quickreply">
@@ -699,7 +699,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           </Select>
         </label>
       )}
-      {pgpDefault && encrypt && (
+      {pgpDefault && (
         <div className="em-encrypt-box">
           {effectiveKey ? (
             <div className="em-encrypt-status">
@@ -734,7 +734,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
       )}
       <Suspense fallback={<div className="em-editor-loading"><Loader size="sm" /></div>}>
         <RichEditor
-          placeholder={canE2E ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`}
+          placeholder={pgpDefault && canEncrypt ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`}
           onUpdate={({ html: h, text: t }) => {
             setHtml(h);
             setText(t);
@@ -823,12 +823,12 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
             className="em-split-main"
             size="sm"
             variant="primary"
-            icon={canE2E ? Lock : PaperPlaneTilt}
+            icon={pgpDefault ? Lock : PaperPlaneTilt}
             loading={sending}
-            disabled={!canSend}
-            onClick={() => send()}
+            disabled={mainDisabled}
+            onClick={() => send(undefined, pgpDefault)}
           >
-            {canE2E ? "Send encrypted" : "Send"}
+            {pgpDefault ? "Send encrypted" : "Send"}
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
@@ -839,15 +839,23 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
                   size="sm"
                   variant="primary"
                   shape="square"
-                  aria-label="Send later"
+                  aria-label="More send options"
                   icon={CaretDown}
-                  disabled={!canSend}
                 />
               )}
             />
             <DropdownMenu.Content style={{ zIndex: 200 }}>
+              {pgpDefault && (
+                <DropdownMenu.Item icon={PaperPlaneTilt} onClick={() => send(undefined, false)}>
+                  Send without encryption
+                </DropdownMenu.Item>
+              )}
+              <DropdownMenu.Item icon={ArrowBendUpLeft} onClick={() => onReply(last, "replyAll")}>
+                Reply all
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
               {sendLaterPresets().map((p) => (
-                <DropdownMenu.Item key={p.key} onClick={() => send(p.sendAt)}>
+                <DropdownMenu.Item key={p.key} onClick={() => send(p.sendAt, pgpDefault)}>
                   {p.label}
                 </DropdownMenu.Item>
               ))}
@@ -857,24 +865,11 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         <Button size="sm" variant="ghost" icon={Paperclip} onClick={() => fileInput.current?.click()}>
           Attach
         </Button>
-        {pgpDefault && (
-          <button
-            type="button"
-            className={`em-quote-toggle em-encrypt-toggle${encrypt ? " is-on" : ""}`}
-            onClick={() => setEncrypt((v) => !v)}
-            title="PGP-encrypt this message so only the recipient can read it"
-          >
-            <Lock size={13} weight={encrypt ? "fill" : "regular"} /> Encrypt
-          </button>
-        )}
         {!showCc && (
           <button type="button" className="em-quote-toggle" onClick={() => setShowCc(true)}>
             Cc
           </button>
         )}
-        <button type="button" className="em-quote-toggle" onClick={() => onReply(last, "replyAll")}>
-          Reply all
-        </button>
         <button type="button" className="em-quote-toggle" onClick={() => onForward(last)}>
           Forward
         </button>
