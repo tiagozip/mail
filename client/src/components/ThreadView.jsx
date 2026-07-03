@@ -532,7 +532,11 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     .split(/[,\s]+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const canE2E = user.pgpEnabled === true && !!recipKey && !ccAddrs.length && !atts.length;
+  const [encrypt, setEncrypt] = useState(false);
+  const [manualKey, setManualKey] = useState("");
+  const effectiveKey =
+    recipKey || (/-----BEGIN PGP PUBLIC KEY BLOCK-----/.test(manualKey) ? manualKey.trim() : null);
+  const canE2E = encrypt && !!effectiveKey && !ccAddrs.length && !atts.length;
 
   async function uploadFiles(files) {
     for (const file of files) {
@@ -605,17 +609,20 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
       let payload;
       let plain = body;
       if (canE2E) {
-        if (!ownKeyRef.current) {
+        if (!ownKeyRef.current && user.pgpEnabled) {
           const own = await api.getPgp();
           ownKeyRef.current = own?.publicKey || null;
         }
-        if (!ownKeyRef.current) {
-          notify("Cannot encrypt", "Your encryption key is unavailable.", "warning");
+        plain = editorRef.current?.getText?.() ?? body;
+        const keys = [effectiveKey, ownKeyRef.current].filter(Boolean);
+        let armored;
+        try {
+          armored = await pgp.encryptFor(keys, plain);
+        } catch {
+          notify("Cannot encrypt", "That public key could not be read.", "warning");
           setSending(false);
           return;
         }
-        plain = editorRef.current?.getText?.() ?? body;
-        const armored = await pgp.encryptFor([recipKey, ownKeyRef.current], plain);
         payload = { ...base, pgp: true, text: armored };
       } else {
         payload = {
@@ -689,6 +696,30 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
             ))}
           </Select>
         </label>
+      )}
+      {encrypt && (
+        <div className="em-encrypt-box">
+          {effectiveKey ? (
+            <div className="em-encrypt-status">
+              <Lock size={13} weight="fill" /> Encrypted to {replyName}
+              {(ccAddrs.length > 0 || atts.length > 0) && (
+                <span className="em-encrypt-warn"> · remove Cc/attachments to encrypt</span>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="em-encrypt-status">
+                Paste {replyName}'s PGP public key to encrypt for them
+              </div>
+              <textarea
+                className="em-textarea em-encrypt-key"
+                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
+                value={manualKey}
+                onChange={(e) => setManualKey(e.target.value)}
+              />
+            </>
+          )}
+        </div>
       )}
       {showCc && (
         <input
@@ -824,6 +855,14 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         <Button size="sm" variant="ghost" icon={Paperclip} onClick={() => fileInput.current?.click()}>
           Attach
         </Button>
+        <button
+          type="button"
+          className={`em-quote-toggle em-encrypt-toggle${encrypt ? " is-on" : ""}`}
+          onClick={() => setEncrypt((v) => !v)}
+          title="PGP-encrypt this message so only the recipient can read it"
+        >
+          <Lock size={13} weight={encrypt ? "fill" : "regular"} /> Encrypt
+        </button>
         {!showCc && (
           <button type="button" className="em-quote-toggle" onClick={() => setShowCc(true)}>
             Cc

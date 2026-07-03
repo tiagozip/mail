@@ -939,6 +939,41 @@ html[data-theme="nord"] {
   color: var(--text-color-kumo-subtle);
 }
 
+.em-encrypt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.em-encrypt-toggle.is-on {
+  color: var(--em-star, #e6b450);
+}
+
+.em-encrypt-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-2);
+  padding: var(--em-2) 0;
+}
+
+.em-encrypt-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-encrypt-warn {
+  color: var(--text-color-kumo-danger);
+}
+
+.em-encrypt-key {
+  min-height: 80px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem;
+}
+
 .em-reply-from-top {
   display: flex;
   padding-bottom: var(--em-2);
