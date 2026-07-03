@@ -1973,6 +1973,7 @@ html[data-theme="nord"] {
 .em-alias-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--em-1);
   flex: none;
 }
@@ -2165,9 +2166,10 @@ html[data-theme="nord"] {
 }
 
 .em-domain-main {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--em-2);
 }
