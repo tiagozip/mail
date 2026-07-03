@@ -1743,14 +1743,20 @@ export async function handleApi(request, env, ctx) {
     if (!isValidEmail(address)) return error(400, "invalid address");
     let name = "";
     let fingerprint = "";
+    let key;
     try {
-      const key = await openpgp.readKey({ armoredKey: publicKey });
-      fingerprint = key.getFingerprint();
-      const uid = (await key.getPrimaryUser())?.user?.userID;
-      name = uid?.name || uid?.email || "";
+      key = await openpgp.readKey({ armoredKey: publicKey });
     } catch {
       return error(400, "that isn't a valid PGP public key");
     }
+    try {
+      fingerprint = key.getFingerprint();
+    } catch {}
+    try {
+      const uid = key.getUserIDs?.()[0] || "";
+      const m = uid.match(/^(.*?)\s*<([^>]+)>/);
+      name = (m ? m[1] || m[2] : uid).trim();
+    } catch {}
     await env.DB.prepare(
       "INSERT INTO pgp_keys (user_id, address, public_key, name, fingerprint, created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id, address) DO UPDATE SET public_key = excluded.public_key, name = excluded.name, fingerprint = excluded.fingerprint",
     )
