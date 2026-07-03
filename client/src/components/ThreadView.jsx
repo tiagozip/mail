@@ -687,18 +687,16 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
 
   return (
     <div className="em-quickreply">
-      {addresses.length > 1 && (
-        <label className="em-reply-from em-reply-from-top">
-          <span>From</span>
-          <Select aria-label="From address" size="sm" value={fromAddr} onValueChange={setFromPick}>
-            {addresses.map((a) => (
-              <Select.Option key={a.address} value={a.address}>
-                {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
-              </Select.Option>
-            ))}
-          </Select>
-        </label>
-      )}
+      <label className="em-reply-from em-reply-from-top">
+        <span>From</span>
+        <Select aria-label="From address" size="sm" value={fromAddr} onValueChange={setFromPick}>
+          {addresses.map((a) => (
+            <Select.Option key={a.address} value={a.address}>
+              {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
+            </Select.Option>
+          ))}
+        </Select>
+      </label>
       {pgpDefault && (
         <div className="em-encrypt-box">
           {effectiveKey ? (

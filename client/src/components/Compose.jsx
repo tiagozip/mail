@@ -599,8 +599,6 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     onClose();
   }
 
-  const multiAddr = addresses.length > 1;
-
   return (
     <DialogRoot open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog
@@ -624,22 +622,18 @@ export function Compose({ open, initial, user, onClose, onSent }) {
         <div className="em-compose-fields">
           <div className="em-compose-from">
             <label>From</label>
-            {multiAddr ? (
-              <Select
-                aria-label="From address"
-                size="sm"
-                value={from}
-                onValueChange={(v) => setFrom(v)}
-              >
-                {addresses.map((a) => (
-                  <Select.Option key={a.address} value={a.address}>
-                    {a.address}
-                  </Select.Option>
-                ))}
-              </Select>
-            ) : (
-              <span className="em-compose-from-static">{from}</span>
-            )}
+            <Select
+              aria-label="From address"
+              size="sm"
+              value={from}
+              onValueChange={(v) => setFrom(v)}
+            >
+              {addresses.map((a) => (
+                <Select.Option key={a.address} value={a.address}>
+                  {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
+                </Select.Option>
+              ))}
+            </Select>
           </div>
           <RecipientField label="To" value={to} onChange={setTo} autoFocus />
           {showCc && <RecipientField label="Cc" value={cc} onChange={setCc} />}
