@@ -48,6 +48,8 @@ function RecipientField({ label, value, onChange, autoFocus }) {
   const timer = useRef(null);
   const listRef = useRef(null);
   const inputRef = useRef(null);
+  const reqSeq = useRef(0);
+  const draftRef = useRef("");
 
   const tokens = value.split(",");
   const recipients = tokens
@@ -55,23 +57,28 @@ function RecipientField({ label, value, onChange, autoFocus }) {
     .map((s) => s.trim())
     .filter(Boolean);
   const draft = (tokens[tokens.length - 1] || "").replace(/^\s+/, "");
+  draftRef.current = draft;
 
   function queueSuggest(d) {
     const last = d.trim();
     clearTimeout(timer.current);
+    reqSeq.current += 1;
     if (!last) {
       setSuggestions([]);
       setShow(false);
       return;
     }
+    const seq = reqSeq.current;
     timer.current = setTimeout(async () => {
       try {
         const r = await api.contacts(last);
+        if (seq !== reqSeq.current || draftRef.current.trim() !== last) return;
         const list = r.contacts || [];
         setSuggestions(list);
         setActive(0);
         setShow(list.length > 0);
       } catch {
+        if (seq !== reqSeq.current) return;
         setSuggestions([]);
         setShow(false);
       }
@@ -168,7 +175,7 @@ function RecipientField({ label, value, onChange, autoFocus }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
-            onFocus={() => suggestions.length && setShow(true)}
+            onFocus={() => (draft.trim() ? queueSuggest(draft) : suggestions.length && setShow(true))}
             onBlur={() => setTimeout(() => setShow(false), 150)}
           />
           {show && suggestions.length > 0 && (
