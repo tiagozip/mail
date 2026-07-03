@@ -20,6 +20,7 @@ import {
   Funnel,
   Globe,
   IdentificationCard,
+  Key,
   Lock,
   LockKey,
   Palette,
@@ -705,6 +706,123 @@ function Encryption({ user, setUser }) {
   );
 }
 
+function KeyRing() {
+  const [keys, setKeys] = useState(null);
+  const [address, setAddress] = useState("");
+  const [pubkey, setPubkey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function load() {
+    api
+      .pgpKeys()
+      .then((d) => setKeys(d.keys || []))
+      .catch(notifyError);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function add(e) {
+    e.preventDefault();
+    const addr = address.trim().toLowerCase();
+    if (!addr || !pubkey.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.addPgpKey(addr, pubkey.trim());
+      setAddress("");
+      setPubkey("");
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(addr) {
+    try {
+      await api.removePgpKey(addr);
+      setKeys((p) => (p || []).filter((k) => k.address !== addr));
+    } catch (err) {
+      notifyError(err);
+    }
+  }
+
+  return (
+    <div className="em-card">
+      <div className="em-card-head">
+        <h2 className="em-card-title">Recipient keys</h2>
+        <p className="em-card-sub">
+          Save people's PGP public keys here and mail to them is encrypted automatically, no pasting
+          each time. Contacts who use encryption on this server are already found for you.
+        </p>
+      </div>
+
+      {!keys ? (
+        <Loader size="sm" />
+      ) : keys.length === 0 ? (
+        <div className="em-empty-hint">No saved keys yet.</div>
+      ) : (
+        <div className="em-alias-list">
+          {keys.map((k) => (
+            <div key={k.address} className="em-alias-row">
+              <span className="em-alias-addr">
+                <span>{k.name ? `${k.name} · ${k.address}` : k.address}</span>
+                {k.fingerprint && (
+                  <span className="em-hidden-meta">
+                    {k.fingerprint.slice(-16).replace(/(.{4})/g, "$1 ").trim()}
+                  </span>
+                )}
+              </span>
+              <div className="em-alias-actions">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  shape="square"
+                  aria-label="Remove key"
+                  icon={Trash}
+                  onClick={() => remove(k.address)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form className="em-keyring-add" onSubmit={add}>
+        <Input
+          label="Email address"
+          placeholder="them@example.com"
+          value={address}
+          onChange={(e) => {
+            setAddress(e.target.value);
+            setError("");
+          }}
+        />
+        <div>
+          <label className="em-field-label">Public key</label>
+          <textarea
+            className="em-textarea em-encrypt-key"
+            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
+            value={pubkey}
+            onChange={(e) => {
+              setPubkey(e.target.value);
+              setError("");
+            }}
+          />
+        </div>
+        {error && <div className="em-form-error">{error}</div>}
+        <Button type="submit" variant="primary" icon={Plus} loading={busy}>
+          Save key
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 const FIELD_LABELS = { from: "From", to: "To", subject: "Subject" };
 const ACTION_LABELS = {
   read: "mark as read",
@@ -1192,6 +1310,7 @@ const SECTIONS = [
   { id: "domains", label: "Domains", icon: Globe },
   { id: "filters", label: "Filters", icon: Funnel },
   { id: "encryption", label: "Encryption", icon: LockKey },
+  { id: "keys", label: "Keys", icon: Key, needsPgp: true },
   { id: "developer", label: "Developer", icon: Code },
 ];
 
@@ -1332,7 +1451,7 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
         </div>
         <div className="em-settings-body">
           <nav className="em-settings-rail">
-            {SECTIONS.map((s) => {
+            {SECTIONS.filter((s) => !s.needsPgp || user.settings?.pgpDefault).map((s) => {
               const Icon = s.icon;
               const active = section === s.id;
               return (
@@ -1565,6 +1684,8 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
             )}
 
             {section === "encryption" && <Encryption user={user} setUser={setUser} />}
+
+            {section === "keys" && <KeyRing />}
 
             {section === "developer" && <ApiKeys />}
           </div>

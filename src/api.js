@@ -48,6 +48,7 @@ import {
 import {
   clampInt,
   error,
+  isValidEmail,
   json,
   normalizeAddr,
   now,
@@ -1706,13 +1707,63 @@ export async function handleApi(request, env, ctx) {
   if (path === "/api/pgp/pubkey" && method === "GET") {
     const address = normalizeAddr(url.searchParams.get("address") || "");
     if (!address) return error(400, "address required");
+    const saved = await env.DB.prepare(
+      "SELECT public_key FROM pgp_keys WHERE user_id = ? AND address = ?",
+    )
+      .bind(user.id, address)
+      .first();
+    if (saved?.public_key) return json({ publicKey: saved.public_key, source: "keyring" });
     const row = await env.DB.prepare(
       "SELECT u.pgp_public_key AS pk FROM addresses a JOIN users u ON u.id = a.user_id WHERE a.address = ? AND u.pgp_enabled = 1 AND u.pgp_public_key IS NOT NULL",
     )
       .bind(address)
       .first();
     if (!row?.pk) return error(404, "no public key");
-    return json({ publicKey: row.pk });
+    return json({ publicKey: row.pk, source: "directory" });
+  }
+  if (path === "/api/pgp/keys" && method === "GET") {
+    const res = await env.DB.prepare(
+      "SELECT address, name, fingerprint, created_at FROM pgp_keys WHERE user_id = ? ORDER BY address",
+    )
+      .bind(user.id)
+      .all();
+    return json({
+      keys: (res.results || []).map((k) => ({
+        address: k.address,
+        name: k.name || "",
+        fingerprint: k.fingerprint || "",
+        createdAt: k.created_at,
+      })),
+    });
+  }
+  if (path === "/api/pgp/keys" && method === "POST") {
+    const b = await readJson(request);
+    const address = normalizeAddr(b.address || "");
+    const publicKey = String(b.publicKey || "").trim();
+    if (!isValidEmail(address)) return error(400, "invalid address");
+    let name = "";
+    let fingerprint = "";
+    try {
+      const key = await openpgp.readKey({ armoredKey: publicKey });
+      fingerprint = key.getFingerprint();
+      const uid = (await key.getPrimaryUser())?.user?.userID;
+      name = uid?.name || uid?.email || "";
+    } catch {
+      return error(400, "that isn't a valid PGP public key");
+    }
+    await env.DB.prepare(
+      "INSERT INTO pgp_keys (user_id, address, public_key, name, fingerprint, created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id, address) DO UPDATE SET public_key = excluded.public_key, name = excluded.name, fingerprint = excluded.fingerprint",
+    )
+      .bind(user.id, address, publicKey, name || null, fingerprint || null, now())
+      .run();
+    return json({ address, name, fingerprint });
+  }
+  if ((m = path.match(/^\/api\/pgp\/keys\/(.+)$/)) && method === "DELETE") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    await env.DB.prepare("DELETE FROM pgp_keys WHERE user_id = ? AND address = ?")
+      .bind(user.id, address)
+      .run();
+    return json({ ok: true });
   }
 
   if (path === "/api/contacts" && method === "GET") {

@@ -974,6 +974,19 @@ html[data-theme="nord"] {
   font-size: 0.7rem;
 }
 
+.em-keyring-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-3);
+  margin-top: var(--em-4);
+  padding-top: var(--em-4);
+  border-top: 1px solid var(--color-kumo-hairline);
+}
+
+.em-keyring-add .em-encrypt-key {
+  width: 100%;
+}
+
 .em-reply-from-top {
   display: flex;
   padding-bottom: var(--em-2);

@@ -121,6 +121,9 @@ export const api = {
   enablePgp: (publicKey, privateKeyEnc) => req("POST", "/api/pgp/enable", { publicKey, privateKeyEnc }),
   disablePgp: () => req("DELETE", "/api/pgp"),
   pgpPubkey: (address) => req("GET", `/api/pgp/pubkey?address=${encodeURIComponent(address)}`),
+  pgpKeys: () => req("GET", "/api/pgp/keys"),
+  addPgpKey: (address, publicKey) => req("POST", "/api/pgp/keys", { address, publicKey }),
+  removePgpKey: (address) => req("DELETE", `/api/pgp/keys/${encodeURIComponent(address)}`),
 
   listApiKeys: () => req("GET", "/api/keys"),
   createApiKey: (name) => req("POST", "/api/keys", { name }),
