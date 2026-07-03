@@ -1204,21 +1204,18 @@ html[data-theme="nord"] {
 .em-letter {
   max-width: 100%;
   overflow-x: auto;
-  border-radius: var(--em-radius);
-  background: #ffffff;
-  color: #1b1b1b;
-  color-scheme: light;
-  padding: 16px 18px;
+  border-radius: var(--em-radius-sm);
+  color: var(--text-color-kumo-default);
   font-size: 0.9rem;
   line-height: 1.6;
 }
 
 .em-letter-inner {
-  color: #1b1b1b;
+  color: var(--text-color-kumo-default);
 }
 
 .em-letter-inner a {
-  color: #0b57d0;
+  color: var(--text-color-kumo-link);
 }
 
 .em-letter-inner img {
