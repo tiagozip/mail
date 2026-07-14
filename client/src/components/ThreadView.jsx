@@ -411,7 +411,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
         <div className="em-msg-body">
           {message.authStatus === "fail" && (
             <div className="em-spoof-banner">
-              <Image src={spamton} className="em-spoof-image" alt="Spamton"></Image>
+              <img src={spamton} className="em-spoof-image" alt="Spamton" />
               <div className="em-spoof-copy">
                 <div className="em-spoof-title">This message may be [[spoofed]]</div>
                 <div className="em-spoof-text">
