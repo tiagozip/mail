@@ -19,12 +19,35 @@ data class UnlockedIdentity(
     val armoredPublicKey: String
 )
 
+data class GeneratedIdentity(
+    val publicKey: String,
+    val privateKeyEnc: String
+)
+
 object PgpEngine {
 
     fun looksEncrypted(text: String?): Boolean {
         val t = text?.trimStart() ?: return false
         return t.startsWith("-----BEGIN PGP MESSAGE-----")
     }
+
+    fun generateIdentity(name: String, email: String, passphrase: String): Result<GeneratedIdentity> = runCatching {
+        val userId = when {
+            name.isNotBlank() && email.isNotBlank() -> "$name <$email>"
+            email.isNotBlank() -> email
+            else -> name.ifBlank { "Estrogen Mail" }
+        }
+        val secretKeys = PGPainless.generateKeyRing().modernKeyRing(userId, passphrase)
+        val armoredPrivate = PGPainless.asciiArmor(secretKeys)
+        val armoredPublic = PGPainless.asciiArmor(PGPainless.extractCertificate(secretKeys))
+        GeneratedIdentity(armoredPublic, armoredPrivate)
+    }
+
+    fun fingerprint(armored: String): String = runCatching {
+        val cert = runCatching { PGPainless.readKeyRing().publicKeyRing(armored) }.getOrNull()
+            ?: PGPainless.readKeyRing().secretKeyRing(armored)?.let { PGPainless.extractCertificate(it) }
+        cert?.let { org.pgpainless.key.OpenPgpFingerprint.of(it).toString() }.orEmpty()
+    }.getOrDefault("")
 
     fun unlock(armoredPrivateKey: String, passphrase: String): Result<UnlockedIdentity> = runCatching {
         val secretKeys = PGPainless.readKeyRing().secretKeyRing(armoredPrivateKey)

@@ -34,6 +34,9 @@ export const api = {
   logout: () => req("POST", "/api/auth/logout"),
 
   folders: () => req("GET", "/api/folders"),
+  addFolder: (body) => req("POST", "/api/folders", body),
+  updateFolder: (id, body) => req("PATCH", `/api/folders/${id}`, body),
+  removeFolder: (id) => req("DELETE", `/api/folders/${id}`),
   sync: (since, limit) =>
     req("GET", `/api/sync?since=${since || 0}${limit ? `&limit=${limit}` : ""}`),
   messages: (params) => {
@@ -50,6 +53,7 @@ export const api = {
   setRead: (id, read) => req("POST", `/api/messages/${id}/read`, { read }),
   setStar: (id, star) => req("POST", `/api/messages/${id}/star`, { star }),
   moveMessage: (id, folder) => req("POST", `/api/messages/${id}/move`, { folder }),
+  moveToFolder: (id, folderId) => req("POST", `/api/messages/${id}/move`, { folderId }),
   setLabels: (id, add, remove) => req("POST", `/api/messages/${id}/labels`, { add, remove }),
   deleteMessage: (id) => req("DELETE", `/api/messages/${id}`),
   bulk: (ids, action, value) => req("POST", "/api/messages/bulk", { ids, action, value }),
@@ -71,6 +75,15 @@ export const api = {
   addAlias: (localPart, domain) => req("POST", "/api/aliases", { localPart, domain }),
   removeAlias: (address) => req("DELETE", `/api/aliases/${encodeURIComponent(address)}`),
   setPrimaryAddress: (address) => req("POST", "/api/aliases/primary", { address }),
+  setAliasIdentity: (address, body) =>
+    req("PATCH", `/api/aliases/${encodeURIComponent(address)}/identity`, body),
+  uploadAliasAvatar: (address, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return req("POST", `/api/aliases/${encodeURIComponent(address)}/avatar`, form, true);
+  },
+  deleteAliasAvatar: (address) =>
+    req("DELETE", `/api/aliases/${encodeURIComponent(address)}/avatar`),
   hiddenAliases: () => req("GET", "/api/hidden-aliases"),
   createHiddenAlias: (label) => req("POST", "/api/hidden-aliases", { label }),
   updateHiddenAlias: (address, patch) =>
@@ -108,6 +121,9 @@ export const api = {
   enablePgp: (publicKey, privateKeyEnc) => req("POST", "/api/pgp/enable", { publicKey, privateKeyEnc }),
   disablePgp: () => req("DELETE", "/api/pgp"),
   pgpPubkey: (address) => req("GET", `/api/pgp/pubkey?address=${encodeURIComponent(address)}`),
+  pgpKeys: () => req("GET", "/api/pgp/keys"),
+  addPgpKey: (address, publicKey) => req("POST", "/api/pgp/keys", { address, publicKey }),
+  removePgpKey: (address) => req("DELETE", `/api/pgp/keys/${encodeURIComponent(address)}`),
 
   listApiKeys: () => req("GET", "/api/keys"),
   createApiKey: (name) => req("POST", "/api/keys", { name }),

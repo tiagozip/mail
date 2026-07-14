@@ -351,6 +351,16 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     }
   }
 
+  let folderId = null;
+  if (matchedAddress) {
+    const fdr = await env.DB.prepare(
+      "SELECT id FROM folders WHERE user_id = ? AND alias_address = ? LIMIT 1",
+    )
+      .bind(userId, matchedAddress)
+      .first();
+    if (fdr) folderId = fdr.id;
+  }
+
   await insertMessage(env, {
     id: messageId,
     user_id: userId,
@@ -359,6 +369,8 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     in_reply_to: inReplyTo,
     refs: refs.join(" "),
     folder,
+    folder_id: folderId,
+    delivered_to: matchedAddress || null,
     auth_status: auth.status,
     auth_detail: JSON.stringify({
       spf: auth.spf,

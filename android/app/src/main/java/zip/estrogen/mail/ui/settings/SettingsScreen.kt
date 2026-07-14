@@ -1,6 +1,8 @@
 package zip.estrogen.mail.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,132 +12,142 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.automirrored.rounded.Logout
-import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.AlternateEmail
+import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.FilterAlt
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.SwipeRightAlt
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import zip.estrogen.mail.data.pgp.PgpStatus
 import zip.estrogen.mail.ui.appViewModel
 import zip.estrogen.mail.ui.common.Avatar
+import zip.estrogen.mail.ui.common.BackButton
+import zip.estrogen.mail.ui.common.NavListRow
+import zip.estrogen.mail.ui.common.SectionLabel
+import zip.estrogen.mail.ui.common.SettingsCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenEncryption: () -> Unit = {},
+    onOpenAppearance: () -> Unit = {},
+    onOpenProfile: () -> Unit = {},
+    onOpenAliases: () -> Unit = {},
+    onOpenFilters: () -> Unit = {},
+    onOpenLabels: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
+    onOpenScheduled: () -> Unit = {},
+    onOpenKeys: () -> Unit = {},
+    onOpenByod: () -> Unit = {},
+    onOpenSwipe: () -> Unit = {},
     onSignedOut: () -> Unit
 ) {
     val viewModel = appViewModel<SettingsViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
-    LaunchedEffect(state.signedOut) {
-        if (state.signedOut) onSignedOut()
-    }
-    LaunchedEffect(state.message) {
-        state.message?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.consumeMessage()
-        }
-    }
+    LaunchedEffect(state.signedOut) { if (state.signedOut) onSignedOut() }
+    LaunchedEffect(state.message) { state.message?.let { snackbarHostState.showSnackbar(it); viewModel.consumeMessage() } }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
+            LargeTopAppBar(
+                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                navigationIcon = { BackButton(onBack) },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.largeTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp)
         ) {
-            AccountCard(state)
-            Spacer(Modifier.size(16.dp))
+            ProfileHeader(state, onOpenProfile)
 
-            SectionTitle("Appearance")
-            SettingCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Dynamic color", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                        Text(
-                            if (state.dynamicSupported) "Match colors to your wallpaper" else "Needs Android 12 or newer",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = state.dynamicColor && state.dynamicSupported,
-                        onCheckedChange = { viewModel.setDynamicColor(it) },
-                        enabled = state.dynamicSupported
-                    )
-                }
+            Spacer(Modifier.size(24.dp))
+            SectionLabel("Mail")
+            SettingsCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp)) {
+                NavListRow(Icons.Rounded.AlternateEmail, "Addresses & aliases", null, onOpenAliases)
+                NavListRow(Icons.Rounded.FilterAlt, "Filters", null, onOpenFilters)
+                NavListRow(Icons.AutoMirrored.Rounded.Label, "Labels", null, onOpenLabels)
+                NavListRow(Icons.Rounded.Schedule, "Scheduled", null, onOpenScheduled)
             }
 
-            Spacer(Modifier.size(16.dp))
-            SectionTitle("Encryption")
-            PgpCard(state, viewModel)
+            Spacer(Modifier.size(20.dp))
+            SectionLabel("App")
+            SettingsCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp)) {
+                val pgpOn = state.pgpStatus == PgpStatus.UNLOCKED
+                NavListRow(
+                    icon = if (pgpOn) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
+                    title = "Encryption",
+                    subtitle = when (state.pgpStatus) {
+                        PgpStatus.UNLOCKED -> "On"
+                        PgpStatus.LOCKED -> "Locked"
+                        PgpStatus.ABSENT -> "Off"
+                    },
+                    onClick = onOpenEncryption,
+                    badgeContainer = if (pgpOn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    badgeTint = if (pgpOn) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                NavListRow(Icons.Rounded.Palette, "Appearance", null, onOpenAppearance)
+                NavListRow(Icons.Rounded.SwipeRightAlt, "Swipe actions", null, onOpenSwipe)
+                NavListRow(Icons.Rounded.Notifications, "Notifications", null, onOpenNotifications)
+                NavListRow(Icons.Rounded.Dns, "Your domain", null, onOpenByod)
+                NavListRow(Icons.Rounded.Key, "API keys", null, onOpenKeys)
+            }
 
-            Spacer(Modifier.size(16.dp))
-            SectionTitle("Account")
-            SettingCard {
-                Column(modifier = Modifier.padding(16.dp)) {
+            Spacer(Modifier.size(20.dp))
+            SectionLabel("Account")
+            SettingsCard {
+                Column(modifier = Modifier.padding(20.dp)) {
                     LabeledValue("Server", state.baseUrl.ifBlank { "not set" })
-                    Spacer(Modifier.size(16.dp))
+                    Spacer(Modifier.size(18.dp))
                     OutlinedButton(
                         onClick = viewModel::signOut,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        shape = MaterialTheme.shapes.large,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -145,193 +157,56 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.size(16.dp))
-            SectionTitle("About")
-            SettingCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    LabeledValue("App", "Estrogen Mail")
-                    Spacer(Modifier.size(8.dp))
-                    LabeledValue("Version", "0.1.0")
-                    Spacer(Modifier.size(8.dp))
+            Spacer(Modifier.size(20.dp))
+            SettingsCard {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    LabeledValue("Estrogen Mail", "Version 0.1.0")
+                    Spacer(Modifier.size(10.dp))
                     Text(
-                        "Your API key and PGP secrets stay on this device. Encrypted mail is decrypted locally and never leaves your phone in the clear.",
+                        "Your keys and PGP secrets stay on this device. Encrypted mail is decrypted locally and never leaves your phone in the clear.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            Spacer(Modifier.size(32.dp))
+            Spacer(Modifier.size(40.dp))
         }
     }
 }
 
 @Composable
-private fun AccountCard(state: SettingsState) {
-    SettingCard {
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(
-                url = state.avatarUrl,
-                seed = state.address ?: "me",
-                label = state.displayName ?: state.address,
-                size = 56.dp
-            )
-            Spacer(Modifier.width(14.dp))
-            Column {
-                Text(
-                    state.displayName ?: "Your mailbox",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                if (state.address != null) {
-                    Text(state.address, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PgpCard(state: SettingsState, viewModel: SettingsViewModel) {
-    SettingCard {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (state.pgpStatus == PgpStatus.UNLOCKED) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        when (state.pgpStatus) {
-                            PgpStatus.UNLOCKED -> "Unlocked"
-                            PgpStatus.LOCKED -> "Locked"
-                            PgpStatus.ABSENT -> "No key on this device"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        when (state.pgpStatus) {
-                            PgpStatus.UNLOCKED -> "You can read and send encrypted mail"
-                            PgpStatus.LOCKED -> "Enter your passphrase to use encryption"
-                            PgpStatus.ABSENT -> "Import your private key to enable encryption"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(Modifier.size(12.dp))
-
-            if (state.pgpStatus == PgpStatus.LOCKED) {
-                PassphraseField(state, viewModel)
-                Spacer(Modifier.size(8.dp))
-                FilledTonalButton(onClick = viewModel::unlockExisting, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                    ButtonContent(state.busy, "Unlock")
-                }
-                Spacer(Modifier.size(8.dp))
-                TextButton(onClick = viewModel::forgetKey, modifier = Modifier.fillMaxWidth()) {
-                    Text("Remove key from device")
-                }
-            }
-
-            if (state.pgpStatus == PgpStatus.UNLOCKED) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = viewModel::lock, modifier = Modifier.weight(1f)) {
-                        Text("Lock")
-                    }
-                    OutlinedButton(
-                        onClick = viewModel::forgetKey,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Remove")
-                    }
-                }
-            }
-
-            if (state.pgpStatus == PgpStatus.ABSENT) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = viewModel::fetchKeyFromServer, enabled = !state.busy, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("From server")
-                    }
-                    FilledTonalButton(onClick = viewModel::toggleImport, modifier = Modifier.weight(1f)) {
-                        Text(if (state.importVisible) "Hide" else "Paste key")
-                    }
-                }
-            }
-
-            if (state.importVisible && state.pgpStatus == PgpStatus.ABSENT) {
-                Spacer(Modifier.size(12.dp))
-                OutlinedTextField(
-                    value = state.importKeyText,
-                    onValueChange = viewModel::onImportKeyText,
-                    label = { Text("Armored private key") },
-                    placeholder = { Text("-----BEGIN PGP PRIVATE KEY BLOCK-----") },
-                    minLines = 4,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.size(8.dp))
-                PassphraseField(state, viewModel)
-                Spacer(Modifier.size(8.dp))
-                FilledTonalButton(onClick = viewModel::importAndUnlock, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                    ButtonContent(state.busy, "Import and unlock")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PassphraseField(state: SettingsState, viewModel: SettingsViewModel) {
-    OutlinedTextField(
-        value = state.passphrase,
-        onValueChange = viewModel::onPassphrase,
-        label = { Text("Passphrase") },
-        singleLine = true,
-        enabled = !state.busy,
-        visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-        modifier = Modifier.fillMaxWidth()
-    )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = state.rememberPassphrase, onCheckedChange = viewModel::setRememberPassphrase)
-        Text("Remember on this device", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun ButtonContent(busy: Boolean, label: String) {
-    if (busy) {
-        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-    } else {
-        Text(label)
-    }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-    )
-}
-
-@Composable
-private fun SettingCard(content: @Composable () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        shape = MaterialTheme.shapes.large
+private fun ProfileHeader(state: SettingsState, onOpenProfile: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clickable(onClick = onOpenProfile)
+            .padding(20.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        content()
+        Avatar(url = state.avatarUrl, seed = state.address ?: "me", label = state.displayName ?: state.address, size = 60.dp)
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                state.displayName ?: "Your mailbox",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            state.address?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
+            }
+        }
+        Box(
+            modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
     }
 }
 
@@ -339,6 +214,7 @@ private fun SettingCard(content: @Composable () -> Unit) {
 private fun LabeledValue(label: String, value: String) {
     Column {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.size(2.dp))
         Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
     }
 }

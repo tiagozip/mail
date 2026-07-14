@@ -48,6 +48,7 @@ import {
 import {
   clampInt,
   error,
+  isValidEmail,
   json,
   normalizeAddr,
   now,
@@ -91,6 +92,8 @@ function listItem(row) {
     id: row.id,
     threadId: row.thread_id,
     folder: row.folder,
+    folderId: row.folder_id || null,
+    deliveredTo: row.delivered_to || null,
     from: { address: row.from_addr, name: row.from_name },
     to: JSON.parse(row.to_json || "[]"),
     subject: row.subject,
@@ -130,7 +133,7 @@ async function attachSenderAvatars(env, items) {
   if (!addrs.length) return items;
   const ph = addrs.map(() => "?").join(",");
   const res = await env.DB.prepare(
-    `SELECT a.address, u.avatar_url FROM addresses a JOIN users u ON u.id = a.user_id WHERE a.address IN (${ph}) AND u.avatar_url IS NOT NULL`,
+    `SELECT a.address, COALESCE(a.avatar_url, u.avatar_url) AS avatar_url FROM addresses a JOIN users u ON u.id = a.user_id WHERE a.address IN (${ph}) AND COALESCE(a.avatar_url, u.avatar_url) IS NOT NULL`,
   )
     .bind(...addrs)
     .all();
@@ -169,12 +172,13 @@ function safeEqual(a, b) {
 
 async function oidcLogin(request, env) {
   const url = new URL(request.url);
+  const native = url.searchParams.get("native") === "1";
   const redirectUri = `${url.origin}/api/auth/callback`;
   const state = randomToken(16);
   const nonce = randomToken(16);
   const verifier = randomVerifier();
   const challenge = await challengeFor(verifier);
-  await env.KV.put(`oauthflow:${state}`, JSON.stringify({ verifier, nonce, redirectUri }), {
+  await env.KV.put(`oauthflow:${state}`, JSON.stringify({ verifier, nonce, redirectUri, native }), {
     expirationTtl: 600,
   });
   const dest = await authorizeUrl(env, { redirectUri, state, nonce, challenge });
@@ -221,6 +225,13 @@ async function oidcCallback(request, env) {
     }
     const user = await upsertOidcUser(env, { ...claims, sub: verified.sub });
     const token = await createSession(env, user.id, { idToken: tokens.id_token || null });
+    if (flow.native) {
+      const oneTime = randomToken(32);
+      await env.KV.put(`nativeauth:${oneTime}`, JSON.stringify({ userId: user.id }), {
+        expirationTtl: 120,
+      });
+      return redirectTo(`${url.origin}/app/auth?code=${oneTime}`, { "set-cookie": clearFlow });
+    }
     const headers = new Headers();
     headers.append("set-cookie", clearFlow);
     headers.append("set-cookie", sessionCookie(token, secure));
@@ -232,6 +243,27 @@ async function oidcCallback(request, env) {
       "set-cookie": clearFlow,
     });
   }
+}
+
+async function nativeExchange(request, env) {
+  const body = await readJson(request);
+  const code = String(body.code || "");
+  if (!code) return error(400, "missing code");
+  const raw = await env.KV.get(`nativeauth:${code}`);
+  if (!raw) return error(400, "invalid or expired code");
+  await env.KV.delete(`nativeauth:${code}`);
+  const { userId } = JSON.parse(raw);
+  const user = await env.DB.prepare("SELECT id, address FROM users WHERE id = ?").bind(userId).first();
+  if (!user) return error(400, "user not found");
+  const key = `emk_${randomToken(20)}`;
+  const prefix = key.slice(0, 12);
+  const keyHash = await sha256Hex(key);
+  await env.DB.prepare(
+    "INSERT INTO api_keys (id, user_id, name, key_hash, prefix, created_at) VALUES (?,?,?,?,?,?)",
+  )
+    .bind(uuid(), userId, "Android app", keyHash, prefix, now())
+    .run();
+  return json({ apiKey: key, address: user.address });
 }
 
 async function upsertOidcUser(env, claims) {
@@ -380,11 +412,17 @@ async function notifyAdminsPublicRequest(env, domain, requester) {
 
 async function listAddresses(env, userId) {
   const res = await env.DB.prepare(
-    "SELECT address, is_primary FROM addresses WHERE user_id = ? AND kind = 'standard' ORDER BY is_primary DESC, address",
+    "SELECT address, is_primary, display_name, signature, avatar_url FROM addresses WHERE user_id = ? AND kind = 'standard' ORDER BY is_primary DESC, address",
   )
     .bind(userId)
     .all();
-  return (res.results || []).map((r) => ({ address: r.address, isPrimary: !!r.is_primary }));
+  return (res.results || []).map((r) => ({
+    address: r.address,
+    isPrimary: !!r.is_primary,
+    displayName: r.display_name || "",
+    signature: r.signature || "",
+    avatar: r.avatar_url || null,
+  }));
 }
 
 function publicUser(u) {
@@ -426,6 +464,7 @@ async function listMessages(request, env, user) {
   const folder = url.searchParams.get("folder") || "inbox";
   const q = (url.searchParams.get("q") || "").trim();
   const labelId = url.searchParams.get("label");
+  const folderParam = url.searchParams.get("folderId");
   const starred = url.searchParams.get("starred") === "1";
   const limit = clampInt(url.searchParams.get("limit"), 1, 100, 50);
   const cursor = url.searchParams.get("cursor");
@@ -435,27 +474,97 @@ async function listMessages(request, env, user) {
 
   const nowTs = now();
   if (q) {
-    const term = q.replace(/[^\w\s@.-]/g, " ").trim();
-    if (!term) return json({ messages: [], nextCursor: null });
-    let ftsIds;
-    try {
-      ftsIds = await env.DB.prepare(
-        "SELECT mid FROM messages_fts WHERE uid = ? AND messages_fts MATCH ? LIMIT 300",
-      )
-        .bind(user.id, `"${term}"*`)
-        .all();
-    } catch {
+    const ops = { is: [] };
+    const opRe = /(\w+):("[^"]+"|[^\s]+)/g;
+    let mt;
+    while ((mt = opRe.exec(q))) {
+      const key = mt[1].toLowerCase();
+      const val = mt[2].replace(/^"|"$/g, "");
+      if (key === "is") ops.is.push(val.toLowerCase());
+      else ops[key] = val;
+    }
+    const text = q.replace(opRe, " ").replace(/\s+/g, " ").trim();
+    const like = (s) => `%${String(s).replace(/[%_\\]/g, "\\$&")}%`;
+    const FOLDERS_OK = new Set(["inbox", "sent", "drafts", "archive", "spam", "trash", "snoozed"]);
+
+    if (ops.from) {
+      where.push("(m.from_addr LIKE ? ESCAPE '\\' OR m.from_name LIKE ? ESCAPE '\\')");
+      binds.push(like(ops.from), like(ops.from));
+    }
+    if (ops.to) {
+      where.push("(m.to_json LIKE ? ESCAPE '\\' OR m.cc_json LIKE ? ESCAPE '\\')");
+      binds.push(like(ops.to), like(ops.to));
+    }
+    if (ops.subject) {
+      where.push("m.subject LIKE ? ESCAPE '\\'");
+      binds.push(like(ops.subject));
+    }
+    if (ops.has && /attach/.test(ops.has.toLowerCase())) where.push("m.has_attachments = 1");
+    for (const v of ops.is) {
+      if (v === "unread") where.push("m.is_read = 0");
+      else if (v === "read") where.push("m.is_read = 1");
+      else if (v === "starred" || v === "star") where.push("m.is_starred = 1");
+    }
+    const parseDay = (s) => {
+      const t = Date.parse(String(s).replace(/\//g, "-"));
+      return Number.isNaN(t) ? null : t;
+    };
+    if (ops.after) {
+      const t = parseDay(ops.after);
+      if (t !== null) {
+        where.push("m.date >= ?");
+        binds.push(t);
+      }
+    }
+    if (ops.before) {
+      const t = parseDay(ops.before);
+      if (t !== null) {
+        where.push("m.date < ?");
+        binds.push(t);
+      }
+    }
+    if (ops.label) {
+      where.push(
+        "m.id IN (SELECT ml.message_id FROM message_labels ml JOIN labels l ON l.id = ml.label_id WHERE l.user_id = ? AND lower(l.name) = ?)",
+      );
+      binds.push(user.id, ops.label.toLowerCase());
+    }
+    const inFolder = (ops.in || "").toLowerCase();
+    if (FOLDERS_OK.has(inFolder)) {
+      where.push("m.folder = ?");
+      binds.push(inFolder);
+    } else {
+      where.push("m.folder NOT IN ('trash', 'spam')");
+    }
+
+    if (text) {
+      const term = text.replace(/[^\w\s@.-]/g, " ").trim();
+      if (!term) return json({ messages: [], nextCursor: null });
+      let ftsIds;
+      try {
+        ftsIds = await env.DB.prepare(
+          "SELECT mid FROM messages_fts WHERE uid = ? AND messages_fts MATCH ? LIMIT 300",
+        )
+          .bind(user.id, `"${term}"*`)
+          .all();
+      } catch {
+        return json({ messages: [], nextCursor: null });
+      }
+      const ids = (ftsIds.results || []).map((r) => r.mid);
+      if (!ids.length) return json({ messages: [], nextCursor: null });
+      where.push(`m.id IN (${ids.map(() => "?").join(",")})`);
+      binds.push(...ids);
+    } else if (where.length === 1) {
       return json({ messages: [], nextCursor: null });
     }
-    const ids = (ftsIds.results || []).map((r) => r.mid);
-    if (!ids.length) return json({ messages: [], nextCursor: null });
-    where.push(`m.id IN (${ids.map(() => "?").join(",")})`);
-    binds.push(...ids);
   } else if (folder === "snoozed") {
     where.push("m.snooze_until > ?");
     binds.push(nowTs);
   } else {
-    if (starred) {
+    if (folderParam) {
+      where.push("m.folder_id = ? AND m.folder NOT IN ('trash', 'spam', 'drafts')");
+      binds.push(folderParam);
+    } else if (starred) {
       where.push("m.is_starred = 1 AND m.folder != 'trash'");
     } else if (labelId) {
       where.push("m.id IN (SELECT message_id FROM message_labels WHERE label_id = ?)");
@@ -463,6 +572,12 @@ async function listMessages(request, env, user) {
     } else {
       where.push("m.folder = ?");
       binds.push(folder);
+      if (folder === "inbox") {
+        where.push(
+          "(m.folder_id IS NULL OR m.folder_id NOT IN (SELECT id FROM folders WHERE user_id = ? AND skip_inbox = 1))",
+        );
+        binds.push(user.id);
+      }
     }
     where.push("(m.snooze_until IS NULL OR m.snooze_until <= ?)");
     binds.push(nowTs);
@@ -748,6 +863,7 @@ export async function handleApi(request, env, ctx) {
 
   if (path === "/api/auth/login" && method === "GET") return oidcLogin(request, env);
   if (path === "/api/auth/callback" && method === "GET") return oidcCallback(request, env);
+  if (path === "/api/auth/native/exchange" && method === "POST") return nativeExchange(request, env);
   if (path === "/api/byod/ingest" && method === "POST") return byodIngest(request, env, ctx);
 
   const auth = await authenticate(request, env);
@@ -774,8 +890,31 @@ export async function handleApi(request, env, ctx) {
     );
   }
 
-  if (path === "/api/folders" && method === "GET")
-    return json({ counts: await folderCounts(env, user.id) });
+  if (path === "/api/folders" && method === "GET") {
+    const fres = await env.DB.prepare(
+      "SELECT id, name, color, alias_address, skip_inbox, position FROM folders WHERE user_id = ? ORDER BY position, name",
+    )
+      .bind(user.id)
+      .all();
+    const fcounts = await env.DB.prepare(
+      "SELECT folder_id, COUNT(*) AS unread FROM messages WHERE user_id = ? AND folder_id IS NOT NULL AND is_read = 0 AND folder NOT IN ('trash','spam','drafts') GROUP BY folder_id",
+    )
+      .bind(user.id)
+      .all();
+    const unreadBy = {};
+    for (const c of fcounts.results || []) unreadBy[c.folder_id] = c.unread;
+    return json({
+      counts: await folderCounts(env, user.id),
+      folders: (fres.results || []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        color: f.color,
+        alias: f.alias_address || null,
+        skipInbox: !!f.skip_inbox,
+        unread: unreadBy[f.id] || 0,
+      })),
+    });
+  }
 
   if (path === "/api/sync" && method === "GET") {
     const since = clampInt(url.searchParams.get("since"), 0, Number.MAX_SAFE_INTEGER, 0);
@@ -852,10 +991,24 @@ export async function handleApi(request, env, ctx) {
   }
   if ((m = path.match(/^\/api\/messages\/([\w-]+)\/move$/)) && method === "POST") {
     const b = await readJson(request);
-    if (!FOLDERS.includes(b.folder)) return error(400, "bad folder");
-    await env.DB.prepare("UPDATE messages SET folder = ? WHERE id = ? AND user_id = ?")
-      .bind(b.folder, m[1], user.id)
-      .run();
+    if (b.folderId) {
+      const owned = await env.DB.prepare("SELECT 1 FROM folders WHERE id = ? AND user_id = ?")
+        .bind(b.folderId, user.id)
+        .first();
+      if (!owned) return error(400, "unknown folder");
+      await env.DB.prepare(
+        "UPDATE messages SET folder_id = ?, folder = 'inbox' WHERE id = ? AND user_id = ?",
+      )
+        .bind(b.folderId, m[1], user.id)
+        .run();
+    } else {
+      if (!FOLDERS.includes(b.folder)) return error(400, "bad folder");
+      await env.DB.prepare(
+        "UPDATE messages SET folder = ?, folder_id = NULL WHERE id = ? AND user_id = ?",
+      )
+        .bind(b.folder, m[1], user.id)
+        .run();
+    }
     await recordChange(env, user.id, m[1], "upsert");
     return json({ ok: true });
   }
@@ -892,8 +1045,21 @@ export async function handleApi(request, env, ctx) {
         .bind(b.value !== false ? 1 : 0, user.id, ...ids)
         .run();
       await recordChanges(env, user.id, ids, "upsert");
+    } else if (b.action === "movefolder" && b.value) {
+      const owned = await env.DB.prepare("SELECT 1 FROM folders WHERE id = ? AND user_id = ?")
+        .bind(b.value, user.id)
+        .first();
+      if (!owned) return error(400, "unknown folder");
+      await env.DB.prepare(
+        `UPDATE messages SET folder_id = ?, folder = 'inbox' WHERE user_id = ? AND id IN (${ph})`,
+      )
+        .bind(b.value, user.id, ...ids)
+        .run();
+      await recordChanges(env, user.id, ids, "upsert");
     } else if (b.action === "move" && FOLDERS.includes(b.value)) {
-      await env.DB.prepare(`UPDATE messages SET folder = ? WHERE user_id = ? AND id IN (${ph})`)
+      await env.DB.prepare(
+        `UPDATE messages SET folder = ?, folder_id = NULL WHERE user_id = ? AND id IN (${ph})`,
+      )
         .bind(b.value, user.id, ...ids)
         .run();
       await recordChanges(env, user.id, ids, "upsert");
@@ -1076,6 +1242,133 @@ export async function handleApi(request, env, ctx) {
     return json({ ok: true });
   }
 
+  if (path === "/api/folders" && method === "POST") {
+    const b = await readJson(request);
+    const name = String(b.name || "")
+      .trim()
+      .slice(0, 40);
+    if (!name) return error(400, "name required");
+    const color = String(b.color || "#8b7fd6").slice(0, 9);
+    const skipInbox = b.skipInbox ? 1 : 0;
+    let alias = null;
+    if (b.createAlias) {
+      const localPart = String(b.localPart || "")
+        .trim()
+        .toLowerCase();
+      if (!ALIAS_RE.test(localPart)) return error(400, "invalid alias (a-z, 0-9, . _ -)");
+      const domain = String(b.domain || env.MAIL_DOMAIN)
+        .trim()
+        .toLowerCase();
+      const allowed = await verifiedDomainSet(env, user.id);
+      if (!allowed.has(domain)) return error(400, "unknown or unverified domain");
+      const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?")
+        .bind(user.id)
+        .first();
+      if ((count?.n || 0) >= ALIAS_LIMIT) return error(400, `alias limit reached (${ALIAS_LIMIT})`);
+      alias = `${localPart}@${domain}`;
+      const taken = await env.DB.prepare("SELECT user_id FROM addresses WHERE address = ?")
+        .bind(alias)
+        .first();
+      if (taken) return error(409, "that address is already taken");
+      await env.DB.prepare(
+        "INSERT INTO addresses (address, user_id, is_primary, label, created_at) VALUES (?,?,0,?,?)",
+      )
+        .bind(alias, user.id, name, now())
+        .run();
+    } else if (b.aliasAddress) {
+      alias = normalizeAddr(b.aliasAddress);
+      const owned = await env.DB.prepare(
+        "SELECT 1 FROM addresses WHERE address = ? AND user_id = ?",
+      )
+        .bind(alias, user.id)
+        .first();
+      if (!owned) return error(400, "you don't own that alias");
+    }
+    const id = uuid();
+    await env.DB.prepare(
+      "INSERT INTO folders (id, user_id, name, color, alias_address, skip_inbox, position, created_at) VALUES (?,?,?,?,?,?,?,?)",
+    )
+      .bind(id, user.id, name, color, alias, skipInbox, now(), now())
+      .run();
+    if (alias) {
+      await env.DB.prepare(
+        "UPDATE messages SET folder_id = ? WHERE user_id = ? AND delivered_to = ? AND folder_id IS NULL",
+      )
+        .bind(id, user.id, alias)
+        .run();
+    }
+    return json({ id, name, color, alias, skipInbox: !!skipInbox, unread: 0 });
+  }
+  if ((m = path.match(/^\/api\/folders\/([\w-]+)$/)) && (method === "PUT" || method === "PATCH")) {
+    const b = await readJson(request);
+    const row = await env.DB.prepare("SELECT * FROM folders WHERE id = ? AND user_id = ?")
+      .bind(m[1], user.id)
+      .first();
+    if (!row) return error(404, "not found");
+    const name = b.name !== undefined ? String(b.name).trim().slice(0, 40) || row.name : row.name;
+    const color = b.color !== undefined ? String(b.color).slice(0, 9) : row.color;
+    const skipInbox = b.skipInbox !== undefined ? (b.skipInbox ? 1 : 0) : row.skip_inbox;
+    let alias = row.alias_address;
+    if (b.createAlias) {
+      const localPart = String(b.localPart || "")
+        .trim()
+        .toLowerCase();
+      if (!ALIAS_RE.test(localPart)) return error(400, "invalid alias (a-z, 0-9, . _ -)");
+      const dom = String(b.domain || env.MAIL_DOMAIN)
+        .trim()
+        .toLowerCase();
+      const allowed = await verifiedDomainSet(env, user.id);
+      if (!allowed.has(dom)) return error(400, "unknown or unverified domain");
+      const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?")
+        .bind(user.id)
+        .first();
+      if ((count?.n || 0) >= ALIAS_LIMIT) return error(400, `alias limit reached (${ALIAS_LIMIT})`);
+      alias = `${localPart}@${dom}`;
+      const taken = await env.DB.prepare("SELECT user_id FROM addresses WHERE address = ?")
+        .bind(alias)
+        .first();
+      if (taken) return error(409, "that address is already taken");
+      await env.DB.prepare(
+        "INSERT INTO addresses (address, user_id, is_primary, label, created_at) VALUES (?,?,0,?,?)",
+      )
+        .bind(alias, user.id, name, now())
+        .run();
+    } else if (b.aliasAddress !== undefined) {
+      if (!b.aliasAddress) alias = null;
+      else {
+        alias = normalizeAddr(b.aliasAddress);
+        const owned = await env.DB.prepare(
+          "SELECT 1 FROM addresses WHERE address = ? AND user_id = ?",
+        )
+          .bind(alias, user.id)
+          .first();
+        if (!owned) return error(400, "you don't own that alias");
+      }
+    }
+    await env.DB.prepare(
+      "UPDATE folders SET name = ?, color = ?, skip_inbox = ?, alias_address = ? WHERE id = ? AND user_id = ?",
+    )
+      .bind(name, color, skipInbox, alias, m[1], user.id)
+      .run();
+    if (alias) {
+      await env.DB.prepare(
+        "UPDATE messages SET folder_id = ? WHERE user_id = ? AND delivered_to = ? AND folder_id IS NULL",
+      )
+        .bind(m[1], user.id, alias)
+        .run();
+    }
+    return json({ id: m[1], name, color, alias, skipInbox: !!skipInbox });
+  }
+  if ((m = path.match(/^\/api\/folders\/([\w-]+)$/)) && method === "DELETE") {
+    await env.DB.prepare("UPDATE messages SET folder_id = NULL WHERE folder_id = ? AND user_id = ?")
+      .bind(m[1], user.id)
+      .run();
+    await env.DB.prepare("DELETE FROM folders WHERE id = ? AND user_id = ?")
+      .bind(m[1], user.id)
+      .run();
+    return json({ ok: true });
+  }
+
   if (path === "/api/filters" && method === "GET") {
     const res = await env.DB.prepare(
       "SELECT id, field, match_value, action, position FROM filters WHERE user_id = ? ORDER BY position, created_at",
@@ -1248,6 +1541,61 @@ export async function handleApi(request, env, ctx) {
       .run();
     return json({ address, isPrimary: false });
   }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/identity$/)) && method === "PATCH") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const owned = await env.DB.prepare("SELECT 1 FROM addresses WHERE address = ? AND user_id = ?")
+      .bind(address, user.id)
+      .first();
+    if (!owned) return error(404, "not found");
+    const b = await readJson(request);
+    const displayName = String(b.displayName ?? "").slice(0, 80);
+    const signature = String(b.signature ?? "").slice(0, 2000);
+    await env.DB.prepare(
+      "UPDATE addresses SET display_name = ?, signature = ? WHERE address = ? AND user_id = ?",
+    )
+      .bind(displayName || null, signature || null, address, user.id)
+      .run();
+    return json({ address, displayName, signature });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/avatar$/)) && method === "GET") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const obj = await env.R2.get(`aliasavatar/${address}`);
+    if (!obj) return error(404, "not found");
+    const ct = (obj.httpMetadata?.contentType || "image/png").toLowerCase();
+    const headers = new Headers();
+    headers.set("content-type", AVATAR_TYPES.has(ct) ? ct : "application/octet-stream");
+    headers.set("cache-control", "private, max-age=86400");
+    return new Response(obj.body, { headers });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/avatar$/)) && method === "POST") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const owned = await env.DB.prepare("SELECT 1 FROM addresses WHERE address = ? AND user_id = ?")
+      .bind(address, user.id)
+      .first();
+    if (!owned) return error(404, "not found");
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!file || typeof file === "string") return error(400, "no file");
+    if (!AVATAR_TYPES.has(String(file.type || "").toLowerCase()))
+      return error(400, "use a PNG, JPEG, GIF, WebP, or AVIF image");
+    if (file.size > 3 * 1024 * 1024) return error(413, "image too large (max 3 MiB)");
+    await env.R2.put(`aliasavatar/${address}`, file.stream(), {
+      httpMetadata: { contentType: file.type },
+    });
+    const avatarUrl = `/api/aliases/${encodeURIComponent(address)}/avatar?v=${now()}`;
+    await env.DB.prepare("UPDATE addresses SET avatar_url = ? WHERE address = ? AND user_id = ?")
+      .bind(avatarUrl, address, user.id)
+      .run();
+    return json({ avatar: avatarUrl });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/avatar$/)) && method === "DELETE") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    await env.R2.delete(`aliasavatar/${address}`).catch(() => {});
+    await env.DB.prepare("UPDATE addresses SET avatar_url = NULL WHERE address = ? AND user_id = ?")
+      .bind(address, user.id)
+      .run();
+    return json({ ok: true });
+  }
   if ((m = path.match(/^\/api\/aliases\/(.+)$/)) && method === "DELETE") {
     const address = normalizeAddr(decodeURIComponent(m[1]));
     const row = await env.DB.prepare(
@@ -1317,7 +1665,7 @@ export async function handleApi(request, env, ctx) {
   }
 
   if (path === "/api/pgp" && method === "GET") {
-    if (!auth?.session) return error(403, "use the web app to manage pgp keys");
+    if (!auth?.session && !auth?.viaApiKey) return error(403, "use the web app to manage pgp keys");
     const row = await env.DB.prepare(
       "SELECT pgp_enabled, pgp_public_key, pgp_private_key_enc FROM users WHERE id = ?",
     )
@@ -1330,7 +1678,7 @@ export async function handleApi(request, env, ctx) {
     });
   }
   if (path === "/api/pgp/enable" && method === "POST") {
-    if (!auth?.session) return error(403, "use the web app to manage pgp keys");
+    if (!auth?.session && !auth?.viaApiKey) return error(403, "use the web app to manage pgp keys");
     const b = await readJson(request);
     const publicKey = String(b.publicKey || "");
     const privateKeyEnc = String(b.privateKeyEnc || "");
@@ -1348,7 +1696,7 @@ export async function handleApi(request, env, ctx) {
     return json({ ok: true });
   }
   if (path === "/api/pgp" && method === "DELETE") {
-    if (!auth?.session) return error(403, "use the web app to manage pgp keys");
+    if (!auth?.session && !auth?.viaApiKey) return error(403, "use the web app to manage pgp keys");
     await env.DB.prepare(
       "UPDATE users SET pgp_public_key = NULL, pgp_private_key_enc = NULL, pgp_enabled = 0 WHERE id = ?",
     )
@@ -1359,13 +1707,69 @@ export async function handleApi(request, env, ctx) {
   if (path === "/api/pgp/pubkey" && method === "GET") {
     const address = normalizeAddr(url.searchParams.get("address") || "");
     if (!address) return error(400, "address required");
+    const saved = await env.DB.prepare(
+      "SELECT public_key FROM pgp_keys WHERE user_id = ? AND address = ?",
+    )
+      .bind(user.id, address)
+      .first();
+    if (saved?.public_key) return json({ publicKey: saved.public_key, source: "keyring" });
     const row = await env.DB.prepare(
       "SELECT u.pgp_public_key AS pk FROM addresses a JOIN users u ON u.id = a.user_id WHERE a.address = ? AND u.pgp_enabled = 1 AND u.pgp_public_key IS NOT NULL",
     )
       .bind(address)
       .first();
     if (!row?.pk) return error(404, "no public key");
-    return json({ publicKey: row.pk });
+    return json({ publicKey: row.pk, source: "directory" });
+  }
+  if (path === "/api/pgp/keys" && method === "GET") {
+    const res = await env.DB.prepare(
+      "SELECT address, name, fingerprint, created_at FROM pgp_keys WHERE user_id = ? ORDER BY address",
+    )
+      .bind(user.id)
+      .all();
+    return json({
+      keys: (res.results || []).map((k) => ({
+        address: k.address,
+        name: k.name || "",
+        fingerprint: k.fingerprint || "",
+        createdAt: k.created_at,
+      })),
+    });
+  }
+  if (path === "/api/pgp/keys" && method === "POST") {
+    const b = await readJson(request);
+    const address = normalizeAddr(b.address || "");
+    const publicKey = String(b.publicKey || "").trim();
+    if (!isValidEmail(address)) return error(400, "invalid address");
+    let name = "";
+    let fingerprint = "";
+    let key;
+    try {
+      key = await openpgp.readKey({ armoredKey: publicKey });
+    } catch {
+      return error(400, "that isn't a valid PGP public key");
+    }
+    try {
+      fingerprint = key.getFingerprint();
+    } catch {}
+    try {
+      const uid = key.getUserIDs?.()[0] || "";
+      const m = uid.match(/^(.*?)\s*<([^>]+)>/);
+      name = (m ? m[1] || m[2] : uid).trim();
+    } catch {}
+    await env.DB.prepare(
+      "INSERT INTO pgp_keys (user_id, address, public_key, name, fingerprint, created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id, address) DO UPDATE SET public_key = excluded.public_key, name = excluded.name, fingerprint = excluded.fingerprint",
+    )
+      .bind(user.id, address, publicKey, name || null, fingerprint || null, now())
+      .run();
+    return json({ address, name, fingerprint });
+  }
+  if ((m = path.match(/^\/api\/pgp\/keys\/(.+)$/)) && method === "DELETE") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    await env.DB.prepare("DELETE FROM pgp_keys WHERE user_id = ? AND address = ?")
+      .bind(user.id, address)
+      .run();
+    return json({ ok: true });
   }
 
   if (path === "/api/contacts" && method === "GET") {

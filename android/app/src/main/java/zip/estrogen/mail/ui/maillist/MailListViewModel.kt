@@ -2,33 +2,111 @@ package zip.estrogen.mail.ui.maillist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import zip.estrogen.mail.data.Folder
 import zip.estrogen.mail.data.MailRepository
+import zip.estrogen.mail.data.SwipeAction
+import zip.estrogen.mail.data.SwipeConfig
+import zip.estrogen.mail.data.local.CachedMessage
 import zip.estrogen.mail.data.model.FolderCounts
-import zip.estrogen.mail.data.model.MessageSummary
+import zip.estrogen.mail.data.model.Label
 import zip.estrogen.mail.data.model.User
+import zip.estrogen.mail.data.pgp.PgpStatus
+import zip.estrogen.mail.data.pgp.SnippetCipher
 
-data class MailListState(
-    val folder: Folder = Folder.INBOX,
+data class SnackbarMessage(val text: String, val undo: (() -> Unit)? = null)
+
+sealed interface ListView {
+    data class FolderView(val folder: Folder) : ListView
+    data class LabelView(val id: String, val name: String) : ListView
+    data class SearchView(val query: String) : ListView
+    data object Snoozed : ListView
+
+    val title: String
+        get() = when (this) {
+            is FolderView -> folder.label
+            is LabelView -> name
+            is SearchView -> "Search"
+            Snoozed -> "Snoozed"
+        }
+}
+
+data class MailListUi(
     val user: User? = null,
     val counts: FolderCounts = FolderCounts(),
-    val messages: List<MessageSummary> = emptyList(),
-    val nextCursor: String? = null,
+    val labels: List<Label> = emptyList(),
+    val selected: Set<String> = emptySet(),
+    val query: String = "",
+    val searchActive: Boolean = false,
     val loading: Boolean = false,
     val refreshing: Boolean = false,
     val loadingMore: Boolean = false,
+    val nextCursor: String? = null,
     val error: String? = null,
-    val signedOut: Boolean = false
-)
+    val snackbar: SnackbarMessage? = null,
+    val signedOut: Boolean = false,
+    val pgpUnlocked: Boolean = false,
+    val swipe: SwipeConfig = SwipeConfig()
+) {
+    val selecting: Boolean get() = selected.isNotEmpty()
+}
 
 class MailListViewModel(private val repository: MailRepository) : ViewModel() {
 
-    private val _state = MutableStateFlow(MailListState())
-    val state = _state.asStateFlow()
+    private val _view = MutableStateFlow<ListView>(ListView.FolderView(Folder.INBOX))
+    val view = _view.asStateFlow()
+
+    private val _ui = MutableStateFlow(MailListUi())
+    val ui = _ui.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val items = _view
+        .flatMapLatest { v ->
+            val grouped = v !is ListView.SearchView
+            val source: kotlinx.coroutines.flow.Flow<List<CachedMessage>> = when (v) {
+                is ListView.FolderView -> repository.observeFolder(v.folder)
+                is ListView.LabelView -> repository.observeLabel(v.id)
+                is ListView.SearchView -> if (v.query.isBlank()) flowOf(emptyList()) else {
+                    val parsed = SearchQueryParser.parse(v.query)
+                    repository.search(parsed.text).map { list -> list.filter { parsed.matches(it) } }
+                }
+                ListView.Snoozed -> repository.observeSnoozed()
+            }
+            source.map { list ->
+                withContext(Dispatchers.Default) {
+                    val mapped = list.map { it.toItem(SnippetCipher.decrypt(it.decryptedSnippet)) }
+                    if (grouped) groupConversations(mapped) else mapped
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private fun groupConversations(items: List<MailItem>): List<MailItem> =
+        items.groupBy { it.threadId ?: it.id }
+            .map { (_, group) ->
+                val latest = group.maxByOrNull { it.date } ?: group.first()
+                latest.copy(
+                    threadCount = group.size,
+                    isRead = group.all { it.isRead },
+                    isStarred = group.any { it.isStarred },
+                    hasAttachments = group.any { it.hasAttachments },
+                    labels = group.flatMap { it.labels }.distinctBy { it.id }
+                )
+            }
+            .sortedByDescending { it.date }
+
+    private fun isThread(item: MailItem): Boolean = item.threadId != null && item.threadCount > 1
 
     private var started = false
 
@@ -36,123 +114,255 @@ class MailListViewModel(private val repository: MailRepository) : ViewModel() {
         if (started) return
         started = true
         viewModelScope.launch {
-            repository.loadMe().onSuccess { me -> _state.update { it.copy(user = me.user) } }
+            repository.loadMe().onSuccess { me -> _ui.update { it.copy(user = me.user) } }
         }
-        refreshFolders()
-        loadMessages(Folder.INBOX, reset = true, refreshing = false)
+        viewModelScope.launch {
+            repository.swipeConfig.collect { cfg -> _ui.update { it.copy(swipe = cfg) } }
+        }
+        refreshMeta()
+        refresh(initial = true)
+        viewModelScope.launch {
+            withContext(Dispatchers.Default) { repository.pgp.tryAutoUnlock() }
+            _ui.update { it.copy(pgpUnlocked = repository.pgp.status.value == PgpStatus.UNLOCKED) }
+            decryptPreviews()
+            repository.syncDelta()
+        }
+    }
+
+    private fun refreshMeta() {
+        viewModelScope.launch {
+            repository.loadFolders().onSuccess { resp -> _ui.update { it.copy(counts = resp.counts) } }
+        }
+        viewModelScope.launch {
+            repository.labels().onSuccess { labels -> _ui.update { it.copy(labels = labels) } }
+        }
     }
 
     fun selectFolder(folder: Folder) {
-        if (folder == _state.value.folder && _state.value.messages.isNotEmpty()) return
-        _state.update { it.copy(folder = folder, messages = emptyList(), nextCursor = null) }
-        loadMessages(folder, reset = true, refreshing = false)
+        if (_view.value == ListView.FolderView(folder)) return
+        _view.value = ListView.FolderView(folder)
+        _ui.update { it.copy(selected = emptySet(), nextCursor = null, searchActive = false, query = "") }
+        refresh(initial = true)
     }
 
-    fun refresh() {
-        refreshFolders()
-        loadMessages(_state.value.folder, reset = true, refreshing = true)
+    fun openLabel(id: String, name: String) {
+        _view.value = ListView.LabelView(id, name)
+        _ui.update { it.copy(selected = emptySet(), nextCursor = null, searchActive = false) }
+        refresh(initial = true)
     }
 
-    private fun refreshFolders() {
-        viewModelScope.launch {
-            repository.loadFolders().onSuccess { resp ->
-                _state.update { it.copy(counts = resp.counts) }
+    fun openSnoozed() {
+        _view.value = ListView.Snoozed
+        _ui.update { it.copy(selected = emptySet(), searchActive = false) }
+        refresh(initial = true)
+    }
+
+    fun openSearch() {
+        _ui.update { it.copy(searchActive = true) }
+        _view.value = ListView.SearchView("")
+    }
+
+    fun closeSearch() {
+        _ui.update { it.copy(searchActive = false, query = "") }
+        selectFolder(Folder.INBOX)
+    }
+
+    fun setQuery(q: String) {
+        _ui.update { it.copy(query = q) }
+        _view.value = ListView.SearchView(q)
+        val text = SearchQueryParser.parse(q).text
+        if (text.length >= 2) {
+            viewModelScope.launch {
+                repository.searchRemote(text)
+                decryptPreviews()
             }
         }
     }
 
-    private fun loadMessages(folder: Folder, reset: Boolean, refreshing: Boolean) {
-        _state.update {
-            it.copy(
-                loading = reset && !refreshing,
-                refreshing = refreshing,
-                error = null
-            )
-        }
+    fun refresh(initial: Boolean = false) {
+        val v = _view.value
+        _ui.update { it.copy(loading = initial, refreshing = !initial, error = null) }
         viewModelScope.launch {
-            repository.loadMessages(folder).fold(
-                onSuccess = { resp ->
-                    _state.update {
-                        if (it.folder != folder) it
-                        else it.copy(
-                            messages = resp.messages,
-                            nextCursor = resp.nextCursor,
-                            loading = false,
-                            refreshing = false
-                        )
-                    }
-                },
-                onFailure = { err ->
-                    _state.update {
-                        it.copy(
-                            loading = false,
-                            refreshing = false,
-                            error = err.message ?: "Failed to load messages"
-                        )
-                    }
-                }
+            val result = when (v) {
+                is ListView.FolderView -> repository.refreshMessages(v.folder, replace = false).map { it.nextCursor }
+                is ListView.LabelView -> repository.refreshLabel(v.id).map { it.nextCursor }
+                is ListView.SearchView -> if (v.query.isBlank()) Result.success(null) else repository.searchRemote(v.query).map { null }
+                ListView.Snoozed -> repository.refreshMessages(Folder.INBOX).map { null }
+            }
+            result.fold(
+                onSuccess = { cursor -> _ui.update { it.copy(loading = false, refreshing = false, nextCursor = cursor) } },
+                onFailure = { err -> _ui.update { it.copy(loading = false, refreshing = false, error = if (items.value.isEmpty()) err.message else null) } }
             )
+            refreshMeta()
+            decryptPreviews()
         }
     }
 
     fun loadMore() {
-        val current = _state.value
-        val cursor = current.nextCursor ?: return
-        if (current.loadingMore) return
-        _state.update { it.copy(loadingMore = true) }
+        val v = _view.value
+        val cursor = _ui.value.nextCursor ?: return
+        if (_ui.value.loadingMore || v !is ListView.FolderView) return
+        _ui.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
-            repository.loadMessages(current.folder, cursor).fold(
-                onSuccess = { resp ->
-                    _state.update {
-                        it.copy(
-                            messages = it.messages + resp.messages,
-                            nextCursor = resp.nextCursor,
-                            loadingMore = false
-                        )
-                    }
-                },
-                onFailure = { _state.update { it.copy(loadingMore = false) } }
+            repository.refreshMessages(v.folder, cursor = cursor).fold(
+                onSuccess = { resp -> _ui.update { it.copy(loadingMore = false, nextCursor = resp.nextCursor) } },
+                onFailure = { _ui.update { it.copy(loadingMore = false) } }
             )
+            decryptPreviews()
         }
     }
 
-    fun toggleStar(message: MessageSummary) {
-        val newValue = !message.isStarred
-        _state.update { s ->
-            s.copy(messages = s.messages.map { if (it.id == message.id) it.copy(isStarred = newValue) else it })
-        }
-        viewModelScope.launch {
-            repository.setStar(message.id, newValue).onFailure {
-                _state.update { s ->
-                    s.copy(messages = s.messages.map { if (it.id == message.id) it.copy(isStarred = !newValue) else it })
-                }
+    private fun decryptPreviews() {
+        if (repository.pgp.status.value != PgpStatus.UNLOCKED) return
+        viewModelScope.launch(Dispatchers.Default) {
+            val targets = items.value.filter { it.pgp && it.decryptedPreview == null }.take(12)
+            for (item in targets) {
+                val full = repository.loadMessage(item.id).getOrNull() ?: continue
+                val body = full.bodyText ?: continue
+                val plain = repository.pgp.decrypt(body).getOrNull() ?: continue
+                val preview = plain
+                    .replace(Regex("<[^>]*>"), " ")
+                    .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                    .take(140)
+                repository.cacheDecryptedSnippet(item.id, SnippetCipher.encrypt(preview))
             }
         }
     }
 
-    fun markReadLocally(messageId: String) {
-        _state.update { s ->
-            s.copy(messages = s.messages.map { if (it.id == messageId) it.copy(isRead = true) else it })
+    fun toggleStar(item: MailItem) {
+        viewModelScope.launch {
+            if (isThread(item)) repository.setThreadStar(item.threadId!!, !item.isStarred)
+            else repository.setStar(item.id, !item.isStarred)
         }
     }
 
-    fun moveMessage(message: MessageSummary, folder: Folder) {
-        val previous = _state.value.messages
-        _state.update { s -> s.copy(messages = s.messages.filterNot { it.id == message.id }) }
-        viewModelScope.launch {
-            repository.move(message.id, folder).fold(
-                onSuccess = { refreshFolders() },
-                onFailure = {
-                    _state.update { it.copy(messages = previous, error = "Could not move the message") }
+    fun markRead(id: String) {
+        viewModelScope.launch { repository.setRead(id, true) }
+    }
+
+    fun archive(item: MailItem) = moveWithUndo(item, Folder.ARCHIVE, "Archived")
+    fun trash(item: MailItem) = moveWithUndo(item, Folder.TRASH, "Moved to Trash")
+
+    fun performSwipe(item: MailItem, action: SwipeAction) {
+        when (action) {
+            SwipeAction.ARCHIVE -> archive(item)
+            SwipeAction.TRASH -> trash(item)
+            SwipeAction.READ -> viewModelScope.launch {
+                if (isThread(item)) repository.setThreadRead(item.threadId!!, !item.isRead)
+                else repository.setRead(item.id, !item.isRead)
+            }
+            SwipeAction.STAR -> toggleStar(item)
+            SwipeAction.SNOOZE -> {
+                val until = System.currentTimeMillis() + java.util.concurrent.TimeUnit.DAYS.toMillis(1)
+                viewModelScope.launch {
+                    if (isThread(item)) repository.snoozeThread(item.threadId!!, until)
+                    else repository.snooze(item.id, until)
+                    _ui.update { it.copy(snackbar = SnackbarMessage("Snoozed") { unsnoozeItem(item) }) }
                 }
-            )
+            }
+            SwipeAction.NONE -> {}
         }
     }
+
+    private fun unsnoozeItem(item: MailItem) {
+        viewModelScope.launch {
+            if (isThread(item)) repository.snoozeThread(item.threadId!!, null)
+            else repository.snooze(item.id, null)
+        }
+    }
+
+    private fun moveWithUndo(item: MailItem, folder: Folder, label: String) {
+        val origin = (_view.value as? ListView.FolderView)?.folder ?: Folder.INBOX
+        viewModelScope.launch {
+            if (isThread(item)) repository.moveThread(item.threadId!!, folder)
+            else repository.move(item.id, folder)
+            _ui.update {
+                it.copy(snackbar = SnackbarMessage(label) {
+                    viewModelScope.launch {
+                        if (isThread(item)) repository.moveThread(item.threadId!!, origin)
+                        else repository.move(item.id, origin)
+                        refreshMeta()
+                    }
+                })
+            }
+            refreshMeta()
+        }
+    }
+
+    fun snooze(id: String, until: Long?) {
+        viewModelScope.launch {
+            repository.snooze(id, until)
+            _ui.update {
+                if (until != null) it.copy(snackbar = SnackbarMessage("Snoozed") { snooze(id, null) })
+                else it.copy(snackbar = SnackbarMessage("Unsnoozed"))
+            }
+        }
+    }
+
+    fun toggleSelect(id: String) {
+        _ui.update {
+            val next = if (id in it.selected) it.selected - id else it.selected + id
+            it.copy(selected = next)
+        }
+    }
+
+    fun clearSelection() = _ui.update { it.copy(selected = emptySet()) }
+
+    fun snoozeSelected(until: Long?) {
+        val ids = _ui.value.selected.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            ids.forEach { repository.snooze(it, until) }
+            _ui.update {
+                it.copy(selected = emptySet(), snackbar = SnackbarMessage("Snoozed ${ids.size}") {
+                    viewModelScope.launch { ids.forEach { id -> repository.snooze(id, null) } }
+                })
+            }
+        }
+    }
+
+    fun selectionAction(action: String, value: String? = null) {
+        val ids = _ui.value.selected.toList()
+        if (ids.isEmpty()) return
+        val origin = (_view.value as? ListView.FolderView)?.folder ?: Folder.INBOX
+        viewModelScope.launch {
+            repository.bulk(ids, action, value)
+            val undo: (() -> Unit)? = when (action) {
+                "move" -> {
+                    {
+                        viewModelScope.launch {
+                            repository.bulk(ids, "move", origin.key)
+                            refreshMeta()
+                        }
+                    }
+                }
+                "read", "star" -> {
+                    val reverted = if (value == "true") "false" else "true"
+                    {
+                        viewModelScope.launch { repository.bulk(ids, action, reverted) }
+                    }
+                }
+                else -> null
+            }
+            val label = when (action) {
+                "move" -> if (value == "trash") "Moved to Trash" else "Archived"
+                "read" -> if (value == "true") "Marked read" else "Marked unread"
+                "star" -> if (value == "true") "Starred" else "Unstarred"
+                else -> "Done"
+            }
+            _ui.update { it.copy(selected = emptySet(), snackbar = SnackbarMessage(label, undo)) }
+            refreshMeta()
+        }
+    }
+
+    fun consumeSnackbar() = _ui.update { it.copy(snackbar = null) }
 
     fun signOut() {
         viewModelScope.launch {
             repository.signOut()
-            _state.update { it.copy(signedOut = true) }
+            _ui.update { it.copy(signedOut = true) }
         }
     }
 }

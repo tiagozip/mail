@@ -1,4 +1,6 @@
-import { Button, DropdownMenu, Input, Loader, Tooltip } from "@cloudflare/kumo";
+import { Button, DropdownMenu, Input, Loader, Select, Tooltip } from "@cloudflare/kumo";
+import spamton from "../assets/spamton.webp";
+
 import {
   Archive,
   ArrowBendDoubleUpLeft,
@@ -17,7 +19,8 @@ import {
   FilePdf,
   FileText,
   FileZip,
-  Image,
+  Folder,
+  Image as ImageIcon,
   Lock,
   LockKeyOpen,
   Paperclip,
@@ -52,7 +55,7 @@ import {
   snoozePresets,
   splitQuoted,
 } from "../util.js";
-import { RichEditor } from "./RichEditor.jsx";
+const RichEditor = lazy(() => import("./RichEditor.jsx").then((m) => ({ default: m.RichEditor })));
 
 const CodeHighlight = lazy(() => import("../CodeHighlight.jsx"));
 
@@ -408,9 +411,9 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
         <div className="em-msg-body">
           {message.authStatus === "fail" && (
             <div className="em-spoof-banner">
-              <Warning size={24} weight="fill" />
+              <Image src={spamton} className="em-spoof-image" alt="Spamton"></Image>
               <div className="em-spoof-copy">
-                <div className="em-spoof-title">This message may be spoofed</div>
+                <div className="em-spoof-title">This message may be [[spoofed]]</div>
                 <div className="em-spoof-text">
                   The sender's identity could not be verified and may be forged. Do not trust links,
                   attachments, or any request to log in, pay, or share information in this message.
@@ -428,7 +431,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
           )}
           {hasBlocked && (
             <div className="em-images-bar">
-              <Image size={15} />
+              <ImageIcon size={15} />
               <span style={{ flex: 1 }}>Remote images blocked</span>
               <button type="button" className="em-quote-toggle" onClick={onShowImages}>
                 Show images
@@ -467,12 +470,17 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
 }
 
 function pickFromAddress(message, user) {
-  const selves = new Set(
-    (user?.addresses?.map((a) => a.address) || []).map((a) => a.toLowerCase()),
+  const byLower = new Map(
+    (user?.addresses?.map((a) => a.address) || []).map((a) => [a.toLowerCase(), a]),
   );
+  const dt = message.deliveredTo?.toLowerCase();
+  if (dt && byLower.has(dt)) return byLower.get(dt);
   const candidates = [...(message.to || []), ...(message.cc || [])];
-  const match = candidates.find((p) => p.address && selves.has(p.address.toLowerCase()));
-  return match?.address || user?.address;
+  for (const p of candidates) {
+    const c = p.address?.toLowerCase();
+    if (c && byLower.has(c)) return byLower.get(c);
+  }
+  return user?.address;
 }
 
 function QuickReply({ store, last, onReply, onForward, onSent }) {
@@ -501,6 +509,13 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   const replyTo = lastExternalSender.from?.address;
   const replyName = lastExternalSender.from?.name || replyTo || "sender";
 
+  const addresses = user.addresses?.length ? user.addresses : [{ address: user.address }];
+  const [fromPick, setFromPick] = useState("");
+  const fromAddr =
+    fromPick && addresses.some((a) => a.address === fromPick)
+      ? fromPick
+      : pickFromAddress(lastExternalSender, user);
+
   useEffect(() => {
     if (!user.pgpEnabled || !replyTo) {
       setRecipKey(null);
@@ -520,13 +535,20 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     .split(/[,\s]+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const canE2E = user.pgpEnabled === true && !!recipKey && !ccAddrs.length && !atts.length;
+  const pgpDefault = user.settings?.pgpDefault === true;
+  const [manualKey, setManualKey] = useState("");
+  const effectiveKey =
+    recipKey || (/-----BEGIN PGP PUBLIC KEY BLOCK-----/.test(manualKey) ? manualKey.trim() : null);
+  const canEncrypt = !!effectiveKey && !ccAddrs.length && !atts.length;
 
   async function uploadFiles(files) {
     for (const file of files) {
       const tmpId = `pending-${Math.random()}`;
       const thumb = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
-      setAtts((p) => [...p, { id: tmpId, filename: file.name, size: file.size, pending: true, thumb }]);
+      setAtts((p) => [
+        ...p,
+        { id: tmpId, filename: file.name, size: file.size, pending: true, thumb },
+      ]);
       try {
         const d = await api.uploadAttachment(file);
         setAtts((p) => p.map((a) => (a.id === tmpId ? { ...d, thumb } : a)));
@@ -575,13 +597,26 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     editorRef.current?.commands.clearContent();
   }
 
-  async function send(sendAt) {
+  async function saveManualKey() {
+    const key = manualKey.trim();
+    if (!replyTo || !key) return;
+    try {
+      await api.addPgpKey(replyTo, key);
+      setRecipKey(key);
+      setManualKey("");
+      notify("Key saved", `Saved ${replyName}'s key to your keyring.`, "success");
+    } catch (err) {
+      notifyError(err);
+    }
+  }
+
+  async function send(sendAt, doEncrypt) {
     const body = text.trim();
     const hasImg = /<img/i.test(html);
     if ((!body && !atts.length && !hasImg) || !replyTo) return;
+    const e2e = doEncrypt && canEncrypt;
     setSending(true);
     const subj = lastExternalSender.subject || "";
-    const fromAddr = pickFromAddress(lastExternalSender, user);
     const base = {
       from: fromAddr,
       to: [replyTo],
@@ -593,18 +628,21 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     try {
       let payload;
       let plain = body;
-      if (canE2E) {
-        if (!ownKeyRef.current) {
+      if (e2e) {
+        if (!ownKeyRef.current && user.pgpEnabled) {
           const own = await api.getPgp();
           ownKeyRef.current = own?.publicKey || null;
         }
-        if (!ownKeyRef.current) {
-          notify("Cannot encrypt", "Your encryption key is unavailable.", "warning");
+        plain = editorRef.current?.getText?.() ?? body;
+        const keys = [effectiveKey, ownKeyRef.current].filter(Boolean);
+        let armored;
+        try {
+          armored = await pgp.encryptFor(keys, plain);
+        } catch {
+          notify("Cannot encrypt", "That public key could not be read.", "warning");
           setSending(false);
           return;
         }
-        plain = editorRef.current?.getText?.() ?? body;
-        const armored = await pgp.encryptFor([recipKey, ownKeyRef.current], plain);
         payload = { ...base, pgp: true, text: armored };
       } else {
         payload = {
@@ -621,14 +659,20 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           threadId: thread.threadId,
           folder: "sent",
-          from: { address: fromAddr, name: user.displayName || user.username },
+          from: {
+            address: fromAddr,
+            name:
+              addresses.find((a) => a.address === fromAddr)?.displayName ||
+              user.displayName ||
+              user.username,
+          },
           to: [{ address: replyTo, name: "" }],
           cc: ccAddrs.map((a) => ({ address: a, name: "" })),
           subject: base.subject,
           snippet: plain.replace(/\s+/g, " ").trim().slice(0, 140),
           bodyText: plain,
-          bodyHtml: !canE2E && (body || hasImg) ? html : null,
-          hasHtml: !canE2E && html ? 1 : 0,
+          bodyHtml: !e2e && (body || hasImg) ? html : null,
+          hasHtml: !e2e && html ? 1 : 0,
           date: Date.now(),
           isRead: 1,
           pgp: 0,
@@ -658,9 +702,53 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     (!!text.trim() || atts.length > 0 || /<img/i.test(html)) &&
     !!replyTo &&
     !atts.some((a) => a.pending);
+  const mainDisabled = !canSend || (pgpDefault && !canEncrypt);
 
   return (
     <div className="em-quickreply">
+      <label className="em-reply-from em-reply-from-top">
+        <span>From</span>
+        <Select aria-label="From address" size="sm" value={fromAddr} onValueChange={setFromPick}>
+          {addresses.map((a) => (
+            <Select.Option key={a.address} value={a.address}>
+              {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
+            </Select.Option>
+          ))}
+        </Select>
+      </label>
+      {pgpDefault && (
+        <div className="em-encrypt-box">
+          {effectiveKey ? (
+            <div className="em-encrypt-status">
+              <Lock size={13} weight="fill" /> Encrypted to {replyName}
+              {(ccAddrs.length > 0 || atts.length > 0) && (
+                <span className="em-encrypt-warn"> · remove Cc/attachments to encrypt</span>
+              )}
+              {!recipKey && manualKey.trim() && (
+                <button
+                  type="button"
+                  className="em-linkbtn em-encrypt-save"
+                  onClick={saveManualKey}
+                >
+                  Save to keyring
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="em-encrypt-status">
+                Paste {replyName}'s PGP public key to encrypt for them
+              </div>
+              <textarea
+                className="em-textarea em-encrypt-key"
+                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
+                value={manualKey}
+                onChange={(e) => setManualKey(e.target.value)}
+              />
+            </>
+          )}
+        </div>
+      )}
       {showCc && (
         <input
           className="em-quickreply-cc"
@@ -670,17 +758,27 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           onChange={(e) => setCc(e.target.value)}
         />
       )}
-      <RichEditor
-        placeholder={canE2E ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`}
-        onUpdate={({ html: h, text: t }) => {
-          setHtml(h);
-          setText(t);
-        }}
-        onEditorReady={(ed) => {
-          editorRef.current = ed;
-        }}
-        onFiles={handleFiles}
-      />
+      <Suspense
+        fallback={
+          <div className="em-editor-loading">
+            <Loader size="sm" />
+          </div>
+        }
+      >
+        <RichEditor
+          placeholder={
+            pgpDefault && canEncrypt ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`
+          }
+          onUpdate={({ html: h, text: t }) => {
+            setHtml(h);
+            setText(t);
+          }}
+          onEditorReady={(ed) => {
+            editorRef.current = ed;
+          }}
+          onFiles={handleFiles}
+        />
+      </Suspense>
       {dropImages && (
         <div className="em-img-choose">
           <span className="em-img-choose-label">
@@ -759,12 +857,12 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
             className="em-split-main"
             size="sm"
             variant="primary"
-            icon={PaperPlaneTilt}
+            icon={pgpDefault ? Lock : PaperPlaneTilt}
             loading={sending}
-            disabled={!canSend}
-            onClick={() => send()}
+            disabled={mainDisabled}
+            onClick={() => send(undefined, pgpDefault)}
           >
-            Send
+            {pgpDefault ? "Send encrypted" : "Send"}
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
@@ -775,22 +873,35 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
                   size="sm"
                   variant="primary"
                   shape="square"
-                  aria-label="Send later"
+                  aria-label="More send options"
                   icon={CaretDown}
-                  disabled={!canSend}
                 />
               )}
             />
             <DropdownMenu.Content style={{ zIndex: 200 }}>
+              {pgpDefault && (
+                <DropdownMenu.Item icon={PaperPlaneTilt} onClick={() => send(undefined, false)}>
+                  Send without encryption
+                </DropdownMenu.Item>
+              )}
+              <DropdownMenu.Item icon={ArrowBendUpLeft} onClick={() => onReply(last, "replyAll")}>
+                Reply all
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
               {sendLaterPresets().map((p) => (
-                <DropdownMenu.Item key={p.key} onClick={() => send(p.sendAt)}>
+                <DropdownMenu.Item key={p.key} onClick={() => send(p.sendAt, pgpDefault)}>
                   {p.label}
                 </DropdownMenu.Item>
               ))}
             </DropdownMenu.Content>
           </DropdownMenu>
         </div>
-        <Button size="sm" variant="ghost" icon={Paperclip} onClick={() => fileInput.current?.click()}>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={Paperclip}
+          onClick={() => fileInput.current?.click()}
+        >
           Attach
         </Button>
         {!showCc && (
@@ -798,9 +909,6 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
             Cc
           </button>
         )}
-        <button type="button" className="em-quote-toggle" onClick={() => onReply(last, "replyAll")}>
-          Reply all
-        </button>
         <button type="button" className="em-quote-toggle" onClick={() => onForward(last)}>
           Forward
         </button>
@@ -829,6 +937,8 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
     messages,
     toggleStar,
     moveMessage,
+    moveToFolder,
+    userFolders,
     snooze,
     setReadState,
     deleteForever,
@@ -1005,8 +1115,9 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
             size="sm"
             variant="ghost"
             shape="square"
-            aria-label="Star"
-            icon={Star}
+            aria-label={headerItem.isStarred ? "Unstar" : "Star"}
+            className={headerItem.isStarred ? "em-star-active" : ""}
+            icon={<Star weight={headerItem.isStarred ? "fill" : "regular"} />}
             onClick={() => toggleStar(headerItem)}
           />
         </Tooltip>
@@ -1060,6 +1171,27 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
                 ))}
               </DropdownMenu.SubContent>
             </DropdownMenu.Sub>
+            {(userFolders || []).length > 0 && (
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger icon={Folder}>Move to folder</DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent>
+                  {userFolders.map((f) => (
+                    <DropdownMenu.Item key={f.id} onClick={() => moveToFolder(headerItem, f.id)}>
+                      <span className="em-label-dot" style={{ background: f.color }} />
+                      {f.name}
+                    </DropdownMenu.Item>
+                  ))}
+                  {headerItem.folderId && (
+                    <>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item onClick={() => moveMessage(headerItem, "inbox")}>
+                        Remove from folder
+                      </DropdownMenu.Item>
+                    </>
+                  )}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+            )}
             <DropdownMenu.Separator />
             <DropdownMenu.Item icon={Printer} onClick={() => printMessage(last)}>
               Print
@@ -1104,7 +1236,13 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
             />
           ))}
           {headerItem.folder !== "drafts" && (
-            <QuickReply store={store} last={last} onReply={onReply} onForward={onForward} onSent={onSent} />
+            <QuickReply
+              store={store}
+              last={last}
+              onReply={onReply}
+              onForward={onForward}
+              onSent={onSent}
+            />
           )}
         </div>
       </div>

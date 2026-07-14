@@ -6,12 +6,21 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import zip.estrogen.mail.ui.theme.AppPalette
+import zip.estrogen.mail.ui.theme.DarkMode
 
 private val Context.dataStore by preferencesDataStore(name = "estrogen_mail_prefs")
 
 data class Credentials(
     val apiKey: String,
     val baseUrl: String
+)
+
+data class Appearance(
+    val palette: AppPalette = AppPalette.PLUM,
+    val dynamicColor: Boolean = true,
+    val darkMode: DarkMode = DarkMode.SYSTEM,
+    val amoled: Boolean = false
 )
 
 class SettingsStore(private val context: Context) {
@@ -21,7 +30,13 @@ class SettingsStore(private val context: Context) {
     private val keyApiKey = stringPreferencesKey("api_key")
     private val keyBaseUrl = stringPreferencesKey("base_url")
     private val keyDynamicColor = stringPreferencesKey("dynamic_color")
+    private val keyPalette = stringPreferencesKey("palette")
+    private val keyDarkMode = stringPreferencesKey("dark_mode")
+    private val keyAmoled = stringPreferencesKey("amoled")
     private val keyPgpPublicKey = stringPreferencesKey("pgp_public_key")
+    private val keyNotifications = stringPreferencesKey("notifications")
+    private val keySwipeRight = stringPreferencesKey("swipe_right")
+    private val keySwipeLeft = stringPreferencesKey("swipe_left")
 
     val credentials: Flow<Credentials?> = context.dataStore.data.map { prefs ->
         val legacyKey = prefs[keyApiKey]
@@ -38,8 +53,39 @@ class SettingsStore(private val context: Context) {
         prefs[keyDynamicColor]?.let { it == "true" } ?: true
     }
 
+    val appearance: Flow<Appearance> = context.dataStore.data.map { prefs ->
+        Appearance(
+            palette = AppPalette.fromKey(prefs[keyPalette]),
+            dynamicColor = prefs[keyDynamicColor]?.let { it == "true" } ?: true,
+            darkMode = DarkMode.fromKey(prefs[keyDarkMode]),
+            amoled = prefs[keyAmoled] == "true"
+        )
+    }
+
     val pgpPublicKey: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[keyPgpPublicKey]
+    }
+
+    val notificationsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[keyNotifications] == "true"
+    }
+
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[keyNotifications] = if (enabled) "true" else "false" }
+    }
+
+    val swipeConfig: Flow<SwipeConfig> = context.dataStore.data.map { prefs ->
+        SwipeConfig(
+            right = prefs[keySwipeRight]?.let { SwipeAction.from(it) } ?: SwipeAction.ARCHIVE,
+            left = prefs[keySwipeLeft]?.let { SwipeAction.from(it) } ?: SwipeAction.TRASH
+        )
+    }
+
+    suspend fun setSwipe(right: SwipeAction, left: SwipeAction) {
+        context.dataStore.edit { prefs ->
+            prefs[keySwipeRight] = right.key
+            prefs[keySwipeLeft] = left.key
+        }
     }
 
     suspend fun save(apiKey: String, baseUrl: String) {
@@ -56,6 +102,18 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun setPalette(palette: AppPalette) {
+        context.dataStore.edit { prefs -> prefs[keyPalette] = palette.key }
+    }
+
+    suspend fun setDarkMode(mode: DarkMode) {
+        context.dataStore.edit { prefs -> prefs[keyDarkMode] = mode.key }
+    }
+
+    suspend fun setAmoled(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[keyAmoled] = if (enabled) "true" else "false" }
+    }
+
     suspend fun setPgpPublicKey(armored: String?) {
         context.dataStore.edit { prefs ->
             if (armored.isNullOrBlank()) prefs.remove(keyPgpPublicKey)
@@ -66,9 +124,15 @@ class SettingsStore(private val context: Context) {
     suspend fun clear() {
         secureStore.clear()
         context.dataStore.edit { prefs ->
-            val keep = prefs[keyDynamicColor]
+            val palette = prefs[keyPalette]
+            val dynamic = prefs[keyDynamicColor]
+            val dark = prefs[keyDarkMode]
+            val amoled = prefs[keyAmoled]
             prefs.clear()
-            if (keep != null) prefs[keyDynamicColor] = keep
+            palette?.let { prefs[keyPalette] = it }
+            dynamic?.let { prefs[keyDynamicColor] = it }
+            dark?.let { prefs[keyDarkMode] = it }
+            amoled?.let { prefs[keyAmoled] = it }
         }
     }
 

@@ -54,10 +54,10 @@ class SettingsViewModel(
             repository.loadMe().onSuccess { me ->
                 _state.update {
                     it.copy(
-                        address = me.user.address,
-                        displayName = me.user.displayName ?: me.user.username,
-                        avatarUrl = me.user.avatarUrl,
-                        pgpEnabledOnServer = me.user.pgpEnabled
+                        address = me.user?.address,
+                        displayName = me.user?.displayName ?: me.user?.username,
+                        avatarUrl = me.user?.avatarUrl,
+                        pgpEnabledOnServer = me.user?.pgpEnabled == true
                     )
                 }
             }

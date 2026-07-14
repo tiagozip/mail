@@ -1,8 +1,9 @@
-import { Button, Checkbox, Loader, Tooltip } from "@cloudflare/kumo";
+import { Button, Checkbox, DropdownMenu, Loader, Tooltip } from "@cloudflare/kumo";
 import {
   Archive,
   Envelope,
   EnvelopeOpen,
+  Folder,
   List,
   MagnifyingGlass,
   NotePencil,
@@ -14,6 +15,7 @@ import {
   Tray,
   Trash,
 } from "@phosphor-icons/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as cache from "../cache.js";
@@ -115,7 +117,7 @@ function Row({
 }
 
 function BulkBar({ store }) {
-  const { selectedIds, bulkAction, selectAll } = store;
+  const { selectedIds, bulkAction, selectAll, userFolders } = store;
   return (
     <div className="em-bulkbar">
       <Checkbox checked onCheckedChange={() => selectAll(false)} aria-label="Clear selection" />
@@ -134,8 +136,28 @@ function BulkBar({ store }) {
         <Button size="sm" variant="ghost" shape="square" aria-label="Mark unread" icon={Envelope} onClick={() => bulkAction("read", false)} />
       </Tooltip>
       <Tooltip content="Star">
-        <Button size="sm" variant="ghost" shape="square" aria-label="Star" icon={Star} onClick={() => bulkAction("star", true)} />
+        <Button size="sm" variant="ghost" shape="square" aria-label="Star" icon={<Star weight="fill" />} onClick={() => bulkAction("star", true)} />
       </Tooltip>
+      <Tooltip content="Unstar">
+        <Button size="sm" variant="ghost" shape="square" aria-label="Unstar" icon={<Star weight="regular" />} onClick={() => bulkAction("star", false)} />
+      </Tooltip>
+      {(userFolders || []).length > 0 && (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={(p) => (
+              <Button {...p} size="sm" variant="ghost" shape="square" aria-label="Move to folder" icon={Folder} />
+            )}
+          />
+          <DropdownMenu.Content>
+            {userFolders.map((f) => (
+              <DropdownMenu.Item key={f.id} onClick={() => bulkAction("movefolder", f.id)}>
+                <span className="em-label-dot" style={{ background: f.color }} />
+                {f.name}
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
     </div>
   );
 }
@@ -230,6 +252,12 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
   }, [messages]);
 
   const threads = useMemo(() => groupThreads(messages), [messages]);
+  const rowVirtualizer = useVirtualizer({
+    count: threads.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 76,
+    overscan: 8,
+  });
   const selfAddresses = useMemo(
     () => (store.user?.addresses?.map((a) => a.address) || [store.user?.address]).filter(Boolean),
     [store.user],
@@ -266,6 +294,11 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
           icon={List}
           onClick={onMenu}
         />
+        {selecting && selectedIds.size < messages.length && (
+          <button type="button" className="em-selectall" onClick={() => selectAll(true)}>
+            Select all {messages.length}
+          </button>
+        )}
       </div>
 
       {selecting && <BulkBar store={store} />}
@@ -312,20 +345,40 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
           })()
         ) : (
           <>
-            {threads.map((item) => (
-              <Row
-                key={item.id}
-                item={item}
-                active={item._members?.some((m) => m.id === openId)}
-                selected={selectedIds.has(item.id)}
-                selfAddresses={selfAddresses}
-                decSnippet={decSnippets[item.id]}
-                onOpen={item.isDraft && onOpenDraft ? onOpenDraft : openMessage}
-                onPrefetch={prefetchThread}
-                onToggleSelect={toggleSelect}
-                onToggleStar={toggleStar}
-              />
-            ))}
+            <div
+              className="em-vlist"
+              style={{ height: rowVirtualizer.getTotalSize(), position: "relative" }}
+            >
+              {rowVirtualizer.getVirtualItems().map((v) => {
+                const item = threads[v.index];
+                return (
+                  <div
+                    key={item.id}
+                    data-index={v.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${v.start}px)`,
+                    }}
+                  >
+                    <Row
+                      item={item}
+                      active={item._members?.some((m) => m.id === openId)}
+                      selected={selectedIds.has(item.id)}
+                      selfAddresses={selfAddresses}
+                      decSnippet={decSnippets[item.id]}
+                      onOpen={item.isDraft && onOpenDraft ? onOpenDraft : openMessage}
+                      onPrefetch={prefetchThread}
+                      onToggleSelect={toggleSelect}
+                      onToggleStar={toggleStar}
+                    />
+                  </div>
+                );
+              })}
+            </div>
             {nextCursor && (
               <div className="em-loadmore">
                 {loadingMore ? <Loader size="sm" /> : <Button variant="ghost" size="sm" onClick={loadMore}>Load more</Button>}
@@ -341,7 +394,7 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
           <input
             ref={searchRef}
             className="em-floatbar-input"
-            placeholder="Search"
+            placeholder="search your email..."
             aria-label="Search mail"
             value={query}
             onChange={(e) => setQuery(e.target.value)}

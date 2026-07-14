@@ -3,7 +3,7 @@ import { sendViaRelay } from "./byod.js";
 import { encryptText, tryDecryptBytes } from "./crypto.js";
 import { sanitizeEmailHtml, textToHtml } from "./sanitize.js";
 import { bumpContact, htmlKey, insertMessage, resolveThread, updateStorage } from "./store.js";
-import { isValidEmail, normalizeAddr, now, snippetFrom, uuid } from "./util.js";
+import { escapeHtml, isValidEmail, normalizeAddr, now, snippetFrom, uuid } from "./util.js";
 
 function expandHtmlBlocks(html) {
   return String(html || "").replace(
@@ -87,13 +87,19 @@ export async function sendMessage(env, user, payload) {
   }
 
   let fromAddr = user.address;
-  if (payload.from) {
+  let fromName = user.display_name || user.username;
+  let sigText = user.signature || "";
+  {
     const owned = await env.DB.prepare(
-      "SELECT address FROM addresses WHERE address = ? AND user_id = ?",
+      "SELECT address, display_name, signature FROM addresses WHERE address = ? AND user_id = ?",
     )
-      .bind(normalizeAddr(payload.from), user.id)
+      .bind(normalizeAddr(payload.from || user.address), user.id)
       .first();
-    if (owned) fromAddr = owned.address;
+    if (owned) {
+      fromAddr = owned.address;
+      if (owned.display_name) fromName = owned.display_name;
+      if (owned.signature !== null && owned.signature !== undefined) sigText = owned.signature;
+    }
   }
 
   const fromDomain = fromAddr.split("@")[1]?.toLowerCase() || "";
@@ -120,7 +126,8 @@ export async function sendMessage(env, user, payload) {
   const html = expandedHtml
     ? sanitizeEmailHtml(expandedHtml, { allowRemote: true })
     : textToHtml(text);
-  const signature = user.signature ? `\n\n${user.signature}` : "";
+  const signature = sigText ? `\n\n${sigText}` : "";
+  const sigHtml = sigText ? `<br><br>${escapeHtml(sigText).replace(/\n/g, "<br>")}` : "";
 
   const inlineRows = [];
   const inlineIds = [
@@ -161,14 +168,14 @@ export async function sendMessage(env, user, payload) {
   const isE2E = payload.pgp === true && text.includes("-----BEGIN PGP MESSAGE-----");
   const sendPayload = {
     to,
-    from: { email: fromAddr, name: user.display_name || user.username },
+    from: { email: fromAddr, name: fromName },
     subject,
   };
   if (isE2E) {
     sendPayload.text = text;
   } else {
     sendPayload.text = text + signature;
-    sendPayload.html = outboundHtml;
+    sendPayload.html = outboundHtml + sigHtml;
   }
   if (cc.length) sendPayload.cc = cc;
   if (bcc.length) sendPayload.bcc = bcc;
@@ -212,7 +219,7 @@ export async function sendMessage(env, user, payload) {
     refs: refs.join(" "),
     folder: "sent",
     from_addr: fromAddr,
-    from_name: user.display_name || user.username,
+    from_name: fromName,
     to: to.map((a) => ({ name: "", address: a })),
     cc: cc.map((a) => ({ name: "", address: a })),
     bcc: bcc.map((a) => ({ name: "", address: a })),

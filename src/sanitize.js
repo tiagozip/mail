@@ -65,6 +65,51 @@ export function stripTrackers(html) {
   return { html: out, count };
 }
 
+function isDarkColor(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (!v || v === "transparent" || v === "inherit" || v === "currentcolor") return false;
+  if (v === "black" || v === "windowtext") return true;
+  let r;
+  let g;
+  let b;
+  let m;
+  if ((m = v.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/))) {
+    r = Number.parseInt(m[1] + m[1], 16);
+    g = Number.parseInt(m[2] + m[2], 16);
+    b = Number.parseInt(m[3] + m[3], 16);
+  } else if ((m = v.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/))) {
+    r = Number.parseInt(m[1], 16);
+    g = Number.parseInt(m[2], 16);
+    b = Number.parseInt(m[3], 16);
+  } else if ((m = v.match(/rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i))) {
+    r = +m[1];
+    g = +m[2];
+    b = +m[3];
+  } else {
+    return false;
+  }
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return max <= 120 && max - min <= 40;
+}
+
+function neutralizeDarkColors(html) {
+  let out = html.replace(/style\s*=\s*("[^"]*"|'[^']*')/gi, (full, raw) => {
+    const q = raw[0];
+    const css = raw.slice(1, -1).replace(
+      /(^|;)\s*color\s*:\s*([^;]+)/gi,
+      (mm, sep, val) => (isDarkColor(val) ? sep : mm),
+    );
+    return `style=${q}${css}${q}`;
+  });
+  out = out.replace(
+    /(<font\b[^>]*?\bcolor\s*=\s*)("([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+    (full, pre, _wrapped, dq, sq, bare) =>
+      isDarkColor(dq ?? sq ?? bare) ? pre.replace(/\s*color\s*=\s*$/i, " ") : full,
+  );
+  return out;
+}
+
 export function sanitizeEmailHtml(html, { cidMap = {}, allowRemote = false } = {}) {
   let out = String(html || "");
   out = out.replace(COMMENTS, "");
@@ -78,6 +123,7 @@ export function sanitizeEmailHtml(html, { cidMap = {}, allowRemote = false } = {
   out = out.replace(DANGEROUS_PROTO, '$1="#"');
   out = out.replace(STYLE_URL, "url(");
   out = rewriteImages(out, cidMap, allowRemote);
+  out = neutralizeDarkColors(out);
   out = out.replace(/<a\b([^>]*)>/gi, (m, attrs) => {
     let a = attrs.replace(/\s+target\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
     a = a.replace(/\s+rel\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");

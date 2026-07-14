@@ -55,6 +55,12 @@ class SecureStore(context: Context) {
             }
         }
 
+    var requireBiometric: Boolean
+        get() = runCatching { prefs?.getBoolean(KEY_BIO, false) }.getOrNull() ?: false
+        set(value) {
+            runCatching { prefs?.edit()?.putBoolean(KEY_BIO, value)?.apply() }
+        }
+
     val hasPrivateKey: Boolean
         get() = !armoredPrivateKey.isNullOrBlank()
 
@@ -68,5 +74,6 @@ class SecureStore(context: Context) {
         private const val KEY_PRIVATE = "pgp_private_key"
         private const val KEY_PASS = "pgp_passphrase"
         private const val KEY_API = "api_key"
+        private const val KEY_BIO = "require_biometric"
     }
 }

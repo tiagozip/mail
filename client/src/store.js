@@ -7,7 +7,11 @@ function runViewTransition(apply) {
   apply();
 }
 
-const SYNC_INTERVAL = 25000;
+const POLL_ACTIVE_MIN = 5000;
+const POLL_ACTIVE_MAX = 30000;
+const POLL_HIDDEN = 60000;
+const POLL_DECAY = 1.6;
+const ACTIVITY_THROTTLE = 5000;
 
 function sortMessages(list) {
   return list.sort((a, b) => b.date - a.date || (a.id < b.id ? 1 : -1));
@@ -18,6 +22,7 @@ export function useMailStore(initialUser) {
   const [view, setView] = useState({ kind: "folder", folder: "inbox" });
   const [counts, setCounts] = useState(null);
   const [labels, setLabels] = useState([]);
+  const [userFolders, setUserFolders] = useState([]);
 
   const [messages, setMessages] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
@@ -62,7 +67,11 @@ export function useMailStore(initialUser) {
   const refreshCounts = useCallback(() => {
     api
       .folders()
-      .then((d) => setCounts(d.counts))
+      .then((d) => {
+        setCounts(d.counts);
+        setUserFolders(d.folders || []);
+        cache.setSkipInboxFolders((d.folders || []).filter((f) => f.skipInbox).map((f) => f.id));
+      })
       .catch(() => {});
   }, []);
 
@@ -79,6 +88,7 @@ export function useMailStore(initialUser) {
     if (v.kind === "search") p.q = v.q;
     else if (v.kind === "starred") p.starred = 1;
     else if (v.kind === "label") p.label = v.labelId;
+    else if (v.kind === "userfolder") p.folderId = v.folderId;
     else p.folder = v.folder;
     return p;
   }, []);
@@ -216,16 +226,44 @@ export function useMailStore(initialUser) {
     refreshCounts();
     refreshLabels();
     syncNow();
-    const timer = setInterval(syncNow, SYNC_INTERVAL);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") syncNow();
+
+    let delay = POLL_ACTIVE_MIN;
+    let timer;
+    let lastActivity = 0;
+    const active = () => document.visibilityState === "visible";
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(tick, active() ? delay : POLL_HIDDEN);
     };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", syncNow);
+    async function tick() {
+      await syncNow();
+      if (active()) delay = Math.min(POLL_ACTIVE_MAX, Math.round(delay * POLL_DECAY));
+      schedule();
+    }
+    const reactivate = () => {
+      delay = POLL_ACTIVE_MIN;
+      if (active()) syncNow();
+      schedule();
+    };
+    const onActivity = () => {
+      const t = Date.now();
+      if (t - lastActivity < ACTIVITY_THROTTLE) return;
+      lastActivity = t;
+      delay = POLL_ACTIVE_MIN;
+      schedule();
+    };
+
+    schedule();
+    document.addEventListener("visibilitychange", reactivate);
+    window.addEventListener("focus", reactivate);
+    window.addEventListener("pointerdown", onActivity, { passive: true });
+    window.addEventListener("keydown", onActivity);
     return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", syncNow);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", reactivate);
+      window.removeEventListener("focus", reactivate);
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("keydown", onActivity);
     };
   }, [refreshCounts, refreshLabels, syncNow]);
 
@@ -356,12 +394,13 @@ export function useMailStore(initialUser) {
   const toggleStar = useCallback(
     (item) => {
       const next = !item.isStarred;
-      patchMessage(item.id, { isStarred: next });
-      api
-        .setStar(item.id, next)
+      const ids = item._members?.length ? item._members.map((m) => m.id) : [item.id];
+      for (const id of ids) patchMessage(id, { isStarred: next });
+      const req = ids.length > 1 ? api.bulk(ids, "star", next) : api.setStar(ids[0], next);
+      req
         .then(() => refreshCounts())
         .catch((e) => {
-          patchMessage(item.id, { isStarred: item.isStarred });
+          for (const id of ids) patchMessage(id, { isStarred: item.isStarred });
           notifyError(e);
         });
     },
@@ -393,6 +432,26 @@ export function useMailStore(initialUser) {
       }
       api
         .moveMessage(item.id, folder)
+        .then(() => refreshCounts())
+        .catch((e) => {
+          notifyError(e);
+          loadList(view);
+        });
+    },
+    [removeFromList, openId, refreshCounts, loadList, view],
+  );
+
+  const moveToFolder = useCallback(
+    (item, folderId) => {
+      threadCache.current.delete(item.threadId);
+      cache.putMessages([{ ...item, folder: "inbox", folderId }]);
+      removeFromList([item.id]);
+      if (openId === item.id) {
+        setOpenId(null);
+        setThread(null);
+      }
+      api
+        .moveToFolder(item.id, folderId)
         .then(() => refreshCounts())
         .catch((e) => {
           notifyError(e);
@@ -455,9 +514,11 @@ export function useMailStore(initialUser) {
           cache.putMessages(next.filter((m) => idSet.has(m.id)));
           return next;
         });
-      } else if (action === "move") {
+      } else if (action === "move" || action === "movefolder") {
+        const patch =
+          action === "movefolder" ? { folder: "inbox", folderId: value } : { folder: value };
         setMessages((prev) => {
-          cache.putMessages(prev.filter((m) => idSet.has(m.id)).map((m) => ({ ...m, folder: value })));
+          cache.putMessages(prev.filter((m) => idSet.has(m.id)).map((m) => ({ ...m, ...patch })));
           return prev;
         });
         for (const id of ids) threadCache.current.delete(messages.find((m) => m.id === id)?.threadId);
@@ -503,6 +564,7 @@ export function useMailStore(initialUser) {
     refreshCounts,
     labels,
     refreshLabels,
+    userFolders,
     messages,
     nextCursor,
     listLoading,
@@ -528,6 +590,7 @@ export function useMailStore(initialUser) {
     toggleStar,
     setReadState,
     moveMessage,
+    moveToFolder,
     snooze,
     deleteForever,
     bulkAction,

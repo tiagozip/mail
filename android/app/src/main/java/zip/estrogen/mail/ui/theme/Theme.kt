@@ -3,101 +3,55 @@ package zip.estrogen.mail.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.materialkolor.rememberDynamicColorScheme
 
-private val PlumDarkColors = darkColorScheme(
-    primary = RosePrimary,
-    onPrimary = RoseOnPrimary,
-    primaryContainer = RoseContainerDark,
-    onPrimaryContainer = RoseOnContainerDark,
-    inversePrimary = RosePrimary,
-    secondary = SecondaryDark,
-    onSecondary = OnSecondaryDark,
-    secondaryContainer = SecondaryContainerDark,
-    onSecondaryContainer = OnSecondaryContainerDark,
-    tertiary = TertiaryDark,
-    onTertiary = OnTertiaryDark,
-    tertiaryContainer = TertiaryContainerDark,
-    onTertiaryContainer = OnTertiaryContainerDark,
-    background = PlumBackground,
-    onBackground = WarmTextDefault,
-    surface = PlumSurface,
-    onSurface = WarmTextDefault,
-    surfaceDim = PlumSurfaceDim,
-    surfaceBright = PlumSurfaceBright,
-    surfaceContainerLowest = PlumSurfaceContainerLowest,
-    surfaceContainerLow = PlumSurfaceContainerLow,
-    surfaceContainer = PlumSurfaceContainer,
-    surfaceContainerHigh = PlumSurfaceContainerHigh,
-    surfaceContainerHighest = PlumSurfaceContainerHighest,
-    surfaceVariant = PlumSurfaceVariant,
-    onSurfaceVariant = PlumOnSurfaceVariant,
-    outline = PlumOutline,
-    outlineVariant = PlumOutlineVariant,
-    error = ErrorDark,
-    onError = OnErrorDark,
-    errorContainer = ErrorContainerDark,
-    onErrorContainer = OnErrorContainerDark
+private fun ColorScheme.toAmoled(): ColorScheme = copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceContainerLowest = Color.Black,
+    surfaceDim = Color.Black,
+    surfaceContainerLow = surfaceContainerLow.darken(),
+    surfaceContainer = surfaceContainer.darken(),
+    surfaceContainerHigh = surfaceContainerHigh.darken()
 )
 
-private val PlumLightColors = lightColorScheme(
-    primary = RosePrimary,
-    onPrimary = RoseOnPrimary,
-    primaryContainer = RoseContainerLight,
-    onPrimaryContainer = RoseOnContainerLight,
-    inversePrimary = RoseLight,
-    secondary = LightSecondary,
-    onSecondary = RoseOnPrimary,
-    secondaryContainer = RoseContainerLight,
-    onSecondaryContainer = LightOnSecondaryContainer,
-    tertiary = LightTertiary,
-    onTertiary = RoseOnPrimary,
-    tertiaryContainer = TertiaryContainerDark,
-    onTertiaryContainer = LightOnTertiaryContainer,
-    background = LightBackground,
-    onBackground = LightTextDefault,
-    surface = LightSurface,
-    onSurface = LightTextDefault,
-    surfaceDim = LightSurfaceDim,
-    surfaceBright = LightSurfaceBright,
-    surfaceContainerLowest = LightSurfaceContainerLowest,
-    surfaceContainerLow = LightSurfaceContainerLow,
-    surfaceContainer = LightSurfaceContainer,
-    surfaceContainerHigh = LightSurfaceContainerHigh,
-    surfaceContainerHighest = LightSurfaceContainerHighest,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant,
-    outline = LightOutline,
-    outlineVariant = LightOutlineVariant,
-    error = LightError,
-    onError = RoseOnPrimary,
-    errorContainer = LightErrorContainer,
-    onErrorContainer = LightOnErrorContainer
-)
+private fun Color.darken(factor: Float = 0.55f): Color =
+    Color(red * factor, green * factor, blue * factor, alpha)
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun EstrogenMailTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
+    amoled: Boolean = false,
+    palette: AppPalette = AppPalette.PLUM,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
     val supportsDynamic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val colorScheme = when {
+
+    val base = when {
         dynamicColor && supportsDynamic ->
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        darkTheme -> PlumDarkColors
-        else -> PlumLightColors
+        else -> rememberDynamicColorScheme(
+            seedColor = palette.seed,
+            isDark = darkTheme,
+            isAmoled = amoled && darkTheme,
+            style = palette.style
+        )
     }
+    val colorScheme = if (amoled && darkTheme && dynamicColor && supportsDynamic) base.toAmoled() else base
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -109,7 +63,7 @@ fun EstrogenMailTheme(
         }
     }
 
-    MaterialTheme(
+    MaterialExpressiveTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
         shapes = AppShapes,

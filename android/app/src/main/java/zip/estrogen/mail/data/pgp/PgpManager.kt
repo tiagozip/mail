@@ -25,6 +25,35 @@ class PgpManager(private val secureStore: SecureStore) {
 
     val ownPublicKey: String? get() = identity?.armoredPublicKey
 
+    val hasRememberedPassphrase: Boolean get() = secureStore.passphrase != null
+
+    var requireBiometric: Boolean
+        get() = secureStore.requireBiometric
+        set(value) { secureStore.requireBiometric = value }
+
+    val fingerprint: String? get() = identity?.armoredPublicKey?.let { PgpEngine.fingerprint(it) }
+
+    fun exportPrivateKey(): String? = secureStore.armoredPrivateKey
+
+    fun generate(name: String, email: String, passphrase: String, remember: Boolean): Result<GeneratedIdentity> {
+        val gen = PgpEngine.generateIdentity(name, email, passphrase)
+        return gen.fold(
+            onSuccess = { id ->
+                secureStore.armoredPrivateKey = id.privateKeyEnc
+                PgpEngine.unlock(id.privateKeyEnc, passphrase).fold(
+                    onSuccess = {
+                        identity = it
+                        if (remember) secureStore.passphrase = passphrase else secureStore.passphrase = null
+                        _status.value = PgpStatus.UNLOCKED
+                        Result.success(id)
+                    },
+                    onFailure = { Result.failure(it) }
+                )
+            },
+            onFailure = { Result.failure(it) }
+        )
+    }
+
     fun importPrivateKey(armoredPrivateKey: String): Result<Unit> {
         val check = PgpEngine.publicKeyFromPrivate(armoredPrivateKey)
         if (check.isFailure) return Result.failure(check.exceptionOrNull() ?: IllegalArgumentException("Invalid key"))

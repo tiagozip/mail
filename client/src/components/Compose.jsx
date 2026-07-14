@@ -13,7 +13,7 @@ import {
   Trash,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
@@ -26,7 +26,9 @@ import {
   plainBodyToHtml,
   sendLaterPresets,
 } from "../util.js";
-import { RichEditor } from "./RichEditor.jsx";
+const RichEditor = lazy(() =>
+  import("./RichEditor.jsx").then((m) => ({ default: m.RichEditor })),
+);
 
 function attIcon(mime) {
   const m = mime || "";
@@ -46,6 +48,8 @@ function RecipientField({ label, value, onChange, autoFocus }) {
   const timer = useRef(null);
   const listRef = useRef(null);
   const inputRef = useRef(null);
+  const reqSeq = useRef(0);
+  const draftRef = useRef("");
 
   const tokens = value.split(",");
   const recipients = tokens
@@ -53,23 +57,28 @@ function RecipientField({ label, value, onChange, autoFocus }) {
     .map((s) => s.trim())
     .filter(Boolean);
   const draft = (tokens[tokens.length - 1] || "").replace(/^\s+/, "");
+  draftRef.current = draft;
 
   function queueSuggest(d) {
     const last = d.trim();
     clearTimeout(timer.current);
+    reqSeq.current += 1;
     if (!last) {
       setSuggestions([]);
       setShow(false);
       return;
     }
+    const seq = reqSeq.current;
     timer.current = setTimeout(async () => {
       try {
         const r = await api.contacts(last);
+        if (seq !== reqSeq.current || draftRef.current.trim() !== last) return;
         const list = r.contacts || [];
         setSuggestions(list);
         setActive(0);
         setShow(list.length > 0);
       } catch {
+        if (seq !== reqSeq.current) return;
         setSuggestions([]);
         setShow(false);
       }
@@ -166,7 +175,7 @@ function RecipientField({ label, value, onChange, autoFocus }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
-            onFocus={() => suggestions.length && setShow(true)}
+            onFocus={() => (draft.trim() ? queueSuggest(draft) : suggestions.length && setShow(true))}
             onBlur={() => setTimeout(() => setShow(false), 150)}
           />
           {show && suggestions.length > 0 && (
@@ -265,7 +274,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     if (!open) return;
     const init = initial || {};
     const html = plainBodyToHtml(init.body || "");
-    setFrom(primary);
+    setFrom(init.from && addresses.some((a) => a.address === init.from) ? init.from : primary);
     setTo(init.to || "");
     setCc(init.cc || "");
     setBcc(init.bcc || "");
@@ -338,6 +347,19 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   const bccFilled = parseRecipients(bcc).length > 0;
   const keysReady = recipientAddrs.length > 0 && recipientAddrs.every((addr) => !!keyMap[addr]);
   const canE2E = user.pgpEnabled === true && keysReady && !bccFilled && !pendingAtts;
+  const pgpDefault = user.settings?.pgpDefault === true;
+  const missingKeys = recipientAddrs.filter((addr) => !keyMap[addr]);
+  const encryptReason = !user.pgpEnabled
+    ? "Set up your own key in Encryption settings first."
+    : bccFilled
+      ? "Encryption is off while a Bcc is set."
+      : pendingAtts
+        ? "Encryption is off with attachments."
+        : !recipientAddrs.length
+          ? "Add a recipient with a saved key to encrypt."
+          : missingKeys.length
+            ? `No saved key for ${missingKeys[0]}${missingKeys.length > 1 ? ` +${missingKeys.length - 1}` : ""}.`
+            : "";
 
   async function saveDraft() {
     const payload = {
@@ -481,17 +503,18 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     );
   }
 
-  async function onSend(sendAt) {
+  async function onSend(sendAt, doEncrypt) {
     const recipients = parseRecipients(to);
     if (!recipients.length) {
       notify("Add a recipient", "The To field is empty.", "warning");
       return;
     }
+    const e2e = doEncrypt && canE2E;
     setBusy(true);
     try {
       let payload;
       let plain = bodyText;
-      if (canE2E) {
+      if (e2e) {
         await lookupKeys(recipientAddrs);
         const recipientKeys = recipientAddrs.map((addr) => keyCache.current.get(addr));
         if (recipientKeys.some((k) => !k)) {
@@ -558,8 +581,8 @@ export function Compose({ open, initial, user, onClose, onSent }) {
           subject: subject || "(no subject)",
           snippet: plain.replace(/\s+/g, " ").trim().slice(0, 140),
           bodyText: plain,
-          bodyHtml: !canE2E && (bodyText.trim() || /<img/i.test(bodyHtml)) ? bodyHtml : null,
-          hasHtml: !canE2E && bodyHtml ? 1 : 0,
+          bodyHtml: !e2e && (bodyText.trim() || /<img/i.test(bodyHtml)) ? bodyHtml : null,
+          hasHtml: !e2e && bodyHtml ? 1 : 0,
           date: Date.now(),
           isRead: 1,
           pgp: 0,
@@ -572,7 +595,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
       }
 
       const resp = await api.send(sendAt ? { ...payload, sendAt, skipUndo: true } : payload);
-      announce(resp, recipients, canE2E, sendAt);
+      announce(resp, recipients, e2e, sendAt);
       onSent?.(resp);
       onClose();
     } catch (e) {
@@ -597,8 +620,6 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     onClose();
   }
 
-  const multiAddr = addresses.length > 1;
-
   return (
     <DialogRoot open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog
@@ -622,22 +643,18 @@ export function Compose({ open, initial, user, onClose, onSent }) {
         <div className="em-compose-fields">
           <div className="em-compose-from">
             <label>From</label>
-            {multiAddr ? (
-              <Select
-                aria-label="From address"
-                size="sm"
-                value={from}
-                onValueChange={(v) => setFrom(v)}
-              >
-                {addresses.map((a) => (
-                  <Select.Option key={a.address} value={a.address}>
-                    {a.address}
-                  </Select.Option>
-                ))}
-              </Select>
-            ) : (
-              <span className="em-compose-from-static">{from}</span>
-            )}
+            <Select
+              aria-label="From address"
+              size="sm"
+              value={from}
+              onValueChange={(v) => setFrom(v)}
+            >
+              {addresses.map((a) => (
+                <Select.Option key={a.address} value={a.address}>
+                  {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
+                </Select.Option>
+              ))}
+            </Select>
           </div>
           <RecipientField label="To" value={to} onChange={setTo} autoFocus />
           {showCc && <RecipientField label="Cc" value={cc} onChange={setCc} />}
@@ -663,18 +680,20 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
           />
-          <RichEditor
-            placeholder="Write your message"
-            value={bodyHtml}
-            onEditorReady={(ed) => {
-              editorRef.current = ed;
-            }}
-            onUpdate={({ html, text }) => {
-              setBodyHtml(html);
-              setBodyText(text);
-            }}
-            onFiles={handleFiles}
-          />
+          <Suspense fallback={<div className="em-editor-loading"><Loader size="sm" /></div>}>
+            <RichEditor
+              placeholder="Write your message"
+              value={bodyHtml}
+              onEditorReady={(ed) => {
+                editorRef.current = ed;
+              }}
+              onUpdate={({ html, text }) => {
+                setBodyHtml(html);
+                setBodyText(text);
+              }}
+              onFiles={handleFiles}
+            />
+          </Suspense>
           {dropImages && (
             <div className="em-img-choose">
               <span className="em-img-choose-label">
@@ -748,11 +767,12 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             <Button
               className="em-split-main"
               variant="primary"
-              icon={PaperPlaneTilt}
+              icon={pgpDefault ? Lock : PaperPlaneTilt}
               loading={busy}
-              onClick={() => onSend()}
+              disabled={pgpDefault && !canE2E}
+              onClick={() => onSend(undefined, pgpDefault)}
             >
-              Send
+              {pgpDefault ? "Send encrypted" : "Send"}
             </Button>
             <DropdownMenu>
               <DropdownMenu.Trigger
@@ -762,17 +782,22 @@ export function Compose({ open, initial, user, onClose, onSent }) {
                     className="em-split-caret"
                     variant="primary"
                     shape="square"
-                    aria-label="Send later"
+                    aria-label="More send options"
                     icon={CaretDown}
                     disabled={busy}
                   />
                 )}
               />
               <DropdownMenu.Content>
+                {pgpDefault && (
+                  <DropdownMenu.Item icon={PaperPlaneTilt} onClick={() => onSend(undefined, false)}>
+                    Send without encryption
+                  </DropdownMenu.Item>
+                )}
                 <DropdownMenu.Group>
                   <DropdownMenu.Label>Send later</DropdownMenu.Label>
                   {sendLaterPresets().map((p) => (
-                    <DropdownMenu.Item key={p.key} onClick={() => onSend(p.sendAt)}>
+                    <DropdownMenu.Item key={p.key} onClick={() => onSend(p.sendAt, pgpDefault)}>
                       <span className="em-snooze-item">
                         <span>{p.label}</span>
                         <span className="em-snooze-when">{fullDate(p.sendAt)}</span>
@@ -790,13 +815,18 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             Save draft
           </Button>
           <div className="em-spacer" />
-          {user.pgpEnabled === true && canE2E && (
+          {pgpDefault && canE2E && (
             <span
               className="em-e2e-chip is-on"
               title="Only the recipients can read this. The server never sees it."
             >
               <Lock size={13} weight="fill" />
               End-to-end encrypted
+            </span>
+          )}
+          {pgpDefault && !canE2E && encryptReason && (
+            <span className="em-e2e-chip" title={encryptReason}>
+              {encryptReason}
             </span>
           )}
           <Button variant="secondary-destructive" icon={Trash} onClick={onDiscard}>

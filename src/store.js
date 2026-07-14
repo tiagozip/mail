@@ -153,6 +153,8 @@ export async function insertMessage(env, row) {
     in_reply_to: row.in_reply_to || null,
     refs: row.refs || "",
     folder: row.folder || "inbox",
+    folder_id: row.folder_id || null,
+    delivered_to: row.delivered_to || null,
     from_addr: row.from_addr || "",
     from_name: row.from_name || "",
     to_json: JSON.stringify(row.to || []),
@@ -179,8 +181,8 @@ export async function insertMessage(env, row) {
     created_at: now(),
   };
   await env.DB.prepare(
-    `INSERT INTO messages (id,user_id,thread_id,rfc_message_id,in_reply_to,refs,folder,from_addr,from_name,to_json,cc_json,bcc_json,reply_to,subject,snippet,snippet_enc,body_text,has_html,date,received_at,is_read,is_starred,is_draft,has_attachments,size,raw_key,html_key,pgp,auth_status,auth_detail,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO messages (id,user_id,thread_id,rfc_message_id,in_reply_to,refs,folder,folder_id,delivered_to,from_addr,from_name,to_json,cc_json,bcc_json,reply_to,subject,snippet,snippet_enc,body_text,has_html,date,received_at,is_read,is_starred,is_draft,has_attachments,size,raw_key,html_key,pgp,auth_status,auth_detail,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   )
     .bind(
       m.id,
@@ -190,6 +192,8 @@ export async function insertMessage(env, row) {
       m.in_reply_to,
       m.refs,
       m.folder,
+      m.folder_id,
+      m.delivered_to,
       m.from_addr,
       m.from_name,
       m.to_json,

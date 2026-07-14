@@ -10,13 +10,17 @@ import java.util.concurrent.TimeUnit
 
 object ApiFactory {
 
-    private val json = Json {
+    val json = Json {
         ignoreUnknownKeys = true
         explicitNulls = false
         coerceInputValues = true
     }
 
-    fun create(baseUrl: String, apiKey: String): MailApi {
+    fun client(
+        apiKey: String,
+        onUnauthorized: () -> Unit = {},
+        onAuthorized: () -> Unit = {}
+    ): OkHttpClient {
         val authInterceptor = Interceptor { chain ->
             val request = chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $apiKey")
@@ -25,15 +29,31 @@ object ApiFactory {
                 .build()
             chain.proceed(request)
         }
-
-        val client = OkHttpClient.Builder()
+        val statusInterceptor = Interceptor { chain ->
+            val response = chain.proceed(chain.request())
+            when (response.code) {
+                401 -> onUnauthorized()
+                in 200..299 -> onAuthorized()
+            }
+            response
+        }
+        return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor(statusInterceptor)
             .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
+    }
 
+    fun create(
+        baseUrl: String,
+        apiKey: String,
+        onUnauthorized: () -> Unit = {},
+        onAuthorized: () -> Unit = {},
+        client: OkHttpClient = client(apiKey, onUnauthorized, onAuthorized)
+    ): MailApi {
         val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
-
         return Retrofit.Builder()
             .baseUrl(normalized)
             .client(client)

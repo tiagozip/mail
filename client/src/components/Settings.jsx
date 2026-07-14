@@ -19,6 +19,8 @@ import {
   Copy,
   Funnel,
   Globe,
+  IdentificationCard,
+  Key,
   Lock,
   LockKey,
   Palette,
@@ -38,6 +40,7 @@ import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
 import { humanSize, initials, monoColor, relativeTime } from "../util.js";
+import { AliasIdentity } from "./AliasIdentity.jsx";
 import { ByodSetup } from "./ByodSetup.jsx";
 
 const PALETTES = [
@@ -184,6 +187,15 @@ function Addresses({ user, setUser }) {
   const [domain, setDomain] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [identityAlias, setIdentityAlias] = useState(null);
+
+  function refreshAddresses() {
+    api
+      .aliases()
+      .then((d) => setAddresses(d.addresses || []))
+      .catch(() => {});
+    refreshUser();
+  }
 
   useEffect(() => {
     api
@@ -250,6 +262,7 @@ function Addresses({ user, setUser }) {
   }
 
   return (
+    <>
     <div className="em-card">
       <div className="em-card-head">
         <h2 className="em-card-title">Addresses</h2>
@@ -261,29 +274,42 @@ function Addresses({ user, setUser }) {
         <div className="em-alias-list">
           {addresses.map((a) => (
             <div key={a.address} className="em-alias-row">
-              <span className="em-alias-addr">{a.address}</span>
-              {a.isPrimary ? (
-                <Badge variant="purple">primary</Badge>
-              ) : (
-                <div className="em-alias-actions">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    icon={Star}
-                    onClick={() => makePrimary(a.address)}
-                  >
-                    Make primary
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    shape="square"
-                    aria-label="Remove address"
-                    icon={Trash}
-                    onClick={() => remove(a.address)}
-                  />
-                </div>
-              )}
+              <span className="em-alias-addr">
+                {a.avatar && <img className="em-avatar em-avatar-img em-alias-pfp" src={a.avatar} alt="" />}
+                <span>{a.displayName ? `${a.displayName} · ${a.address}` : a.address}</span>
+              </span>
+              <div className="em-alias-actions">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={IdentificationCard}
+                  onClick={() => setIdentityAlias(a)}
+                >
+                  Identity
+                </Button>
+                {a.isPrimary ? (
+                  <Badge variant="purple">primary</Badge>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={Star}
+                      onClick={() => makePrimary(a.address)}
+                    >
+                      Make primary
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      shape="square"
+                      aria-label="Remove address"
+                      icon={Trash}
+                      onClick={() => remove(a.address)}
+                    />
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -323,6 +349,13 @@ function Addresses({ user, setUser }) {
         </div>
       )}
     </div>
+    <AliasIdentity
+      open={!!identityAlias}
+      alias={identityAlias}
+      onClose={() => setIdentityAlias(null)}
+      onSaved={refreshAddresses}
+    />
+    </>
   );
 }
 
@@ -497,11 +530,27 @@ function Encryption({ user, setUser }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
+  const [pgpDefault, setPgpDefault] = useState(user.settings?.pgpDefault === true);
 
   async function refreshUser() {
     const d = await api.me();
     if (d.user) setUser(d.user);
     return d.user;
+  }
+
+  async function togglePgpDefault(v) {
+    setPgpDefault(v);
+    try {
+      const d = await api.saveSettings({
+        displayName: user.displayName,
+        signature: user.signature,
+        settings: { ...user.settings, pgpDefault: v },
+      });
+      if (d.user) setUser(d.user);
+    } catch (err) {
+      setPgpDefault(!v);
+      notifyError(err);
+    }
   }
 
   async function enable(e) {
@@ -553,6 +602,7 @@ function Encryption({ user, setUser }) {
   }
 
   return (
+    <>
     <div className="em-card">
       <div className="em-card-head">
         <h2 className="em-card-title">End-to-end encryption</h2>
@@ -634,6 +684,142 @@ function Encryption({ user, setUser }) {
           Enable encryption
         </Button>
       )}
+    </div>
+
+    <div className="em-card">
+      <div className="em-card-head">
+        <h2 className="em-card-title">Encrypt outgoing mail</h2>
+        <p className="em-card-sub">
+          When on, replies default to PGP-encrypted: you encrypt to the recipient's public key and
+          they decrypt it in their own client. You can still turn it off per message.
+        </p>
+      </div>
+      <label className="em-domain-public">
+        <Switch
+          aria-label="Encrypt outgoing by default"
+          checked={pgpDefault}
+          onCheckedChange={togglePgpDefault}
+        />
+        <span>Encrypt outgoing messages by default</span>
+      </label>
+    </div>
+    </>
+  );
+}
+
+function KeyRing() {
+  const [keys, setKeys] = useState(null);
+  const [address, setAddress] = useState("");
+  const [pubkey, setPubkey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function load() {
+    api
+      .pgpKeys()
+      .then((d) => setKeys(d.keys || []))
+      .catch(notifyError);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function add(e) {
+    e.preventDefault();
+    const addr = address.trim().toLowerCase();
+    if (!addr || !pubkey.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.addPgpKey(addr, pubkey.trim());
+      setAddress("");
+      setPubkey("");
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(addr) {
+    try {
+      await api.removePgpKey(addr);
+      setKeys((p) => (p || []).filter((k) => k.address !== addr));
+    } catch (err) {
+      notifyError(err);
+    }
+  }
+
+  return (
+    <div className="em-card">
+      <div className="em-card-head">
+        <h2 className="em-card-title">Recipient keys</h2>
+        <p className="em-card-sub">
+          Save people's PGP public keys here and mail to them is encrypted automatically, no pasting
+          each time. Contacts who use encryption on this server are already found for you.
+        </p>
+      </div>
+
+      {!keys ? (
+        <Loader size="sm" />
+      ) : keys.length === 0 ? (
+        <div className="em-empty-hint">No saved keys yet.</div>
+      ) : (
+        <div className="em-alias-list">
+          {keys.map((k) => (
+            <div key={k.address} className="em-alias-row">
+              <span className="em-alias-addr">
+                <span>{k.name ? `${k.name} · ${k.address}` : k.address}</span>
+                {k.fingerprint && (
+                  <span className="em-hidden-meta">
+                    {k.fingerprint.slice(-16).replace(/(.{4})/g, "$1 ").trim()}
+                  </span>
+                )}
+              </span>
+              <div className="em-alias-actions">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  shape="square"
+                  aria-label="Remove key"
+                  icon={Trash}
+                  onClick={() => remove(k.address)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form className="em-keyring-add" onSubmit={add}>
+        <Input
+          label="Email address"
+          placeholder="them@example.com"
+          value={address}
+          onChange={(e) => {
+            setAddress(e.target.value);
+            setError("");
+          }}
+        />
+        <div>
+          <label className="em-field-label">Public key</label>
+          <textarea
+            className="em-textarea em-encrypt-key"
+            placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
+            value={pubkey}
+            onChange={(e) => {
+              setPubkey(e.target.value);
+              setError("");
+            }}
+          />
+        </div>
+        {error && <div className="em-form-error">{error}</div>}
+        <Button type="submit" variant="primary" icon={Plus} loading={busy}>
+          Save key
+        </Button>
+      </form>
     </div>
   );
 }
@@ -1199,6 +1385,7 @@ const SECTIONS = [
   { id: "domains", label: "Domains", icon: Globe },
   { id: "filters", label: "Filters", icon: Funnel },
   { id: "encryption", label: "Encryption", icon: LockKey },
+  { id: "keys", label: "Keys", icon: Key, needsPgp: true },
   { id: "developer", label: "Developer", icon: Code },
 ];
 
@@ -1339,7 +1526,7 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
         </div>
         <div className="em-settings-body">
           <nav className="em-settings-rail">
-            {SECTIONS.map((s) => {
+            {SECTIONS.filter((s) => !s.needsPgp || user.settings?.pgpDefault).map((s) => {
               const Icon = s.icon;
               const active = section === s.id;
               return (
@@ -1572,6 +1759,8 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
             )}
 
             {section === "encryption" && <Encryption user={user} setUser={setUser} />}
+
+            {section === "keys" && <KeyRing />}
 
             {section === "developer" && <ApiKeys />}
           </div>
