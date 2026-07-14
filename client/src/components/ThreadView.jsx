@@ -1,4 +1,6 @@
 import { Button, DropdownMenu, Input, Loader, Select, Tooltip } from "@cloudflare/kumo";
+import spamton from "../assets/spamton.webp";
+
 import {
   Archive,
   ArrowBendDoubleUpLeft,
@@ -18,7 +20,7 @@ import {
   FileText,
   FileZip,
   Folder,
-  Image,
+  Image as ImageIcon,
   Lock,
   LockKeyOpen,
   Paperclip,
@@ -53,9 +55,7 @@ import {
   snoozePresets,
   splitQuoted,
 } from "../util.js";
-const RichEditor = lazy(() =>
-  import("./RichEditor.jsx").then((m) => ({ default: m.RichEditor })),
-);
+const RichEditor = lazy(() => import("./RichEditor.jsx").then((m) => ({ default: m.RichEditor })));
 
 const CodeHighlight = lazy(() => import("../CodeHighlight.jsx"));
 
@@ -411,9 +411,9 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
         <div className="em-msg-body">
           {message.authStatus === "fail" && (
             <div className="em-spoof-banner">
-              <Warning size={24} weight="fill" />
+              <Image src={spamton} className="em-spoof-image" alt="Spamton"></Image>
               <div className="em-spoof-copy">
-                <div className="em-spoof-title">This message may be spoofed</div>
+                <div className="em-spoof-title">This message may be [[spoofed]]</div>
                 <div className="em-spoof-text">
                   The sender's identity could not be verified and may be forged. Do not trust links,
                   attachments, or any request to log in, pay, or share information in this message.
@@ -431,7 +431,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
           )}
           {hasBlocked && (
             <div className="em-images-bar">
-              <Image size={15} />
+              <ImageIcon size={15} />
               <span style={{ flex: 1 }}>Remote images blocked</span>
               <button type="button" className="em-quote-toggle" onClick={onShowImages}>
                 Show images
@@ -545,7 +545,10 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     for (const file of files) {
       const tmpId = `pending-${Math.random()}`;
       const thumb = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
-      setAtts((p) => [...p, { id: tmpId, filename: file.name, size: file.size, pending: true, thumb }]);
+      setAtts((p) => [
+        ...p,
+        { id: tmpId, filename: file.name, size: file.size, pending: true, thumb },
+      ]);
       try {
         const d = await api.uploadAttachment(file);
         setAtts((p) => p.map((a) => (a.id === tmpId ? { ...d, thumb } : a)));
@@ -722,7 +725,11 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
                 <span className="em-encrypt-warn"> · remove Cc/attachments to encrypt</span>
               )}
               {!recipKey && manualKey.trim() && (
-                <button type="button" className="em-linkbtn em-encrypt-save" onClick={saveManualKey}>
+                <button
+                  type="button"
+                  className="em-linkbtn em-encrypt-save"
+                  onClick={saveManualKey}
+                >
                   Save to keyring
                 </button>
               )}
@@ -751,9 +758,17 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           onChange={(e) => setCc(e.target.value)}
         />
       )}
-      <Suspense fallback={<div className="em-editor-loading"><Loader size="sm" /></div>}>
+      <Suspense
+        fallback={
+          <div className="em-editor-loading">
+            <Loader size="sm" />
+          </div>
+        }
+      >
         <RichEditor
-          placeholder={pgpDefault && canEncrypt ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`}
+          placeholder={
+            pgpDefault && canEncrypt ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`
+          }
           onUpdate={({ html: h, text: t }) => {
             setHtml(h);
             setText(t);
@@ -881,7 +896,12 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
             </DropdownMenu.Content>
           </DropdownMenu>
         </div>
-        <Button size="sm" variant="ghost" icon={Paperclip} onClick={() => fileInput.current?.click()}>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={Paperclip}
+          onClick={() => fileInput.current?.click()}
+        >
           Attach
         </Button>
         {!showCc && (
@@ -1216,7 +1236,13 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
             />
           ))}
           {headerItem.folder !== "drafts" && (
-            <QuickReply store={store} last={last} onReply={onReply} onForward={onForward} onSent={onSent} />
+            <QuickReply
+              store={store}
+              last={last}
+              onReply={onReply}
+              onForward={onForward}
+              onSent={onSent}
+            />
           )}
         </div>
       </div>

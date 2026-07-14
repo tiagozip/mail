@@ -3849,6 +3849,12 @@ html[data-theme="nord"] {
   color: var(--text-color-kumo-subtle);
 }
 
+.em-spoof-image {
+  width: 42px;
+  height: 42px;
+  image-rendering: pixelated;
+}
+
 .em-spoof-badge {
   display: inline-flex;
   align-items: center;
