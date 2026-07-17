@@ -29,6 +29,14 @@ Six of the seven plans edit `client/src/theme.css`, and two edit `AppShell.jsx`.
 - **004 and 007 both touch `AppShell.jsx`** in different places (004 at lines 392 and 476; 007 at lines 77, 185, 235-250, 436). Sequential only.
 - **007 is independent of all the CSS plans** and could run first if preferred. It is last here only because it is the largest.
 
+## Correction: plan 007 was only half the story
+
+007 blames the j/k finickiness on the cursor indexing the flat message array while the list renders threads. That bug was real and the fix stands, but it was **not** what made j/k feel broken.
+
+The actual cause was an unguarded async race in `openMessage` (`store.js`): every `j` fired `api.thread(...)` with nothing checking that the response still matched the open thread, so a slow fetch for a thread you had already moved past would land later and flip the reader back to it. Whichever response happened to return last won. Fixed in `23d85f7` with a `threadSeq` guard, mirroring the `reqSeq` idiom `loadList` already used.
+
+Sequence of wrong diagnoses, for the record: a 120ms CSS fade (finding 9, wrong), then the index space (real, but not what was felt), then the race (the actual cause).
+
 ## Notes on what was deliberately not planned
 
 - **The floatbar bounce** (`theme.css:669`, `cubic-bezier(0.34, 1.56, 0.64, 1)` at `0.46s`) was raised as a cohesion finding and **rejected by the author**. It is the app's only bounce and is off-token, but nothing waits on it and it is never re-triggered rapidly, so the frequency argument against it does not hold. It stays. Do not "fix" it.
