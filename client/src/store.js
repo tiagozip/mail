@@ -31,6 +31,7 @@ export function useMailStore(initialUser) {
   const [threadLoading, setThreadLoading] = useState(false);
 
   const reqSeq = useRef(0);
+  const threadSeq = useRef(0);
   const threadCache = useRef(new Map());
   const inflight = useRef(new Set());
   const viewRef = useRef(view);
@@ -264,6 +265,7 @@ export function useMailStore(initialUser) {
   }, [refreshCounts, refreshLabels, syncNow]);
 
   const goView = useCallback((v) => {
+    threadSeq.current++;
     threadCache.current.clear();
     inflight.current.clear();
     setOpenId(null);
@@ -273,6 +275,7 @@ export function useMailStore(initialUser) {
 
   const openMessage = useCallback(
     (item) => {
+      const seq = ++threadSeq.current;
       const cached = threadCache.current.get(item.threadId);
       setOpenId(item.id);
       if (cached) {
@@ -282,6 +285,7 @@ export function useMailStore(initialUser) {
         setThreadLoading(true);
         setThread(null);
         cache.getThread(item.threadId).then((persisted) => {
+          if (seq !== threadSeq.current) return;
           if (!persisted || threadCache.current.has(item.threadId)) return;
           setThread((cur) => (cur ? cur : { threadId: item.threadId, messages: persisted }));
           setThreadLoading(false);
@@ -305,23 +309,27 @@ export function useMailStore(initialUser) {
           const msgs = d.messages || [];
           threadCache.current.set(item.threadId, msgs);
           cache.putThread(item.threadId, msgs);
-          setThread({ threadId: item.threadId, messages: msgs });
           setMessages((prev) =>
             prev.map((m) =>
               m.threadId === item.threadId && m.folder !== "sent" ? { ...m, isRead: true } : m,
             ),
           );
           refreshCounts();
+          if (seq !== threadSeq.current) return;
+          setThread({ threadId: item.threadId, messages: msgs });
         })
         .catch((e) => {
-          if (!cached) notifyError(e);
+          if (!cached && seq === threadSeq.current) notifyError(e);
         })
-        .finally(() => setThreadLoading(false));
+        .finally(() => {
+          if (seq === threadSeq.current) setThreadLoading(false);
+        });
     },
     [refreshCounts],
   );
 
   const closeMessage = useCallback(() => {
+    threadSeq.current++;
     setOpenId(null);
     setThread(null);
   }, []);
