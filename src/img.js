@@ -1,7 +1,5 @@
-const ENC = new TextEncoder();
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
-const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const ALLOWED_MIME = new Set([
   "image/png",
@@ -14,64 +12,6 @@ const ALLOWED_MIME = new Set([
   "image/vnd.microsoft.icon",
   "image/tiff",
 ]);
-
-let cachedKey = null;
-
-function decodeBase64(b64) {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-function b64urlFromBytes(bytes) {
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function b64urlEncode(str) {
-  return b64urlFromBytes(ENC.encode(str));
-}
-
-function b64urlDecode(str) {
-  const pad = str.replace(/-/g, "+").replace(/_/g, "/");
-  const bin = atob(pad + "=".repeat((4 - (pad.length % 4)) % 4));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
-}
-
-async function signingKey(env) {
-  if (cachedKey) return cachedKey;
-  const raw = decodeBase64(env.ENCRYPTION_KEY);
-  const label = ENC.encode("estrogen-img-proxy-v1");
-  const material = new Uint8Array(raw.length + label.length);
-  material.set(raw, 0);
-  material.set(label, raw.length);
-  const digest = await crypto.subtle.digest("SHA-256", material);
-  cachedKey = await crypto.subtle.importKey(
-    "raw",
-    digest,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-  return cachedKey;
-}
-
-async function sign(env, payload) {
-  const key = await signingKey(env);
-  const mac = await crypto.subtle.sign("HMAC", key, ENC.encode(payload));
-  return b64urlFromBytes(new Uint8Array(mac));
-}
-
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
 
 export function isProxyableUrl(raw) {
   let u;
@@ -102,12 +42,9 @@ export function isProxyableUrl(raw) {
   return true;
 }
 
-export async function signImageUrl(env, raw) {
+export function proxyUrl(raw) {
   if (!isProxyableUrl(raw)) return "";
-  const u = b64urlEncode(raw);
-  const e = String(Date.now() + TTL_MS);
-  const s = await sign(env, `${u}.${e}`);
-  return `/api/img?u=${u}&e=${e}&s=${s}`;
+  return `/api/img?url=${encodeURIComponent(raw)}`;
 }
 
 function deny(status, msg) {
@@ -117,23 +54,10 @@ function deny(status, msg) {
   });
 }
 
-export async function proxyImage(request, env) {
+export async function proxyImage(request) {
   const url = new URL(request.url);
-  const u = url.searchParams.get("u") || "";
-  const e = url.searchParams.get("e") || "";
-  const s = url.searchParams.get("s") || "";
-  if (!u || !e || !s) return deny(400, "bad request");
-
-  const expected = await sign(env, `${u}.${e}`);
-  if (!timingSafeEqual(expected, s)) return deny(403, "bad signature");
-  if (!/^\d+$/.test(e) || Number(e) < Date.now()) return deny(410, "expired");
-
-  let target;
-  try {
-    target = b64urlDecode(u);
-  } catch {
-    return deny(400, "bad url");
-  }
+  const target = url.searchParams.get("url") || "";
+  if (!target) return deny(400, "bad request");
   if (!isProxyableUrl(target)) return deny(403, "blocked host");
 
   let res = null;

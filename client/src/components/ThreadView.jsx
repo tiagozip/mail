@@ -39,6 +39,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Letter } from "react-letter";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
+import { stripTrackers } from "../../../src/sanitize.js";
 import { notify, notifyError } from "../toast.js";
 import { SendAtDialog } from "./SendAtDialog.jsx";
 import {
@@ -91,8 +92,22 @@ function LetterBody({ html, allowRemote, resource }) {
   );
 }
 
-function inlineResource(blobMap) {
-  return (url) => blobMap[url] || (url.startsWith("data:") ? url : "");
+function proxied(url) {
+  return `/api/img?url=${encodeURIComponent(url)}`;
+}
+
+function inlineResource(blobMap, allowRemote) {
+  return (url) => {
+    if (blobMap[url]) return blobMap[url];
+    if (url.startsWith("data:")) return url;
+    if (url.startsWith("/api/")) return url;
+    if (!allowRemote || !/^https?:\/\//i.test(url)) return "";
+    return proxied(url);
+  };
+}
+
+function hasRemoteRefs(html) {
+  return /<img\b[^>]*\ssrc\s*=\s*["']?https?:/i.test(html) || /url\(\s*["']?https?:/i.test(html);
 }
 
 function PgpLock({ onUnlocked }) {
@@ -187,7 +202,7 @@ async function decryptInlineImages(html, cancelledRef) {
   return { map, urls };
 }
 
-function PgpBody({ message, onUnlocked }) {
+function PgpBody({ message, onUnlocked, allowRemote, onScan }) {
   const [error, setError] = useState(false);
   const [decrypted, setDecrypted] = useState(null);
   const [blobMap, setBlobMap] = useState({});
@@ -201,8 +216,11 @@ function PgpBody({ message, onUnlocked }) {
     setBlobMap({});
     pgp
       .decryptArmored(message.bodyText || "")
-      .then(async (data) => {
+      .then(async (raw) => {
         if (ref.cancelled) return;
+        const scanned = message.hasHtml ? stripTrackers(raw) : { html: raw, count: 0 };
+        const data = scanned.html;
+        onScan(scanned.count, message.hasHtml && hasRemoteRefs(data));
         setDecrypted(data);
         if (!message.hasHtml) return;
         const { map, urls } = await decryptInlineImages(data, ref);
@@ -240,7 +258,7 @@ function PgpBody({ message, onUnlocked }) {
   }
 
   return message.hasHtml ? (
-    <LetterBody html={decrypted} resource={inlineResource(blobMap)} />
+    <LetterBody html={decrypted} resource={inlineResource(blobMap, allowRemote)} />
   ) : (
     <PlainBody text={decrypted} />
   );
@@ -338,8 +356,13 @@ function Attachment({ att }) {
 }
 
 function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) {
-  const remoteShown = message._imagesShown;
-  const hasBlocked = !message.pgp && !remoteShown && htmlHasBlockedImages(message.bodyHtml);
+  const [pgpScan, setPgpScan] = useState({ trackers: 0, hasRemote: false });
+  const [pgpShown, setPgpShown] = useState(false);
+  const remoteShown = message.pgp ? pgpShown : message._imagesShown;
+  const hasBlocked = message.pgp
+    ? pgpScan.hasRemote && !pgpShown
+    : !remoteShown && htmlHasBlockedImages(message.bodyHtml);
+  const trackers = Math.max(message.trackersBlocked || 0, pgpScan.trackers);
   const seed = message.from?.address || message.from?.name;
   const [decSnip, setDecSnip] = useState(null);
   useEffect(() => {
@@ -448,24 +471,32 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
             <div className="em-images-bar">
               <ImageIcon size={15} />
               <span style={{ flex: 1 }}>Remote images blocked</span>
-              <button type="button" className="em-quote-toggle" onClick={onShowImages}>
+              <button
+                type="button"
+                className="em-quote-toggle"
+                onClick={message.pgp ? () => setPgpShown(true) : onShowImages}
+              >
                 Show images
               </button>
             </div>
           )}
-          {message.trackersBlocked > 0 && (
+          {trackers > 0 && (
             <Tooltip content="Hidden images used to track when you open an email were removed and cannot load.">
               <div className="em-tracker-bar">
                 <ShieldCheck size={15} weight="fill" />
                 <span>
-                  Blocked {message.trackersBlocked} tracking{" "}
-                  {message.trackersBlocked === 1 ? "pixel" : "pixels"}
+                  Blocked {trackers} tracking {trackers === 1 ? "pixel" : "pixels"}
                 </span>
               </div>
             </Tooltip>
           )}
           {message.pgp ? (
-            <PgpBody message={message} onUnlocked={onUnlocked} />
+            <PgpBody
+              message={message}
+              onUnlocked={onUnlocked}
+              allowRemote={pgpShown}
+              onScan={(t, r) => setPgpScan({ trackers: t, hasRemote: r })}
+            />
           ) : message.bodyHtml ? (
             <LetterBody html={message.bodyHtml} allowRemote={!!remoteShown} />
           ) : (

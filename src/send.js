@@ -124,7 +124,7 @@ export async function sendMessage(env, user, payload) {
   const text = payload.text || "";
   const expandedHtml = expandHtmlBlocks(payload.html || "");
   const html = expandedHtml
-    ? await sanitizeEmailHtml(expandedHtml, { allowRemote: true })
+    ? sanitizeEmailHtml(expandedHtml, { allowRemote: true })
     : textToHtml(text);
   const signature = sigText ? `\n\n${sigText}` : "";
   const sigHtml = sigText ? `<br><br>${escapeHtml(sigText).replace(/\n/g, "<br>")}` : "";
@@ -200,7 +200,7 @@ export async function sendMessage(env, user, payload) {
   const storedBody = storedPgp
     ? selfEncrypted
     : html
-      ? await sanitizeEmailHtml(html, { allowRemote: true })
+      ? sanitizeEmailHtml(html, { allowRemote: true })
       : "";
   let hKey = null;
   if (storedBody) {

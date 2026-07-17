@@ -48,50 +48,35 @@ function isDangerousUrl(value, allowDataImage = false) {
   return BAD_SCHEMES.has(scheme);
 }
 
-async function replaceAsync(str, re, fn) {
-  const matches = [...str.matchAll(re)];
-  if (!matches.length) return str;
-  const values = await Promise.all(matches.map((m) => fn(...m)));
-  let out = "";
-  let last = 0;
-  matches.forEach((m, i) => {
-    out += str.slice(last, m.index) + values[i];
-    last = m.index + m[0].length;
-  });
-  return out + str.slice(last);
-}
-
 function attrValue(tag, name) {
   const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, "i"));
   if (!m) return null;
   return { full: m[0], value: m[2] ?? m[3] ?? m[4] ?? "" };
 }
 
-async function proxySrcset(value, signUrl) {
-  const parts = await Promise.all(
-    String(value)
+function proxySrcset(value, toProxy) {
+  const parts = String(value)
       .split(",")
-      .map(async (part) => {
+      .map((part) => {
         const trimmed = part.trim();
         if (!trimmed) return "";
         const sp = trimmed.split(/\s+/);
-        const proxied = await signUrl(sp[0]);
+        const proxied = toProxy(sp[0]);
         if (!proxied) return "";
         return [proxied, ...sp.slice(1)].join(" ");
-      }),
-  );
+      });
   return parts.filter(Boolean).join(", ");
 }
 
-async function rewriteImages(html, cidMap, allowRemote, signUrl) {
-  return replaceAsync(html, /<img\b[^>]*>/gi, async (tag) => {
+function rewriteImages(html, cidMap, allowRemote, toProxy) {
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
     const srcAttr = attrValue(tag, "src");
     const src = srcAttr ? srcAttr.value : "";
     let out = tag;
 
     const srcsetAttr = attrValue(out, "srcset");
     if (srcsetAttr) {
-      const replacement = allowRemote ? await proxySrcset(srcsetAttr.value, signUrl) : "";
+      const replacement = allowRemote ? proxySrcset(srcsetAttr.value, toProxy) : "";
       out = out.replace(srcsetAttr.full, replacement ? ` srcset="${escapeAttr(replacement)}"` : "");
     }
 
@@ -103,8 +88,8 @@ async function rewriteImages(html, cidMap, allowRemote, signUrl) {
     }
     if (DATA_IMAGE_OK.test(src)) return out;
     if (allowRemote) {
-      if (!srcAttr || !signUrl) return out;
-      const proxied = await signUrl(src);
+      if (!srcAttr || !toProxy) return out;
+      const proxied = toProxy(src);
       if (!proxied) return out.replace(srcAttr.full, "");
       return out.replace(srcAttr.full, ` src="${escapeAttr(proxied)}"`);
     }
@@ -116,30 +101,30 @@ async function rewriteImages(html, cidMap, allowRemote, signUrl) {
   });
 }
 
-async function rewriteCssUrls(css, allowRemote, signUrl) {
+function rewriteCssUrls(css, allowRemote, toProxy) {
   let out = String(css || "").replace(AT_IMPORT, "");
   out = out.replace(CSS_EXPRESSION, "void(");
   out = out.replace(CSS_BEHAVIOR, "");
-  return replaceAsync(out, CSS_URL, async (full, _q, raw) => {
+  return out.replace(CSS_URL, (full, _q, raw) => {
     const value = raw.trim();
     if (DATA_IMAGE_OK.test(value)) return full;
     if (isDangerousUrl(value)) return "url()";
     if (value.startsWith("/api/attachments/")) return full;
     if (!allowRemote) return "url()";
-    if (!signUrl) return full;
-    const proxied = await signUrl(value);
+    if (!toProxy) return full;
+    const proxied = toProxy(value);
     return proxied ? `url("${proxied}")` : "url()";
   });
 }
 
-async function rewriteAllCss(html, allowRemote, signUrl) {
-  let out = await replaceAsync(html, STYLE_BLOCK, async (_full, body) => {
-    const clean = await rewriteCssUrls(body, allowRemote, signUrl);
+function rewriteAllCss(html, allowRemote, toProxy) {
+  let out = html.replace(STYLE_BLOCK, (_full, body) => {
+    const clean = rewriteCssUrls(body, allowRemote, toProxy);
     return `<style>${clean}</style>`;
   });
-  out = await replaceAsync(out, STYLE_ATTR, async (_full, _raw, dq, sq) => {
+  out = out.replace(STYLE_ATTR, (_full, _raw, dq, sq) => {
     const css = dq ?? sq ?? "";
-    const clean = await rewriteCssUrls(css, allowRemote, signUrl);
+    const clean = rewriteCssUrls(css, allowRemote, toProxy);
     return ` style="${escapeAttr(clean)}"`;
   });
   return out;
@@ -235,10 +220,7 @@ function neutralizeDarkColors(html) {
   return out;
 }
 
-export async function sanitizeEmailHtml(
-  html,
-  { cidMap = {}, allowRemote = false, signUrl = null } = {},
-) {
+export function sanitizeEmailHtml(html, { cidMap = {}, allowRemote = false, toProxy = null } = {}) {
   let out = String(html || "");
   out = out.replace(COMMENTS, "");
   out = out.replace(SCRIPT_BODY, "");
@@ -253,8 +235,8 @@ export async function sanitizeEmailHtml(
     (full, name, _wrapped, dq, sq, bare) =>
       isDangerousUrl(dq ?? sq ?? bare ?? "", name.toLowerCase() === "src") ? ` ${name}="#"` : full,
   );
-  out = await rewriteImages(out, cidMap, allowRemote, signUrl);
-  out = await rewriteAllCss(out, allowRemote, signUrl);
+  out = rewriteImages(out, cidMap, allowRemote, toProxy);
+  out = rewriteAllCss(out, allowRemote, toProxy);
   out = neutralizeDarkColors(out);
   out = out.replace(/<a\b([^>]*)>/gi, (_m, attrs) => {
     let a = attrs.replace(/\s+target\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");

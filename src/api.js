@@ -31,7 +31,7 @@ import {
   verifyIdToken,
 } from "./oidc.js";
 import { isAllowedPushEndpoint } from "./push.js";
-import { proxyImage, signImageUrl } from "./img.js";
+import { proxyImage, proxyUrl } from "./img.js";
 import { sanitizeEmailHtml, stripTrackers } from "./sanitize.js";
 import { sendMessage } from "./send.js";
 import {
@@ -649,10 +649,7 @@ async function getMessage(env, user, id, allowRemote) {
       const html = await tryDecryptText(env, await obj.arrayBuffer());
       const tr = stripTrackers(html);
       trackersBlocked = tr.count;
-      bodyHtml = await sanitizeEmailHtml(tr.html, {
-        allowRemote,
-        signUrl: (u) => signImageUrl(env, u),
-      });
+      bodyHtml = sanitizeEmailHtml(tr.html, { allowRemote, toProxy: proxyUrl });
     }
   }
   return {
@@ -1134,7 +1131,7 @@ export async function handleApi(request, env, ctx) {
   if ((m = path.match(/^\/api\/drafts\/([\w-]+)$/)) && method === "PUT")
     return saveDraft(request, env, user, m[1]);
 
-  if (path === "/api/img" && method === "GET") return proxyImage(request, env);
+  if (path === "/api/img" && method === "GET") return proxyImage(request);
 
   if (path === "/api/attachments" && method === "POST") return uploadAttachment(request, env, user);
   if ((m = path.match(/^\/api\/attachments\/([\w-]+)\/inline$/)) && method === "GET")
