@@ -7,6 +7,7 @@ import {
   ArrowBendUpLeft,
   ArrowLeft,
   ArrowRight,
+  CalendarBlank,
   CaretDown,
   Clock,
   DotsThree,
@@ -39,6 +40,7 @@ import { Letter } from "react-letter";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { notify, notifyError } from "../toast.js";
+import { SendAtDialog } from "./SendAtDialog.jsx";
 import {
   escapeHtml,
   FOLDER_LABELS,
@@ -409,23 +411,36 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
 
       {expanded && (
         <div className="em-msg-body">
-          {message.authStatus === "fail" && (
+          {(message.authStatus === "fail" || message.folder === "spam") && (
             <div className="em-spoof-banner">
               <img src={spamton} className="em-spoof-image" alt="Spamton" />
               <div className="em-spoof-copy">
-                <div className="em-spoof-title">This message may be [[spoofed]]</div>
-                <div className="em-spoof-text">
-                  The sender's identity could not be verified and may be forged. Do not trust links,
-                  attachments, or any request to log in, pay, or share information in this message.
-                  {message.authDetail && (
-                    <span className="em-spoof-detail">
-                      {" "}
-                      SPF {message.authDetail.spf || "none"} / DKIM{" "}
-                      {message.authDetail.dkim || "none"} / DMARC{" "}
-                      {message.authDetail.dmarc || "none"}
-                    </span>
-                  )}
-                </div>
+                {message.authStatus === "fail" ? (
+                  <>
+                    <div className="em-spoof-title">This message may be [[spoofed]]</div>
+                    <div className="em-spoof-text">
+                      The sender's identity could not be verified and may be forged. Do not trust
+                      links, attachments, or any request to log in, pay, or share information in
+                      this message.
+                      {message.authDetail && (
+                        <span className="em-spoof-detail">
+                          {" "}
+                          SPF {message.authDetail.spf || "none"} / DKIM{" "}
+                          {message.authDetail.dkim || "none"} / DMARC{" "}
+                          {message.authDetail.dmarc || "none"}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="em-spoof-title">This message looks like [[SPAM]]</div>
+                    <div className="em-spoof-text">
+                      It was flagged as junk. Be careful with links, attachments, or any request to
+                      log in, pay, or share information in this message.
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -490,6 +505,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   const [cc, setCc] = useState("");
   const [showCc, setShowCc] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pickSendAt, setPickSendAt] = useState(false);
   const [atts, setAtts] = useState([]);
   const [dropImages, setDropImages] = useState(null);
   const [recipKey, setRecipKey] = useState(null);
@@ -893,9 +909,20 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
                   {p.label}
                 </DropdownMenu.Item>
               ))}
+              <DropdownMenu.Item icon={CalendarBlank} onClick={() => setPickSendAt(true)}>
+                Pick date &amp; time
+              </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
         </div>
+        <SendAtDialog
+          open={pickSendAt}
+          onClose={() => setPickSendAt(false)}
+          onConfirm={(ts) => {
+            setPickSendAt(false);
+            send(ts, pgpDefault);
+          }}
+        />
         <Button
           size="sm"
           variant="ghost"

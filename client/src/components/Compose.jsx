@@ -1,5 +1,6 @@
 import { Button, Dialog, DialogRoot, DropdownMenu, Input, Loader, Select } from "@cloudflare/kumo";
 import {
+  CalendarBlank,
   CaretDown,
   FileDoc,
   File as FileIcon,
@@ -16,6 +17,7 @@ import {
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
+import { SendAtDialog } from "./SendAtDialog.jsx";
 import { notify, notifyError } from "../toast.js";
 import {
   fullDate,
@@ -232,6 +234,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   const [showBcc, setShowBcc] = useState(false);
   const [atts, setAtts] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [pickSendAt, setPickSendAt] = useState(false);
   const [draftId, setDraftId] = useState(null);
   const [meta, setMeta] = useState({});
   const [dragOver, setDragOver] = useState(false);
@@ -804,6 +807,9 @@ export function Compose({ open, initial, user, onClose, onSent }) {
                       </span>
                     </DropdownMenu.Item>
                   ))}
+                  <DropdownMenu.Item icon={CalendarBlank} onClick={() => setPickSendAt(true)}>
+                    Pick date &amp; time
+                  </DropdownMenu.Item>
                 </DropdownMenu.Group>
               </DropdownMenu.Content>
             </DropdownMenu>
@@ -833,6 +839,14 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             Discard
           </Button>
         </div>
+        <SendAtDialog
+          open={pickSendAt}
+          onClose={() => setPickSendAt(false)}
+          onConfirm={(ts) => {
+            setPickSendAt(false);
+            onSend(ts, pgpDefault);
+          }}
+        />
       </Dialog>
     </DialogRoot>
   );
