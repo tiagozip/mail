@@ -250,7 +250,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
       const m = rawText.match(/-----BEGIN PGP MESSAGE-----[\s\S]*?-----END PGP MESSAGE-----/);
       armoredBody = m?.[0] || parsed.text || rawText;
     } else if (parsed.html) {
-      const sanitized = sanitizeEmailHtml(parsed.html, { cidMap, allowRemote: true });
+      const sanitized = await sanitizeEmailHtml(parsed.html, { cidMap, allowRemote: true });
       armoredBody = await encryptToPgpText(sanitized);
       hasHtml = 1;
     } else {
@@ -262,7 +262,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     });
     used += armoredBody.length;
   } else if (parsed.html) {
-    const sanitized = sanitizeEmailHtml(parsed.html, { cidMap, allowRemote: true });
+    const sanitized = await sanitizeEmailHtml(parsed.html, { cidMap, allowRemote: true });
     hKey = htmlKey(userId, messageId);
     await env.R2.put(hKey, await encryptText(env, sanitized), {
       httpMetadata: { contentType: "text/html; charset=utf-8" },
