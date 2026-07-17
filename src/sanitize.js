@@ -1,6 +1,6 @@
 const BLOCK_TAGS =
-  /<\/?(?:script|style|head|title|meta|link|base|iframe|object|embed|applet|frame|frameset|noscript|svg|math|form|input|button|textarea|select|option)\b[^>]*>/gi;
-const SCRIPT_BODY = /<(script|style|head|title|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi;
+  /<\/?(?:script|head|title|meta|link|base|iframe|object|embed|applet|frame|frameset|noscript|svg|math|form|input|button|textarea|select|option)\b[^>]*>/gi;
+const SCRIPT_BODY = /<(script|title|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi;
 const COMMENTS = /<!--[\s\S]*?-->/g;
 const ON_ATTR = /[\s/]+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
 const AT_IMPORT = /@import\b[^;]*;?/gi;

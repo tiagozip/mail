@@ -36,7 +36,6 @@ import {
 } from "@phosphor-icons/react";
 import { sanitize } from "lettersanitizer";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Letter } from "react-letter";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { stripTrackers } from "../../../src/sanitize.js";
@@ -72,20 +71,82 @@ function passResource(url) {
   return url;
 }
 
+const FRAME_CSP = [
+  "default-src 'none'",
+  "img-src 'self' data: blob:",
+  "style-src 'unsafe-inline'",
+  "font-src 'self' data:",
+  "script-src 'none'",
+  "object-src 'none'",
+  "frame-src 'none'",
+  "form-action 'none'",
+].join("; ");
+
+function frameCss() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (name, fallback) => (cs.getPropertyValue(name) || "").trim() || fallback;
+  return `html{color-scheme:dark}
+html,body{margin:0;padding:0;background:transparent}
+body{color:${v("--text-color-kumo-default", "#e8e8e8")};font-family:${v("--font-sans", "system-ui, sans-serif")};font-size:0.9rem;line-height:1.6;overflow-wrap:break-word}
+a{color:${v("--text-color-kumo-link", "#7aa2f7")}}
+img{max-width:100%;height:auto}
+table{max-width:100%}
+blockquote{margin:0 0 0 12px;padding-left:12px;border-left:2px solid ${v("--color-kumo-line", "#333")}}
+.em-shiki{margin:12px 0;padding:12px 16px;border-radius:10px;overflow-x:auto;font-size:0.85rem;line-height:1.55;border:1px solid ${v("--color-kumo-hairline", "#333")};background-color:var(--shiki-dark-bg)!important}
+.em-shiki code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:none;padding:0}
+.em-shiki,.em-shiki span{color:var(--shiki-dark)!important}`;
+}
+
 function LetterBody({ html, allowRemote, resource }) {
-  const ref = useRef(null);
+  const frameRef = useRef(null);
+  const [height, setHeight] = useState(0);
+  const [frameBody, setFrameBody] = useState(null);
   const hasCode = useMemo(() => /<pre[\s>]/i.test(html || ""), [html]);
+
+  const srcDoc = useMemo(() => {
+    const clean = sanitize(html || "", undefined, {
+      allowedSchemas: ALLOWED_SCHEMAS,
+      rewriteExternalResources: resource || (allowRemote ? passResource : blockResource),
+      noWrapper: true,
+    });
+    return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}"><style>${frameCss()}</style></head><body>${clean}</body></html>`;
+  }, [html, allowRemote, resource]);
+
+  useEffect(() => {
+    const doc = frameRef.current?.contentDocument;
+    if (!doc?.body) return;
+    setFrameBody(doc.body);
+    const measure = () => setHeight(doc.documentElement.scrollHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(doc.documentElement);
+    ro.observe(doc.body);
+    doc.addEventListener("load", measure, true);
+    return () => {
+      ro.disconnect();
+      doc.removeEventListener("load", measure, true);
+    };
+  }, [srcDoc]);
+
   return (
-    <div className="em-letter" ref={ref}>
-      <Letter
-        html={html || ""}
-        allowedSchemas={ALLOWED_SCHEMAS}
-        rewriteExternalResources={resource || (allowRemote ? passResource : blockResource)}
-        className="em-letter-inner"
+    <div className="em-letter">
+      <iframe
+        ref={frameRef}
+        title="Message body"
+        className="em-letter-frame"
+        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+        srcDoc={srcDoc}
+        style={{ height: height ? `${height}px` : "0px" }}
+        onLoad={() => {
+          const doc = frameRef.current?.contentDocument;
+          if (!doc) return;
+          setFrameBody(doc.body);
+          setHeight(doc.documentElement.scrollHeight);
+        }}
       />
-      {hasCode && (
+      {hasCode && frameBody && (
         <Suspense fallback={null}>
-          <CodeHighlight rootRef={ref} signal={html} />
+          <CodeHighlight rootRef={{ current: frameBody }} signal={html} />
         </Suspense>
       )}
     </div>
@@ -207,6 +268,7 @@ function PgpBody({ message, onUnlocked, allowRemote, onScan }) {
   const [decrypted, setDecrypted] = useState(null);
   const [blobMap, setBlobMap] = useState({});
   const unlocked = !!pgp.getUnlocked();
+  const resource = useMemo(() => inlineResource(blobMap, allowRemote), [blobMap, allowRemote]);
 
   useEffect(() => {
     if (!unlocked) return;
@@ -258,7 +320,7 @@ function PgpBody({ message, onUnlocked, allowRemote, onScan }) {
   }
 
   return message.hasHtml ? (
-    <LetterBody html={decrypted} resource={inlineResource(blobMap, allowRemote)} />
+    <LetterBody html={decrypted} resource={resource} />
   ) : (
     <PlainBody text={decrypted} />
   );

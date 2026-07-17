@@ -1221,21 +1221,13 @@ html[data-theme="nord"] {
   line-height: 1.6;
 }
 
-.em-letter-inner {
-  color: var(--text-color-kumo-default);
-}
-
-.em-letter-inner a {
-  color: var(--text-color-kumo-link);
-}
-
-.em-letter-inner img {
-  max-width: 100%;
-  height: auto;
-}
-
-.em-letter-inner table {
-  max-width: 100%;
+.em-letter-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
+  color-scheme: dark;
 }
 
 .em-pgp-note {
