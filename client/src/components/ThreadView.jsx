@@ -85,9 +85,9 @@ const FRAME_CSP = [
 function frameCss() {
   const cs = getComputedStyle(document.documentElement);
   const v = (name, fallback) => (cs.getPropertyValue(name) || "").trim() || fallback;
-  return `html{color-scheme:dark}
+  return `html{color-scheme:dark;overflow-y:hidden;overflow-x:auto}
 html,body{margin:0;padding:0;background:transparent}
-body{color:${v("--text-color-kumo-default", "#e8e8e8")};font-family:${v("--font-sans", "system-ui, sans-serif")};font-size:0.9rem;line-height:1.6;overflow-wrap:break-word}
+body{color:${v("--text-color-kumo-default", "#e8e8e8")};font-family:${v("--font-sans", "system-ui, sans-serif")};font-size:0.9rem;line-height:1.6;overflow-wrap:break-word;font-optical-sizing:auto;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{color:${v("--text-color-kumo-link", "#7aa2f7")}}
 img{max-width:100%;height:auto}
 table{max-width:100%}
