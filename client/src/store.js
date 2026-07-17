@@ -3,10 +3,6 @@ import { api } from "./api.js";
 import * as cache from "./cache.js";
 import { notifyError } from "./toast.js";
 
-function runViewTransition(apply) {
-  apply();
-}
-
 const POLL_ACTIVE_MIN = 5000;
 const POLL_ACTIVE_MAX = 30000;
 const POLL_HIDDEN = 60000;
@@ -278,33 +274,31 @@ export function useMailStore(initialUser) {
   const openMessage = useCallback(
     (item) => {
       const cached = threadCache.current.get(item.threadId);
-      runViewTransition(() => {
-        setOpenId(item.id);
-        if (cached) {
+      setOpenId(item.id);
+      if (cached) {
+        setThreadLoading(false);
+        setThread({ threadId: item.threadId, messages: cached });
+      } else {
+        setThreadLoading(true);
+        setThread(null);
+        cache.getThread(item.threadId).then((persisted) => {
+          if (!persisted || threadCache.current.has(item.threadId)) return;
+          setThread((cur) => (cur ? cur : { threadId: item.threadId, messages: persisted }));
           setThreadLoading(false);
-          setThread({ threadId: item.threadId, messages: cached });
-        } else {
-          setThreadLoading(true);
-          setThread(null);
-          cache.getThread(item.threadId).then((persisted) => {
-            if (!persisted || threadCache.current.has(item.threadId)) return;
-            setThread((cur) => (cur ? cur : { threadId: item.threadId, messages: persisted }));
-            setThreadLoading(false);
-          });
-        }
-        if (!item.isRead) {
-          setMessages((prev) => prev.map((m) => (m.id === item.id ? { ...m, isRead: true } : m)));
-          setCounts((c) => {
-            if (!c) return c;
-            const folder = item.folder;
-            if (!c[folder]) return c;
-            return {
-              ...c,
-              [folder]: { ...c[folder], unread: Math.max(0, (c[folder].unread || 0) - 1) },
-            };
-          });
-        }
-      });
+        });
+      }
+      if (!item.isRead) {
+        setMessages((prev) => prev.map((m) => (m.id === item.id ? { ...m, isRead: true } : m)));
+        setCounts((c) => {
+          if (!c) return c;
+          const folder = item.folder;
+          if (!c[folder]) return c;
+          return {
+            ...c,
+            [folder]: { ...c[folder], unread: Math.max(0, (c[folder].unread || 0) - 1) },
+          };
+        });
+      }
       api
         .thread(item.threadId)
         .then((d) => {
@@ -328,10 +322,8 @@ export function useMailStore(initialUser) {
   );
 
   const closeMessage = useCallback(() => {
-    runViewTransition(() => {
-      setOpenId(null);
-      setThread(null);
-    });
+    setOpenId(null);
+    setThread(null);
   }, []);
 
   const reloadThread = useCallback((threadId, images) => {

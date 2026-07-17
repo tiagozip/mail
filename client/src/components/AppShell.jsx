@@ -1,10 +1,10 @@
 import { Loader } from "@cloudflare/kumo";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { useMailStore } from "../store.js";
 import { notify, notifyError } from "../toast.js";
-import { recipientLine } from "../util.js";
+import { groupThreads, recipientLine } from "../util.js";
 import { Compose } from "./Compose.jsx";
 import { E2EPrompt, shouldPromptE2E } from "./E2EPrompt.jsx";
 import { MailSidebar } from "./MailSidebar.jsx";
@@ -75,6 +75,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [cursor, setCursor] = useState(-1);
+  const threads = useMemo(() => groupThreads(store.messages), [store.messages]);
   const [undoBar, setUndoBar] = useState(null);
   const searchRef = useRef(null);
   const gPressed = useRef(false);
@@ -183,7 +184,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   }
 
   function openByIndex(idx) {
-    const item = store.messages[idx];
+    const item = threads[idx];
     if (!item) return;
     store.openMessage(item);
   }
@@ -191,6 +192,10 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   function closeReader() {
     window.history.back();
   }
+
+  useEffect(() => {
+    setCursor(-1);
+  }, [store.view]);
 
   useEffect(() => {
     function onKey(e) {
@@ -233,19 +238,15 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         return;
       }
       if (e.key === "j") {
-        setCursor((c) => {
-          const next = Math.min(store.messages.length - 1, c + 1);
-          openByIndex(next);
-          return next;
-        });
+        const next = Math.min(threads.length - 1, cursor + 1);
+        setCursor(next);
+        openByIndex(next);
         return;
       }
       if (e.key === "k") {
-        setCursor((c) => {
-          const next = Math.max(0, c - 1);
-          openByIndex(next);
-          return next;
-        });
+        const next = Math.max(0, cursor - 1);
+        setCursor(next);
+        openByIndex(next);
         return;
       }
       const open = store.messages.find((m) => m.id === store.openId);
@@ -389,7 +390,10 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
 
   return (
     <div className="em-app">
-      {sidebarOpen && <div className="em-sidebar-scrim" onClick={() => setSidebarOpen(false)} />}
+      <div
+        className={`em-sidebar-scrim${sidebarOpen ? " is-open" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+      />
       <div className={`em-sidebar-wrap${sidebarOpen ? " is-open" : ""}`}>
         <MailSidebar
           store={store}
@@ -436,6 +440,9 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
               <MessageList
                 key="list"
                 store={store}
+                threads={threads}
+                cursor={cursor}
+                onCursorChange={setCursor}
                 searchRef={searchRef}
                 onMenu={() => setSidebarOpen(true)}
                 onCompose={() => openCompose()}
@@ -473,11 +480,9 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
           </button>
         </div>
       )}
-      {showHelp && (
-        <Suspense fallback={null}>
-          <Shortcuts onClose={() => setShowHelp(false)} />
-        </Suspense>
-      )}
+      <Suspense fallback={null}>
+        <Shortcuts open={showHelp} onClose={() => setShowHelp(false)} />
+      </Suspense>
       {e2ePrompt && !user.pgpEnabled && (
         <E2EPrompt user={user} setUser={setUser} onClose={() => setE2ePrompt(false)} />
       )}

@@ -1,4 +1,5 @@
 import { Button, Checkbox, DropdownMenu, Loader, Tooltip } from "@cloudflare/kumo";
+import spamton from "../assets/spamton.webp";
 import {
   Archive,
   Envelope,
@@ -20,7 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as cache from "../cache.js";
 import * as pgp from "../pgp.js";
-import { FOLDER_LABELS, groupThreads, initials, monoColor, relativeTime, senderLabel } from "../util.js";
+import { FOLDER_LABELS, initials, monoColor, relativeTime, senderLabel } from "../util.js";
 
 function StarToggle({ on, onClick }) {
   return (
@@ -162,7 +163,17 @@ function BulkBar({ store }) {
   );
 }
 
-export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, floatHidden }) {
+export function MessageList({
+  store,
+  threads,
+  cursor,
+  onCursorChange,
+  searchRef,
+  onMenu,
+  onCompose,
+  onOpenDraft,
+  floatHidden,
+}) {
   const {
     view,
     goView,
@@ -251,13 +262,17 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
     };
   }, [messages]);
 
-  const threads = useMemo(() => groupThreads(messages), [messages]);
   const rowVirtualizer = useVirtualizer({
     count: threads.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 76,
     overscan: 8,
   });
+
+  useEffect(() => {
+    if (cursor >= 0) rowVirtualizer.scrollToIndex(cursor, { align: "auto" });
+  }, [cursor, rowVirtualizer]);
+
   const selfAddresses = useMemo(
     () => (store.user?.addresses?.map((a) => a.address) || [store.user?.address]).filter(Boolean),
     [store.user],
@@ -327,7 +342,7 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
               sent: [PaperPlaneTilt, "No sent mail", "Messages you send will appear here."],
               drafts: [NotePencil, "No drafts", "Start a message and your drafts save here."],
               archive: [Archive, "Archive is empty", "Archived messages live here."],
-              spam: [ShieldWarning, "No spam", "Suspected spam and spoofed mail lands here."],
+              spam: [spamton, "No spam", "Suspected spam and spoofed mail lands here."],
               trash: [Trash, "Trash is empty", "Deleted messages stay here before removal."],
             };
             const [Icon, title, sub] = states[view.kind === "folder" ? view.folder : view.kind] || [
@@ -337,7 +352,11 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
             ];
             return (
               <div className="em-empty">
-                <Icon className="em-empty-icon" size={34} weight="thin" />
+                {typeof Icon === "string" ? (
+                  <img src={Icon} className="em-empty-icon em-empty-spamton" alt="" />
+                ) : (
+                  <Icon className="em-empty-icon" size={34} weight="thin" />
+                )}
                 <div className="em-empty-title">{title}</div>
                 <div className="em-empty-sub">{sub}</div>
               </div>
@@ -370,7 +389,11 @@ export function MessageList({ store, searchRef, onMenu, onCompose, onOpenDraft, 
                       selected={selectedIds.has(item.id)}
                       selfAddresses={selfAddresses}
                       decSnippet={decSnippets[item.id]}
-                      onOpen={item.isDraft && onOpenDraft ? onOpenDraft : openMessage}
+                      onOpen={(...args) => {
+                        onCursorChange?.(v.index);
+                        const target = item.isDraft && onOpenDraft ? onOpenDraft : openMessage;
+                        target(...args);
+                      }}
                       onPrefetch={prefetchThread}
                       onToggleSelect={toggleSelect}
                       onToggleStar={toggleStar}

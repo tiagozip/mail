@@ -420,36 +420,6 @@ html[data-theme="nord"] {
   display: flex;
   flex-direction: column;
   position: relative;
-  view-transition-name: em-column;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
-  }
-
-  ::view-transition-old(em-column) {
-    animation: em-vt-out 180ms var(--em-ease) both;
-  }
-
-  ::view-transition-new(em-column) {
-    animation: em-vt-in 260ms var(--em-ease) both;
-  }
-}
-
-@keyframes em-vt-out {
-  to {
-    opacity: 0;
-    transform: scale(0.99);
-  }
-}
-
-@keyframes em-vt-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
-  }
 }
 
 .em-pane {
@@ -458,32 +428,6 @@ html[data-theme="nord"] {
   height: 100%;
   min-height: 0;
   width: 100%;
-}
-
-@keyframes em-pane-in {
-  from {
-    opacity: 0;
-    transform: translateX(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.em-pane-reader {
-  animation-name: em-pane-in-reader;
-}
-
-@keyframes em-pane-in-reader {
-  from {
-    opacity: 0;
-    transform: translateX(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
 .em-pane-topbar {
@@ -627,11 +571,11 @@ html[data-theme="nord"] {
 @keyframes em-slidein {
   from {
     opacity: 0;
-    transform: translateY(-3px);
+    transform: translateX(-50%) translateY(-3px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
   }
 }
 
@@ -728,11 +672,17 @@ html[data-theme="nord"] {
   font-weight: 600;
   letter-spacing: -0.005em;
   cursor: pointer;
-  transition: background var(--em-fast);
+  transition:
+    background var(--em-fast),
+    transform 160ms var(--em-ease);
 }
 
 .em-floatbar-compose:hover {
   background: var(--color-kumo-brand-hover);
+}
+
+.em-floatbar-compose:active {
+  transform: scale(0.97);
 }
 
 .em-row {
@@ -1026,7 +976,8 @@ html[data-theme="nord"] {
   transition:
     color var(--em-fast),
     opacity var(--em-fast),
-    background var(--em-fast);
+    background var(--em-fast),
+    transform 160ms var(--em-ease);
 }
 
 .em-row:hover .em-star-btn,
@@ -1037,6 +988,10 @@ html[data-theme="nord"] {
 .em-star-btn:hover {
   color: var(--em-star);
   background: var(--color-kumo-fill);
+}
+
+.em-star-btn:active {
+  transform: scale(0.94);
 }
 
 .em-star-btn.is-on {
@@ -1064,6 +1019,13 @@ html[data-theme="nord"] {
 .em-empty-icon {
   color: var(--text-color-kumo-inactive);
   opacity: 0.7;
+}
+
+.em-empty-spamton {
+  width: 48px;
+  height: 48px;
+  image-rendering: pixelated;
+  filter: grayscale(1);
 }
 
 .em-empty-title {
@@ -1205,17 +1167,6 @@ html[data-theme="nord"] {
 
 .em-msg-body {
   padding: 0 var(--em-5) var(--em-5);
-}
-
-@keyframes em-msg-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .em-text-body {
@@ -2830,6 +2781,24 @@ html[data-theme="nord"] {
   border-color: var(--color-kumo-brand);
 }
 
+.em-datetime {
+  width: 100%;
+  background: var(--color-kumo-control);
+  color: var(--text-color-kumo-default);
+  border: 1px solid var(--color-kumo-line);
+  border-radius: var(--em-radius);
+  padding: var(--em-2) var(--em-3);
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color-scheme: light dark;
+  transition: border-color var(--em-fast);
+}
+
+.em-datetime:focus {
+  outline: none;
+  border-color: var(--color-kumo-brand);
+}
+
 .em-pending-atts {
   display: flex;
   gap: var(--em-2);
@@ -3285,16 +3254,19 @@ html[data-theme="nord"] {
   align-items: center;
   justify-content: center;
   padding: var(--em-5);
-  animation: em-fade var(--em-fast);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--em-fast),
+    visibility 0s linear 120ms;
 }
 
-@keyframes em-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.em-kbd-overlay.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity var(--em-fast),
+    visibility 0s linear 0s;
 }
 
 .em-kbd-card {
@@ -3305,18 +3277,16 @@ html[data-theme="nord"] {
   max-width: 480px;
   width: 100%;
   box-shadow: var(--em-shadow-pop);
-  animation: em-pop var(--em-med);
+  opacity: 0;
+  transform: scale(0.97) translateY(6px);
+  transition:
+    opacity var(--em-med),
+    transform var(--em-med);
 }
 
-@keyframes em-pop {
-  from {
-    opacity: 0;
-    transform: scale(0.97) translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+.em-kbd-overlay.is-open .em-kbd-card {
+  opacity: 1;
+  transform: scale(1) translateY(0);
 }
 
 .em-kbd-title {
@@ -3479,12 +3449,17 @@ html[data-theme="nord"] {
   color: var(--text-color-kumo-subtle);
   transition:
     background var(--em-fast),
-    color var(--em-fast);
+    color var(--em-fast),
+    transform 160ms var(--em-ease);
 }
 
 .em-nav-item:hover {
   background: var(--color-kumo-tint);
   color: var(--text-color-kumo-strong);
+}
+
+.em-nav-item:active {
+  transform: scale(0.99);
 }
 
 .em-nav-item.is-active {
@@ -3573,7 +3548,8 @@ html[data-theme="nord"] {
     background var(--em-fast);
 }
 
-.em-nav-labelrow:hover .em-label-edit {
+.em-nav-labelrow:hover .em-label-edit,
+.em-label-edit:focus-visible {
   opacity: 1;
 }
 
@@ -3634,12 +3610,18 @@ html[data-theme="nord"] {
   border-radius: var(--em-radius-sm);
   cursor: pointer;
   transition:
-    transform var(--em-fast),
+    transform 160ms var(--em-ease),
     border-color var(--em-fast);
 }
 
-.em-swatch:hover {
-  transform: scale(1.06);
+@media (hover: hover) and (pointer: fine) {
+  .em-swatch:hover {
+    transform: scale(1.06);
+  }
+}
+
+.em-swatch:active {
+  transform: scale(0.94);
 }
 
 .em-swatch.is-selected {
@@ -3669,7 +3651,12 @@ html[data-theme="nord"] {
   cursor: pointer;
   transition:
     background var(--em-fast),
-    color var(--em-fast);
+    color var(--em-fast),
+    transform 160ms var(--em-ease);
+}
+
+.em-rule-toggle:active {
+  transform: scale(0.97);
 }
 
 .em-rule-toggle.is-active {
@@ -3763,7 +3750,13 @@ html[data-theme="nord"] {
     inset: 0;
     z-index: 110;
     background: rgba(0, 0, 0, 0.5);
-    animation: em-fade var(--em-fast);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--em-med);
+  }
+  .em-sidebar-scrim.is-open {
+    opacity: 1;
+    pointer-events: auto;
   }
   .em-main {
     width: 100%;
@@ -4021,11 +4014,16 @@ a:focus-visible,
   cursor: pointer;
   transition:
     background var(--em-fast),
-    color var(--em-fast);
+    color var(--em-fast),
+    transform 160ms var(--em-ease);
 }
 
 .em-segment-btn:hover {
   color: var(--text-color-kumo-default);
+}
+
+.em-segment-btn:active {
+  transform: scale(0.97);
 }
 
 .em-segment-btn.is-active {

@@ -13,9 +13,9 @@ const SHORTCUTS = [
   [["?"], "Toggle this help"],
 ];
 
-export function Shortcuts({ onClose }) {
+export function Shortcuts({ open, onClose }) {
   return (
-    <div className="em-kbd-overlay" onClick={onClose}>
+    <div className={`em-kbd-overlay${open ? " is-open" : ""}`} onClick={onClose}>
       <div className="em-kbd-card" onClick={(e) => e.stopPropagation()}>
         <h2 className="em-kbd-title em-display">Keyboard shortcuts</h2>
         {SHORTCUTS.map(([keys, label]) => (
