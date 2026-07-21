@@ -3,6 +3,7 @@ import PostalMime from "postal-mime";
 import { encryptBytes, encryptText } from "./crypto.js";
 import { sendPush } from "./push.js";
 import { sanitizeEmailHtml } from "./sanitize.js";
+import { forwardInbound } from "./send.js";
 import { classifySpam } from "./spam.js";
 import {
   applyFilters,
@@ -297,6 +298,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
 
   let filterRead = 0;
   let filterStar = 0;
+  let forwards = [];
   let autoLabels = [];
   if (!spoofed) {
     const applied = await applyFilters(env, userId, {
@@ -308,6 +310,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     if (applied.folder) folder = applied.folder;
     if (applied.read) filterRead = 1;
     if (applied.star) filterStar = 1;
+    forwards = applied.forwards || [];
 
     const ruled = await env.DB.prepare(
       "SELECT id, rule_json FROM labels WHERE user_id = ? AND rule_json IS NOT NULL",
@@ -449,5 +452,37 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
         url: "/",
       }),
     );
+  }
+
+  if (folder !== "spam" && forwards.length) {
+    const incomingHops =
+      Number.parseInt(firstHeader(headerBlock, "x-estrogen-forward-hops") || "0", 10) || 0;
+    const MAX_FORWARD_HOPS = 3;
+    if (incomingHops < MAX_FORWARD_HOPS) {
+      const own = await env.DB.prepare("SELECT address FROM addresses WHERE user_id = ?")
+        .bind(userId)
+        .all();
+      const selves = new Set((own.results || []).map((r) => r.address));
+      const fromAlias =
+        matchedAddress && matchedAddress.endsWith(`@${env.MAIL_DOMAIN}`)
+          ? matchedAddress
+          : (own.results || []).find((r) => r.address.endsWith(`@${env.MAIL_DOMAIN}`))?.address ||
+            matchedAddress;
+      for (const target of forwards) {
+        if (selves.has(target) || target === fromAddr) continue;
+        ctx.waitUntil(
+          forwardInbound(env, {
+            userId,
+            fromAddr: fromAlias,
+            fromName,
+            to: target,
+            parsed,
+            hops: incomingHops + 1,
+          }).catch((e) => console.error("forward error", e?.stack || e)),
+        );
+      }
+    } else {
+      console.log("forward hop limit reached", userId, incomingHops);
+    }
   }
 }

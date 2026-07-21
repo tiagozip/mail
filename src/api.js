@@ -1374,7 +1374,7 @@ export async function handleApi(request, env, ctx) {
 
   if (path === "/api/filters" && method === "GET") {
     const res = await env.DB.prepare(
-      "SELECT id, field, match_value, action, position FROM filters WHERE user_id = ? ORDER BY position, created_at",
+      "SELECT id, field, match_value, action, action_value, position FROM filters WHERE user_id = ? ORDER BY position, created_at",
     )
       .bind(user.id)
       .all();
@@ -1389,17 +1389,29 @@ export async function handleApi(request, env, ctx) {
       .slice(0, 200);
     if (!field || !action) return error(400, "invalid field or action");
     if (!matchValue) return error(400, "match value required");
+    let actionValue = null;
+    if (action === "forward") {
+      actionValue = normalizeAddr(b.actionValue || "");
+      if (!isValidEmail(actionValue)) return error(400, "a valid forwarding address is required");
+    }
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM filters WHERE user_id = ?")
       .bind(user.id)
       .first();
     if ((count?.n || 0) >= 100) return error(400, "filter limit reached (100)");
     const id = uuid();
     await env.DB.prepare(
-      "INSERT INTO filters (id, user_id, field, match_value, action, position, created_at) VALUES (?,?,?,?,?,?,?)",
+      "INSERT INTO filters (id, user_id, field, match_value, action, action_value, position, created_at) VALUES (?,?,?,?,?,?,?,?)",
     )
-      .bind(id, user.id, field, matchValue, action, count?.n || 0, now())
+      .bind(id, user.id, field, matchValue, action, actionValue, count?.n || 0, now())
       .run();
-    return json({ id, field, match_value: matchValue, action, position: count?.n || 0 });
+    return json({
+      id,
+      field,
+      match_value: matchValue,
+      action,
+      action_value: actionValue,
+      position: count?.n || 0,
+    });
   }
   if ((m = path.match(/^\/api\/filters\/([\w-]+)$/)) && method === "DELETE") {
     await env.DB.prepare("DELETE FROM filters WHERE id = ? AND user_id = ?")

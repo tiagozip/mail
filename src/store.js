@@ -1,8 +1,9 @@
-import { now, snippetFrom, uuid } from "./util.js";
+import { normalizeAddr, now, snippetFrom, uuid } from "./util.js";
 
 export const FOLDERS = ["inbox", "sent", "drafts", "archive", "trash", "spam"];
 export const FILTER_FIELDS = ["from", "to", "subject"];
-export const FILTER_ACTIONS = ["read", "archive", "star", "spam"];
+export const FILTER_ACTIONS = ["read", "archive", "star", "spam", "forward"];
+export const MAX_FORWARD_TARGETS = 5;
 export const LABEL_RULE_FIELDS = ["from", "to", "subject", "body"];
 export const LABEL_RULE_OPS = ["contains", "is", "startsWith"];
 
@@ -66,7 +67,7 @@ export function labelsForMessage(labels, msg) {
 
 export async function applyFilters(env, userId, ctx) {
   const res = await env.DB.prepare(
-    "SELECT field, match_value, action FROM filters WHERE user_id = ? ORDER BY position, created_at",
+    "SELECT field, match_value, action, action_value FROM filters WHERE user_id = ? ORDER BY position, created_at",
   )
     .bind(userId)
     .all();
@@ -79,7 +80,7 @@ export async function applyFilters(env, userId, ctx) {
       .toLowerCase(),
     subject: String(ctx.subject || "").toLowerCase(),
   };
-  const out = { folder: null, read: false, star: false };
+  const out = { folder: null, read: false, star: false, forwards: [] };
   for (const rule of rules) {
     const needle = String(rule.match_value || "")
       .trim()
@@ -91,6 +92,12 @@ export async function applyFilters(env, userId, ctx) {
     else if (rule.action === "star") out.star = true;
     else if (rule.action === "archive") out.folder = "archive";
     else if (rule.action === "spam") out.folder = "spam";
+    else if (rule.action === "forward") {
+      const target = normalizeAddr(rule.action_value || "");
+      if (target && !out.forwards.includes(target) && out.forwards.length < MAX_FORWARD_TARGETS) {
+        out.forwards.push(target);
+      }
+    }
   }
   return out;
 }

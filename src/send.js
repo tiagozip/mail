@@ -51,6 +51,95 @@ async function checkSendLimit(env, userId) {
   return true;
 }
 
+function hourKey() {
+  return new Date().toISOString().slice(0, 13);
+}
+
+async function checkForwardLimit(env, userId) {
+  const limit = Number.parseInt(env.FORWARD_HOURLY_LIMIT || "60", 10);
+  const key = `fwd:${userId}:${hourKey()}`;
+  const current = Number.parseInt((await env.KV.get(key)) || "0", 10);
+  if (current >= limit) return false;
+  await env.KV.put(key, String(current + 1), { expirationTtl: 7200 });
+  return true;
+}
+
+export async function forwardInbound(env, { userId, fromAddr, fromName, to, parsed, hops }) {
+  const dest = normalizeAddr(to);
+  if (!isValidEmail(dest) || !isValidEmail(fromAddr)) return;
+  if (!(await checkForwardLimit(env, userId))) {
+    console.log("forward rate-limited", userId, "->", dest);
+    return;
+  }
+
+  const domain = fromAddr.split("@")[1]?.toLowerCase() || "";
+  let relayDomain = null;
+  if (domain && domain !== String(env.MAIL_DOMAIN || "").toLowerCase()) {
+    relayDomain = await env.DB.prepare(
+      "SELECT domain, relay_url, relay_secret_enc FROM domains WHERE domain = ? AND owner_id = ? AND send_verified = 1",
+    )
+      .bind(domain, userId)
+      .first();
+    if (!relayDomain?.relay_url) {
+      console.log("forward skipped: from-domain not sendable", fromAddr);
+      return;
+    }
+  }
+
+  const origFrom = parsed.from || {};
+  const origAddr = normalizeAddr(origFrom.address || "");
+  const origName = origFrom.name || origAddr;
+  const origSubject = parsed.subject || "(no subject)";
+  const subject = /^fwd:/i.test(origSubject) ? origSubject : `Fwd: ${origSubject}`;
+  const origDate = parsed.date ? new Date(parsed.date).toUTCString() : "";
+  const origTo = (parsed.to || [])
+    .map((a) => a.address)
+    .filter(Boolean)
+    .join(", ");
+
+  const headerLines = [
+    "---------- Forwarded message ----------",
+    `From: ${origName} <${origAddr}>`,
+    origDate ? `Date: ${origDate}` : "",
+    `Subject: ${origSubject}`,
+    origTo ? `To: ${origTo}` : "",
+  ].filter(Boolean);
+
+  const text = `${headerLines.join("\n")}\n\n${parsed.text || ""}`;
+  const rawHtml = parsed.html || (parsed.text ? textToHtml(parsed.text) : "");
+  const headerHtml = `<div style="color:#666;border-left:2px solid #ccc;padding-left:10px;margin-bottom:12px">${headerLines
+    .map((l) => escapeHtml(l))
+    .join("<br>")}</div>`;
+  const html = rawHtml ? `${headerHtml}${sanitizeEmailHtml(rawHtml, { allowRemote: true })}` : "";
+
+  const attachments = [];
+  for (const a of parsed.attachments || []) {
+    const content = a.content instanceof ArrayBuffer ? new Uint8Array(a.content) : a.content;
+    if (!content) continue;
+    attachments.push({
+      content,
+      filename: a.filename || "attachment",
+      type: a.mimeType || "application/octet-stream",
+      disposition: "attachment",
+    });
+  }
+
+  const headers = { "X-Estrogen-Forward-Hops": String(hops) };
+  if (origAddr) headers["Reply-To"] = `${origName} <${origAddr}>`;
+
+  const sendPayload = {
+    to: [dest],
+    from: { email: fromAddr, name: fromName || fromAddr.split("@")[0] },
+    subject,
+    text,
+    headers,
+  };
+  if (html) sendPayload.html = html;
+  if (attachments.length) sendPayload.attachments = attachments;
+
+  await (relayDomain ? sendViaRelay(env, relayDomain, sendPayload) : env.EMAIL.send(sendPayload));
+}
+
 export async function sendMessage(env, user, payload) {
   const to = (payload.to || []).map(normalizeAddr).filter(isValidEmail);
   const cc = (payload.cc || []).map(normalizeAddr).filter(isValidEmail);

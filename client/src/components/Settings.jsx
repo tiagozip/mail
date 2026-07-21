@@ -830,6 +830,7 @@ const ACTION_LABELS = {
   archive: "archive it",
   star: "star it",
   spam: "move to spam",
+  forward: "forward to",
 };
 
 function Filters() {
@@ -837,6 +838,7 @@ function Filters() {
   const [field, setField] = useState("from");
   const [matchValue, setMatchValue] = useState("");
   const [action, setAction] = useState("archive");
+  const [actionValue, setActionValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -851,12 +853,23 @@ function Filters() {
     e.preventDefault();
     const v = matchValue.trim();
     if (!v) return;
+    const fwd = actionValue.trim();
+    if (action === "forward" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fwd)) {
+      setError("Enter a valid forwarding address.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      const res = await api.createFilter({ field, matchValue: v, action });
+      const res = await api.createFilter({
+        field,
+        matchValue: v,
+        action,
+        actionValue: action === "forward" ? fwd : undefined,
+      });
       setFilters((p) => [...(p || []), res]);
       setMatchValue("");
+      setActionValue("");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -894,7 +907,14 @@ function Filters() {
               <span className="em-filter-rule">
                 If <strong>{FIELD_LABELS[f.field] || f.field}</strong> contains{" "}
                 <span className="em-filter-needle">{f.match_value}</span>, then{" "}
-                <strong>{ACTION_LABELS[f.action] || f.action}</strong>.
+                <strong>{ACTION_LABELS[f.action] || f.action}</strong>
+                {f.action === "forward" && f.action_value ? (
+                  <>
+                    {" "}
+                    <span className="em-filter-needle">{f.action_value}</span>
+                  </>
+                ) : null}
+                .
               </span>
               <Button
                 size="sm"
@@ -936,6 +956,18 @@ function Filters() {
             </Select.Option>
           ))}
         </Select>
+        {action === "forward" && (
+          <Input
+            aria-label="Forwarding address"
+            type="email"
+            placeholder="you@example.com"
+            value={actionValue}
+            onChange={(e) => {
+              setActionValue(e.target.value);
+              setError("");
+            }}
+          />
+        )}
         <Button type="submit" variant="outline" icon={Plus} loading={busy}>
           Add
         </Button>

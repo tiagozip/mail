@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS filters (
   field TEXT NOT NULL DEFAULT 'from',
   match_value TEXT NOT NULL DEFAULT '',
   action TEXT NOT NULL DEFAULT 'archive',
+  action_value TEXT,
   position INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
