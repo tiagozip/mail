@@ -1224,6 +1224,7 @@ html[data-theme="nord"] {
 .em-letter-frame {
   display: block;
   width: 100%;
+  min-height: 2.5rem;
   border: 0;
   overflow: hidden;
   background: transparent;

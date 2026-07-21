@@ -36,6 +36,7 @@ export function useMailStore(initialUser) {
   const inflight = useRef(new Set());
   const viewRef = useRef(view);
   const syncing = useRef(false);
+  const countsTimer = useRef(null);
 
   useEffect(() => {
     viewRef.current = view;
@@ -62,14 +63,17 @@ export function useMailStore(initialUser) {
   }, []);
 
   const refreshCounts = useCallback(() => {
-    api
-      .folders()
-      .then((d) => {
-        setCounts(d.counts);
-        setUserFolders(d.folders || []);
-        cache.setSkipInboxFolders((d.folders || []).filter((f) => f.skipInbox).map((f) => f.id));
-      })
-      .catch(() => {});
+    clearTimeout(countsTimer.current);
+    countsTimer.current = setTimeout(() => {
+      api
+        .folders()
+        .then((d) => {
+          setCounts(d.counts);
+          setUserFolders(d.folders || []);
+          cache.setSkipInboxFolders((d.folders || []).filter((f) => f.skipInbox).map((f) => f.id));
+        })
+        .catch(() => {});
+    }, 500);
   }, []);
 
   const refreshLabels = useCallback(() => {

@@ -228,7 +228,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     });
     used += size;
     const contentId = (att.contentId || "").replace(/^<|>$/g, "");
-    const isInline = att.disposition === "inline" || !!contentId;
+    const isInline = att.disposition === "inline" || !!contentId || att.related === true;
     if (contentId) cidMap[contentId] = `/api/attachments/${attId}/inline`;
     attRows.push({
       id: attId,

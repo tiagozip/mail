@@ -35,7 +35,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { sanitize } from "lettersanitizer";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { stripTrackers } from "../../../src/sanitize.js";
@@ -97,9 +97,11 @@ blockquote{margin:0 0 0 12px;padding-left:12px;border-left:2px solid ${v("--colo
 .em-shiki,.em-shiki span{color:var(--shiki-dark)!important}`;
 }
 
+const letterHeightCache = new Map();
+
 function LetterBody({ html, allowRemote, resource }) {
   const frameRef = useRef(null);
-  const [height, setHeight] = useState(0);
+  const [height, setHeight] = useState(() => letterHeightCache.get(html) || 0);
   const [frameBody, setFrameBody] = useState(null);
   const hasCode = useMemo(() => /<pre[\s>]/i.test(html || ""), [html]);
 
@@ -112,11 +114,16 @@ function LetterBody({ html, allowRemote, resource }) {
     return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}"><style>${frameCss()}</style></head><body>${clean}</body></html>`;
   }, [html, allowRemote, resource]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const doc = frameRef.current?.contentDocument;
     if (!doc?.body) return;
     setFrameBody(doc.body);
-    const measure = () => setHeight(doc.documentElement.scrollHeight);
+    const measure = () => {
+      const h = doc.documentElement.scrollHeight;
+      if (!h) return;
+      letterHeightCache.set(html, h);
+      setHeight((prev) => (Math.abs(prev - h) > 1 ? h : prev));
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(doc.documentElement);
@@ -126,7 +133,7 @@ function LetterBody({ html, allowRemote, resource }) {
       ro.disconnect();
       doc.removeEventListener("load", measure, true);
     };
-  }, [srcDoc]);
+  }, [srcDoc, html]);
 
   return (
     <div className="em-letter">
@@ -141,7 +148,11 @@ function LetterBody({ html, allowRemote, resource }) {
           const doc = frameRef.current?.contentDocument;
           if (!doc) return;
           setFrameBody(doc.body);
-          setHeight(doc.documentElement.scrollHeight);
+          const h = doc.documentElement.scrollHeight;
+          if (h) {
+            letterHeightCache.set(html, h);
+            setHeight(h);
+          }
         }}
       />
       {hasCode && frameBody && (
@@ -425,6 +436,9 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
     ? pgpScan.hasRemote && !pgpShown
     : !remoteShown && htmlHasBlockedImages(message.bodyHtml);
   const trackers = Math.max(message.trackersBlocked || 0, pgpScan.trackers);
+  const shownAttachments = (message.attachments || []).filter(
+    (a) => !message.bodyHtml?.includes(`/api/attachments/${a.id}/inline`),
+  );
   const seed = message.from?.address || message.from?.name;
   const [decSnip, setDecSnip] = useState(null);
   useEffect(() => {
@@ -564,9 +578,9 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
           ) : (
             <PlainBody text={message.bodyText} />
           )}
-          {message.attachments?.length > 0 && (
+          {shownAttachments.length > 0 && (
             <div className="em-att-row">
-              {message.attachments.map((a) => (
+              {shownAttachments.map((a) => (
                 <Attachment key={a.id} att={a} />
               ))}
             </div>

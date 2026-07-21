@@ -790,7 +790,7 @@ async function downloadAttachment(env, user, id, inline) {
     inlineOk ? mime : inline ? "application/octet-stream" : row.mime || "application/octet-stream",
   );
   headers.set("content-length", String(bytes.byteLength));
-  headers.set("cache-control", "private, max-age=3600");
+  headers.set("cache-control", "private, max-age=31536000, immutable");
   const dispo = inlineOk ? "inline" : "attachment";
   const safeName = String(row.filename || "file")
     .replace(/[\r\n";\\]+/g, "_")
