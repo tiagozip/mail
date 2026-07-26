@@ -1,6 +1,7 @@
 import * as openpgp from "openpgp";
 import { sendViaRelay } from "./byod.js";
 import { encryptText, tryDecryptBytes } from "./crypto.js";
+import { consume } from "./ratelimit.js";
 import { sanitizeEmailHtml, textToHtml } from "./sanitize.js";
 import { bumpContact, htmlKey, insertMessage, resolveThread, updateStorage } from "./store.js";
 import { escapeHtml, isValidEmail, normalizeAddr, now, snippetFrom, uuid } from "./util.js";
@@ -38,17 +39,10 @@ async function pgpEncryptToSelf(env, userId, content) {
   }
 }
 
-function dayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
+// Counted here rather than in the api router so scheduled sends, which the
+// cron dispatches straight to sendMessage(), stay inside the same budget.
 async function checkSendLimit(env, userId) {
-  const limit = Number.parseInt(env.DAILY_SEND_LIMIT || "200", 10);
-  const key = `send:${userId}:${dayKey()}`;
-  const current = Number.parseInt((await env.KV.get(key)) || "0", 10);
-  if (current >= limit) return false;
-  await env.KV.put(key, String(current + 1), { expirationTtl: 90000 });
-  return true;
+  return (await consume(env, "send:day", userId)).ok;
 }
 
 export async function sendMessage(env, user, payload) {

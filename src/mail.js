@@ -2,6 +2,7 @@ import * as openpgp from "openpgp";
 import PostalMime from "postal-mime";
 import { encryptBytes, encryptText } from "./crypto.js";
 import { sendPush } from "./push.js";
+import { consumeAll } from "./ratelimit.js";
 import { sanitizeEmailHtml } from "./sanitize.js";
 import { classifySpam } from "./spam.js";
 import {
@@ -128,6 +129,16 @@ export async function handleEmail(message, env, ctx) {
   }
   if (!resolved.userId) {
     message.setReject("550 5.1.1 No such mailbox at estrogen.delivery");
+    return;
+  }
+  // Mailbox flood protection. Temporary rejects so a legitimate sender that
+  // trips the limit retries later instead of losing the message.
+  const inbound = await consumeAll(env, [
+    ["inbound:user", resolved.userId],
+    ["inbound:pair", `${normalizeAddr(message.from)}>${normalizeAddr(message.to)}`],
+  ]);
+  if (!inbound.ok) {
+    message.setReject("451 4.7.1 Too many messages, try again later");
     return;
   }
   try {

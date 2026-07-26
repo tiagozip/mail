@@ -212,6 +212,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
   tokenize = 'porter unicode61'
 );
 
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket_key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  reset_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at);
+
 CREATE TABLE IF NOT EXISTS mailbox_changes (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
