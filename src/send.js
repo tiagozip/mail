@@ -1,24 +1,9 @@
 import * as openpgp from "openpgp";
 import { sendViaRelay } from "./byod.js";
 import { encryptText, tryDecryptBytes } from "./crypto.js";
-import { sanitizeEmailHtml, textToHtml } from "./sanitize.js";
+import { expandHtmlBlocks, sanitizeEmailHtml, textToHtml } from "./sanitize.js";
 import { bumpContact, htmlKey, insertMessage, resolveThread, updateStorage } from "./store.js";
 import { escapeHtml, isValidEmail, normalizeAddr, now, snippetFrom, uuid } from "./util.js";
-
-function expandHtmlBlocks(html) {
-  return String(html || "").replace(
-    /<div\b[^>]*\bdata-htmlblock="([^"]*)"[^>]*>[\s\S]*?<\/div>/gi,
-    (_m, b64) => {
-      try {
-        const bin = atob(b64);
-        const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-        return new TextDecoder().decode(bytes);
-      } catch {
-        return "";
-      }
-    },
-  );
-}
 
 async function pgpEncryptToSelf(env, userId, content) {
   const row = await env.DB.prepare(

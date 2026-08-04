@@ -187,18 +187,20 @@ export function escapeHtml(s) {
     .replace(/>/g, "&gt;");
 }
 
-export function plainBodyToHtml(text) {
+export function plainBodyToHtml(text, quote = false) {
   const str = String(text || "");
   if (!str.trim()) return "";
   const lines = str.replace(/^\n+/, "").split("\n");
-  const out = ["<p></p>"];
-  const block = [];
-  for (const line of lines) {
-    block.push(escapeHtml(line.replace(/^>\s?/, "")));
-  }
-  const joined = block.join("<br>");
-  out.push(`<blockquote>${joined || "<br>"}</blockquote>`);
-  return out.join("");
+  const joined = lines
+    .map((line) => escapeHtml(quote ? line.replace(/^>\s?/, "") : line))
+    .join("<br>");
+  if (!quote) return `<p>${joined || "<br>"}</p>`;
+  return `<p></p><blockquote>${joined || "<br>"}</blockquote>`;
+}
+
+export function hasBodyContent(html, text) {
+  if (String(text || "").trim()) return true;
+  return /<img\b|data-htmlblock=/i.test(String(html || ""));
 }
 
 export function htmlHasBlockedImages(html) {

@@ -38,13 +38,14 @@ import { sanitize } from "lettersanitizer";
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
-import { stripTrackers } from "../../../src/sanitize.js";
+import { expandHtmlBlocks, stripTrackers } from "../../../src/sanitize.js";
 import { notify, notifyError } from "../toast.js";
 import { SendAtDialog } from "./SendAtDialog.jsx";
 import {
   escapeHtml,
   FOLDER_LABELS,
   fullDate,
+  hasBodyContent,
   htmlHasBlockedImages,
   humanSize,
   imagesDefaultOn,
@@ -734,9 +735,12 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   }
 
   async function send(sendAt, doEncrypt) {
-    const body = text.trim();
-    const hasImg = /<img/i.test(html);
-    if ((!body && !atts.length && !hasImg) || !replyTo) return;
+    const ed = editorRef.current?.isDestroyed === false ? editorRef.current : null;
+    ed?.commands.linkifyAll();
+    const liveHtml = ed ? ed.getHTML() : html;
+    const body = (ed ? ed.getText() : text).trim();
+    const filled = hasBodyContent(liveHtml, body);
+    if ((!filled && !atts.length) || !replyTo) return;
     const e2e = doEncrypt && canEncrypt;
     setSending(true);
     const subj = lastExternalSender.subject || "";
@@ -750,17 +754,15 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     };
     try {
       let payload;
-      let plain = body;
       if (e2e) {
         if (!ownKeyRef.current && user.pgpEnabled) {
           const own = await api.getPgp();
           ownKeyRef.current = own?.publicKey || null;
         }
-        plain = editorRef.current?.getText?.() ?? body;
         const keys = [effectiveKey, ownKeyRef.current].filter(Boolean);
         let armored;
         try {
-          armored = await pgp.encryptFor(keys, plain);
+          armored = await pgp.encryptFor(keys, body);
         } catch {
           notify("Cannot encrypt", "That public key could not be read.", "warning");
           setSending(false);
@@ -771,7 +773,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         payload = {
           ...base,
           text: body,
-          html: body || hasImg ? html : "",
+          html: filled ? liveHtml : "",
           attachmentIds: atts.filter((a) => !a.pending).map((a) => a.id),
         };
       }
@@ -792,10 +794,10 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           to: [{ address: replyTo, name: "" }],
           cc: ccAddrs.map((a) => ({ address: a, name: "" })),
           subject: base.subject,
-          snippet: plain.replace(/\s+/g, " ").trim().slice(0, 140),
-          bodyText: plain,
-          bodyHtml: !e2e && (body || hasImg) ? html : null,
-          hasHtml: !e2e && html ? 1 : 0,
+          snippet: body.replace(/\s+/g, " ").trim().slice(0, 140),
+          bodyText: body,
+          bodyHtml: !e2e && filled ? expandHtmlBlocks(liveHtml) : null,
+          hasHtml: !e2e && filled ? 1 : 0,
           date: Date.now(),
           isRead: 1,
           pgp: 0,
@@ -822,7 +824,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   }
 
   const canSend =
-    (!!text.trim() || atts.length > 0 || /<img/i.test(html)) &&
+    (hasBodyContent(html, text) || atts.length > 0) &&
     !!replyTo &&
     !atts.some((a) => a.pending);
   const mainDisabled = !canSend || (pgpDefault && !canEncrypt);

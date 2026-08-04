@@ -20,6 +20,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect } from "react";
 import { CODE_LANGS } from "../codeLangs.js";
+import { Linkify } from "../linkify.js";
 import { HtmlBlock } from "./HtmlBlock.jsx";
 
 function ToolButton({ icon, label, active, onClick, disabled }) {
@@ -64,9 +65,12 @@ export function RichEditor({ value, onUpdate, placeholder, onEditorReady, onFile
       Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer nofollow" } }),
       Image.configure({ allowBase64: false, HTMLAttributes: { class: "em-rt-img" } }),
       HtmlBlock,
+      Linkify,
       Placeholder.configure({ placeholder: placeholder || "Write your message" }),
     ],
     content: value || "",
+    onCreate: ({ editor: ed }) => ed.commands.linkifyAll(),
+    onBlur: ({ editor: ed }) => ed.commands.linkifyAll(),
     onUpdate: ({ editor: ed }) => onUpdate?.({ html: ed.getHTML(), text: ed.getText() }),
     editorProps: {
       handlePaste: (_view, event) => {

@@ -2636,6 +2636,12 @@ html[data-theme="nord"] {
   padding: var(--em-3);
 }
 
+.em-htmlblock-preview a {
+  color: var(--text-color-kumo-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .em-htmlblock-empty {
   padding: var(--em-3);
   font-size: 0.82rem;
@@ -2727,6 +2733,12 @@ html[data-theme="nord"] {
 .em-rt-content .ProseMirror a {
   color: var(--text-color-kumo-link);
   text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in oklab, var(--text-color-kumo-link) 45%, transparent);
+  border-radius: 3px;
+  padding: 0 1px;
+  background: color-mix(in oklab, var(--text-color-kumo-link) 12%, transparent);
 }
 
 .em-rt-content .ProseMirror code {

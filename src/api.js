@@ -19,7 +19,7 @@ import {
   sendVerifyProbe,
   verifyRelay,
 } from "./byod.js";
-import { encryptBytes, tryDecryptBytes, tryDecryptText } from "./crypto.js";
+import { encryptBytes, encryptText, tryDecryptBytes, tryDecryptText } from "./crypto.js";
 import { checkOwnership, checkSendingDns, lookupMx } from "./domains.js";
 import {
   authorizeUrl,
@@ -40,6 +40,7 @@ import {
   FILTER_ACTIONS,
   FILTER_FIELDS,
   FOLDERS,
+  htmlKey,
   insertMessage,
   recordChange,
   recordChanges,
@@ -647,9 +648,13 @@ async function getMessage(env, user, id, allowRemote) {
     const obj = await env.R2.get(row.html_key);
     if (obj) {
       const html = await tryDecryptText(env, await obj.arrayBuffer());
-      const tr = stripTrackers(html);
-      trackersBlocked = tr.count;
-      bodyHtml = sanitizeEmailHtml(tr.html, { allowRemote, toProxy: proxyUrl });
+      if (row.folder === "drafts") {
+        bodyHtml = html;
+      } else {
+        const tr = stripTrackers(html);
+        trackersBlocked = tr.count;
+        bodyHtml = sanitizeEmailHtml(tr.html, { allowRemote, toProxy: proxyUrl });
+      }
     }
   }
   return {
@@ -806,17 +811,27 @@ async function saveDraft(request, env, user, draftId) {
   const bcc = (body.bcc || []).map(normalizeAddr).filter(Boolean);
   const subject = String(body.subject || "").slice(0, 988);
   const text = String(body.text || "");
+  const html = String(body.html || "").slice(0, 1_000_000);
+  const snippet = snippetFrom(text || html.replace(/<[^>]+>/g, " "));
   const ts = now();
 
   if (draftId) {
     const existing = await env.DB.prepare(
-      "SELECT id FROM messages WHERE id = ? AND user_id = ? AND folder = 'drafts'",
+      "SELECT id, html_key FROM messages WHERE id = ? AND user_id = ? AND folder = 'drafts'",
     )
       .bind(draftId, user.id)
       .first();
     if (existing) {
+      const hKey = html ? htmlKey(user.id, draftId) : null;
+      if (hKey) {
+        await env.R2.put(hKey, await encryptText(env, html), {
+          httpMetadata: { contentType: "text/html; charset=utf-8" },
+        });
+      } else if (existing.html_key) {
+        await env.R2.delete(existing.html_key).catch(() => {});
+      }
       await env.DB.prepare(
-        "UPDATE messages SET to_json=?, cc_json=?, bcc_json=?, subject=?, body_text=?, snippet=?, date=? WHERE id = ? AND user_id = ?",
+        "UPDATE messages SET to_json=?, cc_json=?, bcc_json=?, subject=?, body_text=?, snippet=?, has_html=?, html_key=?, date=? WHERE id = ? AND user_id = ?",
       )
         .bind(
           JSON.stringify(to.map((a) => ({ address: a, name: "" }))),
@@ -824,7 +839,9 @@ async function saveDraft(request, env, user, draftId) {
           JSON.stringify(bcc.map((a) => ({ address: a, name: "" }))),
           subject,
           text,
-          snippetFrom(text),
+          snippet,
+          hKey ? 1 : 0,
+          hKey,
           ts,
           draftId,
           user.id,
@@ -836,6 +853,13 @@ async function saveDraft(request, env, user, draftId) {
   }
 
   const id = uuid();
+  let hKey = null;
+  if (html) {
+    hKey = htmlKey(user.id, id);
+    await env.R2.put(hKey, await encryptText(env, html), {
+      httpMetadata: { contentType: "text/html; charset=utf-8" },
+    });
+  }
   await insertMessage(env, {
     id,
     user_id: user.id,
@@ -849,8 +873,10 @@ async function saveDraft(request, env, user, draftId) {
     cc: cc.map((a) => ({ address: a, name: "" })),
     bcc: bcc.map((a) => ({ address: a, name: "" })),
     subject,
-    snippet: snippetFrom(text),
+    snippet,
     body_text: text,
+    has_html: hKey ? 1 : 0,
+    html_key: hKey,
     date: ts,
     received_at: ts,
   });

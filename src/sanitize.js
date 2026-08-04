@@ -220,6 +220,20 @@ function neutralizeDarkColors(html) {
   return out;
 }
 
+export function expandHtmlBlocks(html) {
+  return String(html || "").replace(
+    /<div\b[^>]*\bdata-htmlblock="([^"]*)"[^>]*>[\s\S]*?<\/div>/gi,
+    (_m, b64) => {
+      try {
+        const bin = atob(b64);
+        return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+      } catch {
+        return "";
+      }
+    },
+  );
+}
+
 export function sanitizeEmailHtml(html, { cidMap = {}, allowRemote = false, toProxy = null } = {}) {
   let out = String(html || "");
   out = out.replace(COMMENTS, "");

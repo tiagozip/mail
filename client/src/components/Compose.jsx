@@ -16,11 +16,13 @@ import {
 } from "@phosphor-icons/react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
+import { expandHtmlBlocks } from "../../../src/sanitize.js";
 import * as pgp from "../pgp.js";
 import { SendAtDialog } from "./SendAtDialog.jsx";
 import { notify, notifyError } from "../toast.js";
 import {
   fullDate,
+  hasBodyContent,
   humanSize,
   initials,
   monoColor,
@@ -276,7 +278,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   useEffect(() => {
     if (!open) return;
     const init = initial || {};
-    const html = plainBodyToHtml(init.body || "");
+    const html = init.html || plainBodyToHtml(init.body || "", init.quoted === true);
     setFrom(init.from && addresses.some((a) => a.address === init.from) ? init.from : primary);
     setTo(init.to || "");
     setCc(init.cc || "");
@@ -284,8 +286,10 @@ export function Compose({ open, initial, user, onClose, onSent }) {
     setSubject(init.subject || "");
     setBodyHtml(html);
     setBodyText(init.body || "");
-    if (editorRef.current && !editorRef.current.isDestroyed)
+    if (editorRef.current && !editorRef.current.isDestroyed) {
       editorRef.current.commands.setContent(html || "<p></p>");
+      editorRef.current.commands.linkifyAll();
+    }
     setShowCc(!!init.cc);
     setShowBcc(!!init.bcc);
     for (const url of previews.current.values()) URL.revokeObjectURL(url);
@@ -303,10 +307,10 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   useEffect(() => {
     if (!open) return;
     clearTimeout(saveTimer.current);
-    if (!to && !subject && !bodyText.trim()) return;
+    if (!to && !subject && !hasBodyContent(bodyHtml, bodyText)) return;
     saveTimer.current = setTimeout(saveDraft, 3000);
     return () => clearTimeout(saveTimer.current);
-  }, [to, cc, bcc, subject, bodyText, open]);
+  }, [to, cc, bcc, subject, bodyText, bodyHtml, open]);
 
   const recipientAddrs = useMemo(() => {
     const seen = new Set();
@@ -371,6 +375,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
       bcc: parseRecipients(bcc),
       subject,
       text: bodyText,
+      html: hasBodyContent(bodyHtml, bodyText) ? bodyHtml : "",
     };
     try {
       if (draftIdRef.current) {
@@ -513,10 +518,14 @@ export function Compose({ open, initial, user, onClose, onSent }) {
       return;
     }
     const e2e = doEncrypt && canE2E;
+    const ed = editorRef.current?.isDestroyed === false ? editorRef.current : null;
+    ed?.commands.linkifyAll();
+    const liveHtml = ed ? ed.getHTML() : bodyHtml;
+    const liveText = ed ? ed.getText() : bodyText;
+    const filled = hasBodyContent(liveHtml, liveText);
     setBusy(true);
     try {
       let payload;
-      let plain = bodyText;
       if (e2e) {
         await lookupKeys(recipientAddrs);
         const recipientKeys = recipientAddrs.map((addr) => keyCache.current.get(addr));
@@ -542,8 +551,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
           setBusy(false);
           return;
         }
-        plain = editorRef.current?.getText?.() ?? bodyText;
-        const armored = await pgp.encryptFor([...recipientKeys, ownKeyRef.current], plain);
+        const armored = await pgp.encryptFor([...recipientKeys, ownKeyRef.current], liveText);
         payload = {
           from,
           to: recipients,
@@ -556,15 +564,14 @@ export function Compose({ open, initial, user, onClose, onSent }) {
           draftId: draftIdRef.current || undefined,
         };
       } else {
-        const html = bodyText.trim() || /<img/i.test(bodyHtml) ? bodyHtml : "";
         payload = {
           from,
           to: recipients,
           cc: parseRecipients(cc),
           bcc: parseRecipients(bcc),
           subject,
-          text: bodyText,
-          html,
+          text: liveText,
+          html: filled ? liveHtml : "",
           inReplyTo: meta.inReplyTo,
           references: meta.references || [],
           attachmentIds: atts.filter((a) => !a.pending).map((a) => a.id),
@@ -582,10 +589,10 @@ export function Compose({ open, initial, user, onClose, onSent }) {
           to: recipients.map((a) => ({ address: a, name: "" })),
           cc: parseRecipients(cc).map((a) => ({ address: a, name: "" })),
           subject: subject || "(no subject)",
-          snippet: plain.replace(/\s+/g, " ").trim().slice(0, 140),
-          bodyText: plain,
-          bodyHtml: !e2e && (bodyText.trim() || /<img/i.test(bodyHtml)) ? bodyHtml : null,
-          hasHtml: !e2e && bodyHtml ? 1 : 0,
+          snippet: liveText.replace(/\s+/g, " ").trim().slice(0, 140),
+          bodyText: liveText,
+          bodyHtml: !e2e && filled ? expandHtmlBlocks(liveHtml) : null,
+          hasHtml: !e2e && filled ? 1 : 0,
           date: Date.now(),
           isRead: 1,
           pgp: 0,

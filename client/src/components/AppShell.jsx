@@ -109,6 +109,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
           bcc: chips(d.bcc),
           subject: d.subject || "",
           body: d.bodyText || "",
+          html: d.bodyHtml || "",
         });
       } catch (e) {
         notifyError(e);
@@ -172,6 +173,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
       cc: ccList.filter((a) => a !== user.address).join(", "),
       subject: re,
       body: quoteBody(msg),
+      quoted: true,
       inReplyTo: msg.rfcMessageId,
       references: [...(msg.references || []), msg.rfcMessageId].filter(Boolean),
     });
@@ -180,7 +182,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   function startForward(msg) {
     const fw = /^fwd:/i.test(msg.subject || "") ? msg.subject : `Fwd: ${msg.subject || ""}`;
     const header = `\n\n---------- Forwarded message ----------\nFrom: ${msg.from?.name || ""} <${msg.from?.address}>\nDate: ${new Date(msg.date).toLocaleString()}\nSubject: ${msg.subject}\nTo: ${recipientLine(msg.to)}\n\n${msg.bodyText || ""}`;
-    openCompose({ subject: fw, body: header });
+    openCompose({ subject: fw, body: header, quoted: true });
   }
 
   function openByIndex(idx) {

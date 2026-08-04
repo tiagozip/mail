@@ -66,7 +66,20 @@ export const HtmlBlock = Node.create({
   atom: true,
   selectable: true,
   addAttributes() {
-    return { html: { default: "" } };
+    return { html: { default: "", rendered: false } };
+  },
+  renderText({ node }) {
+    return String(node.attrs.html || "")
+      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|tr|li|h[1-6]|table)>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   },
   parseHTML() {
     return [
