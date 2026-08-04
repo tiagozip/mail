@@ -4,8 +4,8 @@ export function json(data, init = {}) {
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 
-export function error(status, message, extra = {}) {
-  return json({ error: message, ...extra }, { status });
+export function error(status, message, extra = {}, init = {}) {
+  return json({ error: message, ...extra }, { ...init, status });
 }
 
 export function uuid() {

@@ -20,9 +20,15 @@ async function req(method, path, body, isForm) {
     data = {};
   }
   if (!res.ok) {
-    const err = new Error(data?.error || `request failed (${res.status})`);
+    const retryAfter = data?.retryAfter || Number(res.headers.get("retry-after")) || 0;
+    const fallback =
+      res.status === 429
+        ? `too many requests${retryAfter ? `, retry in ${retryAfter}s` : ", slow down"}`
+        : `request failed (${res.status})`;
+    const err = new Error(data?.error || fallback);
     err.status = res.status;
-    err.code = data?.code;
+    err.code = data?.code || (res.status === 429 ? "E_RATE_LIMIT" : undefined);
+    err.retryAfter = retryAfter;
     throw err;
   }
   return data;

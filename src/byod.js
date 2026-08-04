@@ -1,5 +1,6 @@
 import { decryptText, encryptText } from "./crypto.js";
 import { storeInbound } from "./mail.js";
+import { consume, consumeAll } from "./ratelimit.js";
 import { normalizeAddr } from "./util.js";
 
 const SKEW_MS = 300000;
@@ -117,15 +118,7 @@ async function consumeNonce(env, domain, nonce) {
 }
 
 async function rateOk(env, domain) {
-  const key = `byod:in:${domain}:${Math.floor(Date.now() / 3600000)}`;
-  try {
-    const n = Number.parseInt((await env.KV.get(key)) || "0", 10);
-    if (n >= 5000) return false;
-    await env.KV.put(key, String(n + 1), { expirationTtl: 4000 });
-    return true;
-  } catch {
-    return false;
-  }
+  return (await consume(env, "ingest:domain", domain)).ok;
 }
 
 export async function byodIngest(request, env, ctx) {
@@ -212,6 +205,16 @@ export async function byodIngest(request, env, ctx) {
     } catch {}
     return Response.json({ ok: true, verified: true });
   }
+
+  const inbound = await consumeAll(env, [
+    ["inbound:user", row.owner_id],
+    ["inbound:pair", `${mailfrom}>${rcpt}`],
+  ]);
+  if (!inbound.ok)
+    return new Response("rate limited", {
+      status: 429,
+      headers: { "retry-after": String(inbound.retryAfter) },
+    });
 
   try {
     await storeInbound(env, ctx, {

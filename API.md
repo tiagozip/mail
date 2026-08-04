@@ -61,6 +61,54 @@ curl https://mail.estrogen.delivery/api/messages/MESSAGE_ID \
   -H "Authorization: Bearer $EMK"
 ```
 
+## Rate limits
+
+Every endpoint is rate limited. Limits are counted per account (per client IP for the endpoints that work without a session), in fixed windows, and apply the same way to cookie sessions and API keys.
+
+Successful responses carry the state of the tightest bucket the request touched:
+
+```
+x-ratelimit-limit: 20
+x-ratelimit-remaining: 17
+x-ratelimit-reset: 1785059041
+```
+
+`x-ratelimit-reset` is a unix timestamp in seconds. When a bucket is exhausted the request is rejected with `429`, a `retry-after` header, and a JSON body:
+
+```json
+{ "error": "too many aliases created, retry in 3600s", "code": "E_RATE_LIMIT", "retryAfter": 3600 }
+```
+
+Retry after the window closes; retrying sooner just burns another rejection. The main buckets:
+
+| Bucket | Limit | Applies to |
+| --- | --- | --- |
+| account ceiling | 1200/min | every authenticated request, on top of the per-route bucket |
+| reads | 600/min | `GET` endpoints |
+| writes | 180/min | mutations without a bucket of their own |
+| `/api/sync` | 300/min | change polling |
+| search | 60/min | `GET /api/contacts` |
+| bulk | 60/min | `POST /api/messages/bulk`, `POST /api/threads/bulk` |
+| send | 30/min, 120/hour, 200/day | `POST /api/send`, including scheduled sends when they fire |
+| alias creation | 20/hour, 60/day | `POST /api/aliases`, `POST /api/hidden-aliases` (shared) |
+| alias edits | 120/hour | renaming, identity, enable/disable, delete |
+| uploads | 200/hour | `POST /api/attachments` |
+| avatars | 30/hour | account and per-alias avatar uploads |
+| drafts | 240/min | draft autosave |
+| labels / folders / filters | 60/hour each | creating, editing, deleting |
+| api keys | 10/day created, 60/day revoked | `POST /api/keys`, `DELETE /api/keys/:id` |
+| domains | 30/hour, plus 40/hour verification attempts | `/api/domains*` |
+| pgp | 60/hour | `/api/pgp*` |
+| push | 60/hour | `/api/push/*` |
+| settings | 120/hour | `PUT /api/settings` |
+| sign-in | 30 per 10 min per IP | `/api/auth/login`, `/api/auth/callback` |
+| native code exchange | 10 per 10 min per IP | `/api/auth/native/exchange` |
+| unauthenticated | 120/min per IP | anything else without a session |
+
+Inbound mail is limited too: 1000 messages/hour per mailbox and 200/hour for one sender/recipient pair. Over the limit the SMTP handler answers `451`, so a legitimate sender retries later rather than losing the message.
+
+The daily send ceiling is configurable with the `DAILY_SEND_LIMIT` var; the rest live in `src/ratelimit.js`.
+
 ## Selected endpoints
 
 - `GET /api/me` current user and addresses

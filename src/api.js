@@ -32,6 +32,7 @@ import {
 } from "./oidc.js";
 import { isAllowedPushEndpoint } from "./push.js";
 import { proxyImage, proxyUrl } from "./img.js";
+import { clientIp, consume, enforce, tooMany, withRateLimitHeaders } from "./ratelimit.js";
 import { sanitizeEmailHtml, stripTrackers } from "./sanitize.js";
 import { sendMessage } from "./send.js";
 import {
@@ -887,14 +888,49 @@ export async function handleApi(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
+  const ip = clientIp(request);
 
-  if (path === "/api/auth/login" && method === "GET") return oidcLogin(request, env);
-  if (path === "/api/auth/callback" && method === "GET") return oidcCallback(request, env);
-  if (path === "/api/auth/native/exchange" && method === "POST") return nativeExchange(request, env);
-  if (path === "/api/byod/ingest" && method === "POST") return byodIngest(request, env, ctx);
+  // Endpoints reachable without a session are limited by client ip, before
+  // any session or database work happens.
+  if (path === "/api/auth/login" && method === "GET")
+    return withIpLimit(env, "auth:start", ip, () => oidcLogin(request, env));
+  if (path === "/api/auth/callback" && method === "GET")
+    return withIpLimit(env, "auth:start", ip, () => oidcCallback(request, env));
+  if (path === "/api/auth/native/exchange" && method === "POST")
+    return withIpLimit(env, "auth:exchange", ip, () => nativeExchange(request, env));
+  if (path === "/api/byod/ingest" && method === "POST")
+    return withIpLimit(
+      env,
+      "ingest:ip",
+      ip,
+      () => byodIngest(request, env, ctx),
+      (r) =>
+        new Response("rate limited", {
+          status: 429,
+          headers: { "retry-after": String(r.retryAfter) },
+        }),
+    );
 
   const auth = await authenticate(request, env);
   if (!auth?.viaApiKey && !requireOrigin(request, env)) return error(403, "bad origin");
+
+  const rl = await enforce(env, { method, path, userId: auth?.user?.id || null, ip });
+  if (!rl.ok) return tooMany(rl);
+
+  return withRateLimitHeaders(await routeApi(request, env, ctx, auth), rl);
+}
+
+async function withIpLimit(env, bucket, ip, handler, onLimit) {
+  const rl = await consume(env, bucket, ip);
+  if (!rl.ok) return onLimit ? onLimit(rl) : tooMany(rl);
+  return handler();
+}
+
+async function routeApi(request, env, ctx, auth) {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  const method = request.method;
+
   if (path === "/api/me" && method === "GET") {
     if (!auth) return json({ user: null });
     const me = publicUser(auth.user);
