@@ -48,10 +48,26 @@ function parsePath(pathname) {
   return { view: { kind: "folder", folder: "inbox" } };
 }
 
-function quoteBody(msg) {
+async function quotableText(msg) {
+  if (!msg.pgp) return msg.bodyText || "";
+  if (!pgp.getUnlocked()) return "";
+  try {
+    const raw = await pgp.decryptArmored(msg.bodyText || "");
+    if (msg.hasHtml && raw.trimStart().startsWith("<")) {
+      const withBreaks = raw.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h[1-6])>/gi, "\n");
+      const doc = new DOMParser().parseFromString(withBreaks, "text/html");
+      return (doc.body.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
+    }
+    return raw;
+  } catch {
+    return "";
+  }
+}
+
+function quoteBody(msg, text) {
   const date = new Date(msg.date).toLocaleString();
   const who = msg.from?.name || msg.from?.address || "someone";
-  const quoted = (msg.bodyText || "")
+  const quoted = (text || "")
     .split("\n")
     .map((l) => `> ${l}`)
     .join("\n");
@@ -160,7 +176,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
     }
   }, [store.view, store.openId]);
 
-  function startReply(msg, kind) {
+  async function startReply(msg, kind) {
     const re = /^re:/i.test(msg.subject || "") ? msg.subject : `Re: ${msg.subject || ""}`;
     const toList =
       kind === "replyAll"
@@ -172,16 +188,16 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
       to: dedup.join(", "),
       cc: ccList.filter((a) => a !== user.address).join(", "),
       subject: re,
-      body: quoteBody(msg),
+      body: quoteBody(msg, await quotableText(msg)),
       quoted: true,
       inReplyTo: msg.rfcMessageId,
       references: [...(msg.references || []), msg.rfcMessageId].filter(Boolean),
     });
   }
 
-  function startForward(msg) {
+  async function startForward(msg) {
     const fw = /^fwd:/i.test(msg.subject || "") ? msg.subject : `Fwd: ${msg.subject || ""}`;
-    const header = `\n\n---------- Forwarded message ----------\nFrom: ${msg.from?.name || ""} <${msg.from?.address}>\nDate: ${new Date(msg.date).toLocaleString()}\nSubject: ${msg.subject}\nTo: ${recipientLine(msg.to)}\n\n${msg.bodyText || ""}`;
+    const header = `\n\n---------- Forwarded message ----------\nFrom: ${msg.from?.name || ""} <${msg.from?.address}>\nDate: ${new Date(msg.date).toLocaleString()}\nSubject: ${msg.subject}\nTo: ${recipientLine(msg.to)}\n\n${await quotableText(msg)}`;
     openCompose({ subject: fw, body: header, quoted: true });
   }
 
