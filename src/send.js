@@ -255,7 +255,9 @@ export async function sendMessage(env, user, payload) {
     : await env.EMAIL.send(sendPayload);
 
   const messageId = uuid();
-  const rfcId = `<${messageId}@${env.MAIL_DOMAIN}>`;
+  const wireId =
+    typeof result?.messageId === "string" && validMsgId(result.messageId) ? result.messageId.trim() : null;
+  const rfcId = wireId || `<${messageId}@${env.MAIL_DOMAIN}>`;
   const threadId = (await resolveThread(env, user.id, inReplyTo, refs)) || messageId;
 
   const selfEncrypted = isE2E ? text : await pgpEncryptToSelf(env, user.id, html || text);
