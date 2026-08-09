@@ -176,7 +176,18 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
     }
   }, [store.view, store.openId]);
 
-  async function startReply(msg, kind) {
+  async function hydrate(msg) {
+    if (msg.bodyText !== undefined && msg.rfcMessageId) return msg;
+    try {
+      const { message } = await api.message(msg.id);
+      return message || msg;
+    } catch {
+      return msg;
+    }
+  }
+
+  async function startReply(item, kind) {
+    const msg = await hydrate(item);
     const re = /^re:/i.test(msg.subject || "") ? msg.subject : `Re: ${msg.subject || ""}`;
     const toList =
       kind === "replyAll"
@@ -195,7 +206,8 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
     });
   }
 
-  async function startForward(msg) {
+  async function startForward(item) {
+    const msg = await hydrate(item);
     const fw = /^fwd:/i.test(msg.subject || "") ? msg.subject : `Fwd: ${msg.subject || ""}`;
     const header = `\n\n---------- Forwarded message ----------\nFrom: ${msg.from?.name || ""} <${msg.from?.address}>\nDate: ${new Date(msg.date).toLocaleString()}\nSubject: ${msg.subject}\nTo: ${recipientLine(msg.to)}\n\n${await quotableText(msg)}`;
     openCompose({ subject: fw, body: header, quoted: true });
