@@ -1,0 +1,162 @@
+[
+  {
+    "name": "sent copy stored in sent folder",
+    "ok": true,
+    "detail": "folder=sent"
+  },
+  {
+    "name": "internal delivery alice->bob",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "plain body intact",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "from parsed",
+    "ok": true,
+    "detail": "e2e-alice@estrogen.delivery"
+  },
+  {
+    "name": "rfcMessageId present",
+    "ok": true,
+    "detail": "<T6l5gAjX7xCP2RiUAnmtRttsOCVluiFAAIw8@estrogen.delivery>"
+  },
+  {
+    "name": "reply delivered bob->alice",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "reply In-Reply-To set",
+    "ok": true,
+    "detail": "<T6l5gAjX7xCP2RiUAnmtRttsOCVluiFAAIw8@estrogen.delivery>"
+  },
+  {
+    "name": "reply threads with original",
+    "ok": false,
+    "detail": "ecec5ff1-9576-4a10-873a-20e863fc771d vs 401c3725-5a7f-4a64-9302-d1baabb2dd4d"
+  },
+  {
+    "name": "quote survives transit",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "cc: to-recipient got it",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "cc: cc-recipient got it",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "cc visible on to-copy",
+    "ok": true,
+    "detail": "[{\"name\":\"\",\"address\":\"e2e-carol@estrogen.delivery\"}]"
+  },
+  {
+    "name": "cc visible on cc-copy",
+    "ok": true,
+    "detail": "[{\"name\":\"\",\"address\":\"e2e-carol@estrogen.delivery\"}]"
+  },
+  {
+    "name": "reply-all: to leg",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "reply-all: cc leg",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "reply-all threads on carol's side",
+    "ok": true,
+    "detail": "d343e4fa-03ca-4098-83b7-4b8438ee2ef6 vs d343e4fa-03ca-4098-83b7-4b8438ee2ef6"
+  },
+  {
+    "name": "bcc: to-recipient got it",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "bcc: bcc-recipient got it",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "bcc NOT leaked to to-recipient",
+    "ok": true,
+    "detail": "{\"to\":[{\"name\":\"\",\"address\":\"e2e-bob@estrogen.delivery\"}],\"cc\":[],\"bcc\":[]}"
+  },
+  {
+    "name": "bcc NOT in raw headers of to-copy",
+    "ok": true,
+    "detail": "raw 5116b"
+  },
+  {
+    "name": "html delivery",
+    "ok": true,
+    "detail": "hasHtml=true"
+  },
+  {
+    "name": "html flagged",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "html content present",
+    "ok": true,
+    "detail": "<p>hello <strong>bob</strong></p><p>after script</p>\n"
+  },
+  {
+    "name": "script stripped",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "forward delivered",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "forwarded body included",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "attachment mail delivered",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "attachment parsed inbound",
+    "ok": true,
+    "detail": "[{\"id\":\"e29a4235-b10a-4161-b5ee-1082794d5d8d\",\"filename\":\"e2e.txt\",\"mime\":\"text/plain\",\"size\":28}]"
+  },
+  {
+    "name": "attachment content roundtrip",
+    "ok": true,
+    "detail": "28b"
+  },
+  {
+    "name": "draft saved + listed",
+    "ok": true,
+    "detail": "a8034f51-31df-4e26-8150-5f3bf520e0a1"
+  },
+  {
+    "name": "draft deleted after send",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "draft-send delivered",
+    "ok": true,
+    "detail": "draft body final\n"
+  }
+]

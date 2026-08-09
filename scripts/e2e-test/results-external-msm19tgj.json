@@ -1,0 +1,77 @@
+[
+  {
+    "name": "outbound estrogen->proton delivered",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "outbound body intact at proton",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "outbound wire msgid matches stored",
+    "ok": true,
+    "detail": "<AJ2sXqPcVgAu9mAYXMyJXeCaq2OrR9VGGNg0@estrogen.delivery>"
+  },
+  {
+    "name": "outbound SPF pass",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "outbound DKIM pass",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "external reply delivered to estrogen",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "external reply threads with sent copy",
+    "ok": true,
+    "detail": "d118b5a6-4a2a-40f1-97fa-b8ddd1ab9231 vs d118b5a6-4a2a-40f1-97fa-b8ddd1ab9231"
+  },
+  {
+    "name": "external reply quote intact",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "inbound auth recorded",
+    "ok": true,
+    "detail": "pass"
+  },
+  {
+    "name": "fresh external inbound delivered",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "external from parsed",
+    "ok": true,
+    "detail": "hi@tiago.zip"
+  },
+  {
+    "name": "external body parsed",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "estrogen reply reached proton",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "In-Reply-To header on wire",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "quote renders as text at proton",
+    "ok": false,
+    "detail": ""
+  }
+]
