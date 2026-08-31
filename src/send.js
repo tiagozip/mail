@@ -159,14 +159,19 @@ export async function sendMessage(env, user, payload) {
   let sigText = user.signature || "";
   {
     const owned = await env.DB.prepare(
-      "SELECT address, display_name, signature FROM addresses WHERE address = ? AND user_id = ?",
+      "SELECT address, kind, label, display_name, signature FROM addresses WHERE address = ? AND user_id = ?",
     )
       .bind(normalizeAddr(payload.from || user.address), user.id)
       .first();
     if (owned) {
       fromAddr = owned.address;
-      if (owned.display_name) fromName = owned.display_name;
-      if (owned.signature !== null && owned.signature !== undefined) sigText = owned.signature;
+      if (owned.kind === "hidden") {
+        fromName = owned.display_name || owned.label || fromAddr.split("@")[0];
+        sigText = owned.signature != null ? owned.signature : "";
+      } else {
+        if (owned.display_name) fromName = owned.display_name;
+        if (owned.signature !== null && owned.signature !== undefined) sigText = owned.signature;
+      }
     }
   }
 

@@ -506,6 +506,23 @@ export function useMailStore(initialUser) {
     [removeFromList, openId, refreshCounts, loadList, view],
   );
 
+  const emptyTrash = useCallback(() => {
+    const ids = messages.map((m) => m.id);
+    cache.removeMessages(ids);
+    setMessages([]);
+    setSelectedIds(new Set());
+    setOpenId(null);
+    setThread(null);
+    threadCache.current.clear();
+    return api
+      .emptyTrash()
+      .then(() => refreshCounts())
+      .catch((e) => {
+        notifyError(e);
+        loadList(view);
+      });
+  }, [messages, refreshCounts, loadList, view]);
+
   const bulkAction = useCallback(
     (action, value) => {
       const ids = [...selectedIds];
@@ -597,6 +614,7 @@ export function useMailStore(initialUser) {
     moveToFolder,
     snooze,
     deleteForever,
+    emptyTrash,
     bulkAction,
     patchMessage,
     addOptimistic,

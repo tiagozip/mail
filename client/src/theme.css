@@ -598,6 +598,29 @@ html[data-theme="nord"] {
   padding-bottom: 96px;
 }
 
+.em-trash-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  padding: var(--em-2) var(--em-2) var(--em-2) var(--em-3);
+  margin-bottom: var(--em-2);
+  border: 1px solid var(--em-brand-soft-border);
+  border-radius: var(--em-radius);
+  background: var(--em-brand-soft);
+}
+
+.em-trash-banner-icon {
+  flex-shrink: 0;
+  color: var(--text-color-kumo-brand);
+}
+
+.em-trash-banner-text {
+  flex: 1;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--text-color-kumo-subtle);
+}
+
 .em-floatbar {
   position: absolute;
   bottom: 22px;

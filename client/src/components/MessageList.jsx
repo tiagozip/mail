@@ -179,6 +179,7 @@ export function MessageList({
     goView,
     labels,
     messages,
+    counts,
     listLoading,
     loadingMore,
     loadMore,
@@ -190,10 +191,27 @@ export function MessageList({
     openMessage,
     prefetchThread,
     toggleStar,
+    emptyTrash,
   } = store;
   const [query, setQuery] = useState("");
   const [decSnippets, setDecSnippets] = useState({});
+  const [emptying, setEmptying] = useState(false);
   const scrollRef = useRef(null);
+
+  const inTrash = view.kind === "folder" && view.folder === "trash";
+  const trashTotal = counts?.trash?.total ?? messages.length;
+
+  async function onEmptyTrash() {
+    if (emptying) return;
+    if (!window.confirm(`Permanently delete all ${trashTotal} messages in Trash? This can't be undone.`))
+      return;
+    setEmptying(true);
+    try {
+      await emptyTrash();
+    } finally {
+      setEmptying(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -318,6 +336,23 @@ export function MessageList({
 
       {selecting && <BulkBar store={store} />}
 
+      {inTrash && trashTotal > 0 && (
+        <div className="em-trash-banner">
+          <Trash className="em-trash-banner-icon" size={16} weight="bold" />
+          <span className="em-trash-banner-text">
+            Messages in Trash are automatically deleted after 30 days.
+          </span>
+          <Button
+            size="sm"
+            variant="secondary-destructive"
+            loading={emptying}
+            onClick={onEmptyTrash}
+          >
+            Delete all
+          </Button>
+        </div>
+      )}
+
       <div className="em-list-scroll" ref={scrollRef} onScroll={onScroll}>
         {listLoading ? (
           <div className="em-skel">
@@ -343,7 +378,7 @@ export function MessageList({
               drafts: [NotePencil, "No drafts", "Start a message and your drafts save here."],
               archive: [Archive, "Archive is empty", "Archived messages live here."],
               spam: [spamton, "No spam", "Suspected spam and spoofed mail lands here."],
-              trash: [Trash, "Trash is empty", "Deleted messages stay here before removal."],
+              trash: [Trash, "Trash is empty", "Deleted messages stay here for 30 days, then vanish."],
             };
             const [Icon, title, sub] = states[view.kind === "folder" ? view.folder : view.kind] || [
               Tray,

@@ -4,7 +4,7 @@ import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { useMailStore } from "../store.js";
 import { notify, notifyError } from "../toast.js";
-import { groupThreads, recipientLine } from "../util.js";
+import { groupThreads, pickFromAddress, recipientLine, sendIdentities } from "../util.js";
 import { Compose } from "./Compose.jsx";
 import { E2EPrompt, shouldPromptE2E } from "./E2EPrompt.jsx";
 import { MailSidebar } from "./MailSidebar.jsx";
@@ -194,10 +194,18 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         ? [msg.from?.address, ...(msg.to || []).map((t) => t.address)]
         : [msg.from?.address];
     const ccList = kind === "replyAll" ? (msg.cc || []).map((c) => c.address) : [];
-    const dedup = [...new Set(toList.filter((a) => a && a !== user.address))];
+    const from = pickFromAddress(msg, user);
+    const selfSet = new Set(
+      sendIdentities(user)
+        .map((a) => a.address?.toLowerCase())
+        .filter(Boolean),
+    );
+    const notSelf = (a) => a && !selfSet.has(a.toLowerCase());
+    const dedup = [...new Set(toList.filter(notSelf))];
     openCompose({
+      from,
       to: dedup.join(", "),
-      cc: ccList.filter((a) => a !== user.address).join(", "),
+      cc: ccList.filter(notSelf).join(", "),
       subject: re,
       body: quoteBody(msg, await quotableText(msg)),
       quoted: true,

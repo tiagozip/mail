@@ -428,6 +428,23 @@ async function listAddresses(env, userId) {
   }));
 }
 
+async function listSendableHidden(env, userId) {
+  const res = await env.DB.prepare(
+    "SELECT address, label, display_name, signature, avatar_url FROM addresses WHERE user_id = ? AND kind = 'hidden' AND enabled = 1 ORDER BY created_at DESC",
+  )
+    .bind(userId)
+    .all();
+  return (res.results || []).map((r) => ({
+    address: r.address,
+    isPrimary: false,
+    hidden: true,
+    label: r.label || "",
+    displayName: r.display_name || "",
+    signature: r.signature || "",
+    avatar: r.avatar_url || null,
+  }));
+}
+
 function publicUser(u) {
   return {
     id: u.id,
@@ -935,6 +952,7 @@ async function routeApi(request, env, ctx, auth) {
     if (!auth) return json({ user: null });
     const me = publicUser(auth.user);
     me.addresses = await listAddresses(env, auth.user.id);
+    me.sendAliases = await listSendableHidden(env, auth.user.id);
     return json({ user: me, syncCursor: await currentCursor(env, auth.user.id) });
   }
   if (!auth) return error(401, "not authenticated");
@@ -1060,16 +1078,16 @@ async function routeApi(request, env, ctx, auth) {
         .first();
       if (!owned) return error(400, "unknown folder");
       await env.DB.prepare(
-        "UPDATE messages SET folder_id = ?, folder = 'inbox' WHERE id = ? AND user_id = ?",
+        "UPDATE messages SET folder_id = ?, folder = 'inbox', trashed_at = NULL WHERE id = ? AND user_id = ?",
       )
         .bind(b.folderId, m[1], user.id)
         .run();
     } else {
       if (!FOLDERS.includes(b.folder)) return error(400, "bad folder");
       await env.DB.prepare(
-        "UPDATE messages SET folder = ?, folder_id = NULL WHERE id = ? AND user_id = ?",
+        "UPDATE messages SET folder = ?, folder_id = NULL, trashed_at = ? WHERE id = ? AND user_id = ?",
       )
-        .bind(b.folder, m[1], user.id)
+        .bind(b.folder, b.folder === "trash" ? now() : null, m[1], user.id)
         .run();
     }
     await recordChange(env, user.id, m[1], "upsert");
@@ -1114,20 +1132,31 @@ async function routeApi(request, env, ctx, auth) {
         .first();
       if (!owned) return error(400, "unknown folder");
       await env.DB.prepare(
-        `UPDATE messages SET folder_id = ?, folder = 'inbox' WHERE user_id = ? AND id IN (${ph})`,
+        `UPDATE messages SET folder_id = ?, folder = 'inbox', trashed_at = NULL WHERE user_id = ? AND id IN (${ph})`,
       )
         .bind(b.value, user.id, ...ids)
         .run();
       await recordChanges(env, user.id, ids, "upsert");
     } else if (b.action === "move" && FOLDERS.includes(b.value)) {
       await env.DB.prepare(
-        `UPDATE messages SET folder = ?, folder_id = NULL WHERE user_id = ? AND id IN (${ph})`,
+        `UPDATE messages SET folder = ?, folder_id = NULL, trashed_at = ? WHERE user_id = ? AND id IN (${ph})`,
       )
-        .bind(b.value, user.id, ...ids)
+        .bind(b.value, b.value === "trash" ? now() : null, user.id, ...ids)
         .run();
       await recordChanges(env, user.id, ids, "upsert");
     } else if (b.action === "delete") for (const id of ids) await deleteMessageRow(env, user.id, id);
     else return error(400, "bad action");
+    return json({ ok: true, count: ids.length });
+  }
+
+  if (path === "/api/trash/empty" && method === "POST") {
+    const rows = await env.DB.prepare(
+      "SELECT id FROM messages WHERE user_id = ? AND folder = 'trash'",
+    )
+      .bind(user.id)
+      .all();
+    const ids = (rows.results || []).map((r) => r.id);
+    for (const id of ids) await deleteMessageRow(env, user.id, id);
     return json({ ok: true, count: ids.length });
   }
 

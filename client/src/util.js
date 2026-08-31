@@ -50,6 +50,34 @@ export function displayName(person) {
   return person.name || person.address || "";
 }
 
+export function sendIdentities(user) {
+  const base = user?.addresses?.length
+    ? user.addresses
+    : user?.address
+      ? [{ address: user.address, isPrimary: true }]
+      : [];
+  return [...base, ...(user?.sendAliases || [])];
+}
+
+export function pickFromAddress(message, user) {
+  const byLower = new Map(sendIdentities(user).map((a) => [a.address.toLowerCase(), a.address]));
+  const dt = message?.deliveredTo?.toLowerCase();
+  if (dt && byLower.has(dt)) return byLower.get(dt);
+  for (const p of [...(message?.to || []), ...(message?.cc || [])]) {
+    const c = p.address?.toLowerCase();
+    if (c && byLower.has(c)) return byLower.get(c);
+  }
+  return user?.address;
+}
+
+export function identityLabel(a) {
+  if (a.hidden) {
+    const name = a.displayName || a.label;
+    return `${name ? `${name} · ` : ""}${a.address} · hidden`;
+  }
+  return a.displayName ? `${a.displayName} · ${a.address}` : a.address;
+}
+
 export function initials(person) {
   const base = (person?.name || person?.address || "?").trim();
   const parts = base.split(/[\s@._-]+/).filter(Boolean);

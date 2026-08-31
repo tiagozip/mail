@@ -48,11 +48,14 @@ import {
   hasBodyContent,
   htmlHasBlockedImages,
   humanSize,
+  identityLabel,
   imagesDefaultOn,
   initials,
   linkifyParts,
   monoColor,
+  pickFromAddress,
   recipientLine,
+  sendIdentities,
   relativeTime,
   sendLaterPresets,
   snoozePresets,
@@ -592,20 +595,6 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
   );
 }
 
-function pickFromAddress(message, user) {
-  const byLower = new Map(
-    (user?.addresses?.map((a) => a.address) || []).map((a) => [a.toLowerCase(), a]),
-  );
-  const dt = message.deliveredTo?.toLowerCase();
-  if (dt && byLower.has(dt)) return byLower.get(dt);
-  const candidates = [...(message.to || []), ...(message.cc || [])];
-  for (const p of candidates) {
-    const c = p.address?.toLowerCase();
-    if (c && byLower.has(c)) return byLower.get(c);
-  }
-  return user?.address;
-}
-
 function QuickReply({ store, last, onReply, onForward, onSent }) {
   const { user, thread, reloadThread, openMessage } = store;
   const [text, setText] = useState("");
@@ -622,7 +611,8 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   const ownKeyRef = useRef(null);
 
   const selves = new Set(
-    (user?.addresses?.map((a) => a.address) || [user?.address])
+    sendIdentities(user)
+      .map((a) => a.address)
       .filter(Boolean)
       .map((a) => a.toLowerCase()),
   );
@@ -633,7 +623,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   const replyTo = lastExternalSender.from?.address;
   const replyName = lastExternalSender.from?.name || replyTo || "sender";
 
-  const addresses = user.addresses?.length ? user.addresses : [{ address: user.address }];
+  const addresses = sendIdentities(user);
   const [fromPick, setFromPick] = useState("");
   const fromAddr =
     fromPick && addresses.some((a) => a.address === fromPick)
@@ -836,7 +826,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         <Select aria-label="From address" size="sm" value={fromAddr} onValueChange={setFromPick}>
           {addresses.map((a) => (
             <Select.Option key={a.address} value={a.address}>
-              {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
+              {identityLabel(a)}
             </Select.Option>
           ))}
         </Select>
@@ -1176,13 +1166,51 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
     threadId: thread.threadId,
   };
 
-  function downloadEml(m) {
+  function triggerDownload(href, filename, revoke) {
     const a = document.createElement("a");
-    a.href = api.emlUrl(m.id);
-    a.download = "";
+    a.href = href;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
+    if (revoke) URL.revokeObjectURL(href);
+  }
+
+  async function downloadEml(m) {
+    const safe =
+      String(m.subject || "message")
+        .replace(/[^\w.\- ]+/g, "_")
+        .trim()
+        .slice(0, 80) || "message";
+    const filename = `${safe}.eml`;
+
+    if (m.pgp && pgp.getUnlocked()) {
+      const END = "-----END PGP MESSAGE-----";
+      try {
+        const res = await fetch(api.emlUrl(m.id), { credentials: "same-origin" });
+        if (!res.ok) throw new Error(`raw fetch ${res.status}`);
+        const armored = await res.text();
+        const start = armored.indexOf("-----BEGIN PGP MESSAGE-----");
+        const end = armored.indexOf(END);
+        if (start !== -1 && end !== -1) {
+          const block = armored.slice(start, end + END.length);
+          const decoded = await pgp.decryptBytes(block);
+          const prefix = armored.slice(0, start).trim();
+          const blob = prefix
+            ? new Blob(
+                [armored.slice(0, start), new TextDecoder().decode(decoded), armored.slice(end + END.length)],
+                { type: "message/rfc822" },
+              )
+            : new Blob([decoded], { type: "message/rfc822" });
+          triggerDownload(URL.createObjectURL(blob), filename, true);
+          return;
+        }
+      } catch (err) {
+        notify("Download", "Could not decrypt; downloading encrypted copy", "error");
+      }
+    }
+
+    triggerDownload(api.emlUrl(m.id), filename, false);
   }
 
   async function printMessage(m) {

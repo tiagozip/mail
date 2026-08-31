@@ -2,7 +2,7 @@ import { handleApi } from "./api.js";
 import { reverifyAllDomains } from "./domains.js";
 import { handleEmail } from "./mail.js";
 import { purgeRateLimits } from "./ratelimit.js";
-import { processScheduledSends, wakeSnoozed } from "./scheduler.js";
+import { processScheduledSends, purgeOldTrash, wakeSnoozed } from "./scheduler.js";
 import { error } from "./util.js";
 
 const CSP = [
@@ -98,6 +98,7 @@ export default {
         Promise.all([
           reverifyAllDomains(env).catch((e) => console.error("reverify error", e?.stack || e)),
           purgeRateLimits(env).catch((e) => console.error("rate purge error", e?.stack || e)),
+          purgeOldTrash(env).catch((e) => console.error("trash purge error", e?.stack || e)),
         ]),
       );
       return;

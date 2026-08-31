@@ -63,6 +63,7 @@ export const api = {
   setLabels: (id, add, remove) => req("POST", `/api/messages/${id}/labels`, { add, remove }),
   deleteMessage: (id) => req("DELETE", `/api/messages/${id}`),
   bulk: (ids, action, value) => req("POST", "/api/messages/bulk", { ids, action, value }),
+  emptyTrash: () => req("POST", "/api/trash/empty"),
 
   uploadAttachment: (file) => {
     const form = new FormData();

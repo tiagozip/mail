@@ -24,10 +24,12 @@ import {
   fullDate,
   hasBodyContent,
   humanSize,
+  identityLabel,
   initials,
   monoColor,
   parseRecipients,
   plainBodyToHtml,
+  sendIdentities,
   sendLaterPresets,
 } from "../util.js";
 const RichEditor = lazy(() =>
@@ -219,9 +221,7 @@ function RecipientField({ label, value, onChange, autoFocus }) {
 }
 
 export function Compose({ open, initial, user, onClose, onSent }) {
-  const addresses = user.addresses?.length
-    ? user.addresses
-    : [{ address: user.address, isPrimary: true }];
+  const addresses = sendIdentities(user);
   const primary = addresses.find((a) => a.isPrimary)?.address || addresses[0].address;
 
   const [from, setFrom] = useState(primary);
@@ -661,7 +661,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             >
               {addresses.map((a) => (
                 <Select.Option key={a.address} value={a.address}>
-                  {a.displayName ? `${a.displayName} · ${a.address}` : a.address}
+                  {identityLabel(a)}
                 </Select.Option>
               ))}
             </Select>

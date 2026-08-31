@@ -2,6 +2,29 @@ import { sendMessage } from "./send.js";
 import { deleteMessageRow, recordChanges } from "./store.js";
 import { now } from "./util.js";
 
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export async function purgeOldTrash(env) {
+  const t = now();
+  await env.DB.prepare(
+    "UPDATE messages SET trashed_at = ? WHERE folder = 'trash' AND trashed_at IS NULL",
+  )
+    .bind(t)
+    .run();
+  const due = await env.DB.prepare(
+    "SELECT id, user_id FROM messages WHERE folder = 'trash' AND trashed_at IS NOT NULL AND trashed_at <= ? LIMIT 500",
+  )
+    .bind(t - TRASH_RETENTION_MS)
+    .all();
+  for (const row of due.results || []) {
+    try {
+      await deleteMessageRow(env, row.user_id, row.id);
+    } catch (e) {
+      console.error("purge trash failed", row.id, e?.stack || e);
+    }
+  }
+}
+
 export async function processScheduledSends(env) {
   const due = await env.DB.prepare(
     "SELECT * FROM scheduled_sends WHERE send_at <= ? ORDER BY send_at LIMIT 50",

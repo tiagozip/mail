@@ -69,10 +69,12 @@ CREATE TABLE IF NOT EXISTS messages (
   auth_status TEXT NOT NULL DEFAULT 'none',
   auth_detail TEXT,
   snooze_until INTEGER,
+  trashed_at INTEGER,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(user_id, folder, date DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_snooze ON messages(user_id, snooze_until);
+CREATE INDEX IF NOT EXISTS idx_messages_trashed ON messages(trashed_at) WHERE folder = 'trash';
 CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(user_id, thread_id, date);
 CREATE INDEX IF NOT EXISTS idx_messages_rfc ON messages(user_id, rfc_message_id);
 CREATE INDEX IF NOT EXISTS idx_messages_starred ON messages(user_id, is_starred, date DESC);
