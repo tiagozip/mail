@@ -2328,5 +2328,40 @@ async function routeApi(request, env, ctx, auth) {
     return json({ users: res.results || [] });
   }
 
+  if (path === "/api/admin/stats" && method === "GET") {
+    if (!user.is_admin) return error(403, "admin only");
+    const t = now();
+    const day = 86400000;
+    const since = t - 30 * day;
+    const [totals, volume] = await env.DB.batch([
+      env.DB.prepare(
+        `SELECT
+          (SELECT COUNT(*) FROM users) AS users,
+          (SELECT COUNT(*) FROM users WHERE last_login >= ?1) AS active_week,
+          (SELECT COUNT(*) FROM users WHERE created_at >= ?2) AS new_month,
+          (SELECT COUNT(*) FROM messages) AS messages,
+          (SELECT COALESCE(SUM(storage_used), 0) FROM users) AS storage,
+          (SELECT COUNT(*) FROM addresses) AS addresses,
+          (SELECT COUNT(*) FROM domains) AS domains,
+          (SELECT COUNT(*) FROM scheduled_sends) AS scheduled,
+          (SELECT COUNT(*) FROM messages WHERE folder = 'spam' AND received_at >= ?2) AS spam_month`,
+      ).bind(t - 7 * day, since),
+      env.DB.prepare(
+        `SELECT date(received_at / 1000, 'unixepoch') AS d,
+          SUM(CASE WHEN folder = 'sent' THEN 1 ELSE 0 END) AS sent,
+          SUM(CASE WHEN folder != 'sent' AND is_draft = 0 THEN 1 ELSE 0 END) AS received
+        FROM messages WHERE received_at >= ? GROUP BY d ORDER BY d`,
+      ).bind(since),
+    ]);
+    const byDay = new Map((volume.results || []).map((r) => [r.d, r]));
+    const days = [];
+    for (let i = 30; i >= 0; i--) {
+      const d = new Date(t - i * day).toISOString().slice(0, 10);
+      const row = byDay.get(d);
+      days.push({ day: d, received: row?.received || 0, sent: row?.sent || 0 });
+    }
+    return json({ totals: totals.results?.[0] || {}, days });
+  }
+
   return error(404, "not found");
 }

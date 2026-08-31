@@ -79,6 +79,8 @@ body {
   --em-brand-soft: rgba(191, 50, 100, 0.14);
   --em-brand-soft-border: rgba(224, 120, 159, 0.28);
   --em-star: #f0c259;
+  --em-chart-1: #d94b79;
+  --em-chart-2: #5888c7;
   --em-shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(250, 236, 242, 0.04) inset;
 }
 
@@ -115,6 +117,8 @@ html[data-theme="gold"] {
   --em-brand-soft: rgba(196, 160, 48, 0.14);
   --em-brand-soft-border: rgba(212, 170, 52, 0.28);
   --em-star: #d4aa34;
+  --em-chart-1: #a58100;
+  --em-chart-2: #5389c7;
   --em-shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
@@ -151,6 +155,8 @@ html[data-theme="midnight"] {
   --em-brand-soft: rgba(107, 140, 255, 0.15);
   --em-brand-soft-border: rgba(147, 168, 255, 0.3);
   --em-star: #f0c259;
+  --em-chart-1: #5d7ced;
+  --em-chart-2: #c56087;
   --em-shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
 
@@ -187,6 +193,8 @@ html[data-theme="sakura"] {
   --em-brand-soft: rgba(208, 90, 134, 0.1);
   --em-brand-soft-border: rgba(208, 90, 134, 0.28);
   --em-star: #e0a020;
+  --em-chart-1: #b5426f;
+  --em-chart-2: #426cca;
   --em-shadow-pop: 0 14px 44px rgba(58, 22, 38, 0.16);
 }
 
@@ -223,6 +231,8 @@ html[data-theme="mocha"] {
   --em-brand-soft: rgba(203, 166, 247, 0.14);
   --em-brand-soft-border: rgba(203, 166, 247, 0.28);
   --em-star: #f9e2af;
+  --em-chart-1: #a374db;
+  --em-chart-2: #c07f3a;
   --em-shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
@@ -259,6 +269,8 @@ html[data-theme="latte"] {
   --em-brand-soft: rgba(136, 57, 239, 0.08);
   --em-brand-soft-border: rgba(136, 57, 239, 0.28);
   --em-star: #df8e1d;
+  --em-chart-1: #8345df;
+  --em-chart-2: #00939b;
   --em-shadow-pop: 0 14px 44px rgba(76, 79, 105, 0.16);
 }
 
@@ -295,6 +307,8 @@ html[data-theme="forest"] {
   --em-brand-soft: rgba(167, 192, 128, 0.14);
   --em-brand-soft-border: rgba(167, 192, 128, 0.28);
   --em-star: #dbbc7f;
+  --em-chart-1: #769244;
+  --em-chart-2: #b76990;
   --em-shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
@@ -331,6 +345,8 @@ html[data-theme="nord"] {
   --em-brand-soft: rgba(136, 192, 208, 0.14);
   --em-brand-soft-border: rgba(136, 192, 208, 0.28);
   --em-star: #ebcb8b;
+  --em-chart-1: #199cb8;
+  --em-chart-2: #a06096;
   --em-shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
@@ -3103,6 +3119,134 @@ html[data-theme="nord"] {
 
 .em-code-cell {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.em-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--em-3);
+  margin-bottom: var(--em-4);
+}
+
+.em-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--em-3) var(--em-4);
+  border: 1px solid var(--color-kumo-line);
+  border-radius: var(--em-radius);
+  background: var(--color-kumo-base);
+}
+
+.em-stat-label {
+  font-size: 0.74rem;
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-color-kumo-strong);
+}
+
+.em-stat-sub {
+  font-size: 0.72rem;
+  color: var(--text-color-kumo-brand);
+}
+
+.em-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--em-3);
+}
+
+.em-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--em-4);
+  margin-bottom: var(--em-2);
+  font-size: 0.78rem;
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.em-chart-legend-n {
+  color: var(--text-color-kumo-default);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.em-chart-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.em-chart-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.em-chart-grid {
+  stroke: var(--color-kumo-hairline);
+}
+
+.em-chart-cursor {
+  stroke: var(--color-kumo-line);
+}
+
+.em-chart-dot {
+  stroke: var(--color-kumo-base);
+  stroke-width: 2;
+}
+
+.em-chart-tick {
+  fill: var(--text-color-kumo-inactive);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.em-chart-tip {
+  position: absolute;
+  min-width: 108px;
+  padding: var(--em-2) var(--em-3);
+  border: 1px solid var(--color-kumo-line);
+  border-radius: var(--em-radius-sm);
+  background: var(--color-kumo-overlay);
+  font-size: 0.76rem;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.em-chart-tip-day {
+  color: var(--text-color-kumo-subtle);
+  margin-bottom: 4px;
+}
+
+.em-chart-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-color-kumo-default);
+}
+
+.em-chart-tip-n {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.em-chart-tablewrap {
+  max-height: 260px;
+  overflow-y: auto;
 }
 
 .em-theme-grid {

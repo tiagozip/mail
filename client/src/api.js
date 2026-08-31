@@ -137,6 +137,7 @@ export const api = {
   deleteApiKey: (id) => req("DELETE", `/api/keys/${id}`),
 
   adminUsers: () => req("GET", "/api/admin/users"),
+  adminStats: () => req("GET", "/api/admin/stats"),
 
   domains: () => req("GET", "/api/domains"),
   publicDomains: () => req("GET", "/api/domains/public"),
