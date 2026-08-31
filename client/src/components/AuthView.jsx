@@ -1,5 +1,6 @@
-import { Button } from "@cloudflare/kumo";
+import { Button, Loader } from "@cloudflare/kumo";
 import { SignIn } from "@phosphor-icons/react";
+import { useEffect } from "react";
 import { api } from "../api.js";
 
 const ERRORS = {
@@ -15,6 +16,18 @@ export function AuthView() {
   const errDetail = qs.get("detail");
   const errMsg = errCode ? ERRORS[errCode] || "Could not sign you in. Please try again." : "";
 
+  useEffect(() => {
+    if (!errCode) window.location.href = api.loginUrl;
+  }, [errCode]);
+
+  if (!errCode) {
+    return (
+      <div className="em-center">
+        <Loader />
+      </div>
+    );
+  }
+
   return (
     <div className="em-auth">
       <div className="em-auth-split">
@@ -24,12 +37,10 @@ export function AuthView() {
           <p className="em-auth-copy">
             Sign in with your hrtID account to reach your @estrogen.delivery inbox.
           </p>
-          {errMsg && (
-            <div className="em-form-error">
-              {errMsg}
-              {errDetail && <span className="em-form-error-detail">{errDetail}</span>}
-            </div>
-          )}
+          <div className="em-form-error">
+            {errMsg}
+            {errDetail && <span className="em-form-error-detail">{errDetail}</span>}
+          </div>
           <Button
             variant="primary"
             size="lg"
