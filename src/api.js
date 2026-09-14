@@ -401,7 +401,9 @@ const DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z
 
 async function verifiedDomainSet(env, userId) {
   const set = new Set([String(env.MAIL_DOMAIN || "").toLowerCase()]);
-  const res = await env.DB.prepare("SELECT domain FROM domains WHERE verified = 1 AND owner_id = ?")
+  const res = await env.DB.prepare(
+    "SELECT domain FROM domains WHERE verified = 1 AND (owner_id = ? OR public = 1)",
+  )
     .bind(userId || "")
     .all();
   for (const r of res.results || []) set.add(String(r.domain).toLowerCase());

@@ -57,9 +57,9 @@ export async function forwardInbound(env, { userId, fromAddr, fromName, to, pars
   let relayDomain = null;
   if (domain && domain !== String(env.MAIL_DOMAIN || "").toLowerCase()) {
     relayDomain = await env.DB.prepare(
-      "SELECT domain, relay_url, relay_secret_enc FROM domains WHERE domain = ? AND owner_id = ? AND send_verified = 1",
+      "SELECT domain, relay_url, relay_secret_enc FROM domains WHERE domain = ? AND (owner_id = ? OR public = 1) AND send_verified = 1 ORDER BY owner_id = ? DESC LIMIT 1",
     )
-      .bind(domain, userId)
+      .bind(domain, userId, userId)
       .first();
     if (!relayDomain?.relay_url) {
       console.log("forward skipped: from-domain not sendable", fromAddr);
@@ -181,9 +181,9 @@ export async function sendMessage(env, user, payload) {
   let relayDomain = null;
   if (fromDomain && fromDomain !== String(env.MAIL_DOMAIN || "").toLowerCase()) {
     const ownDom = await env.DB.prepare(
-      "SELECT domain, send_verified, relay_url, relay_secret_enc FROM domains WHERE domain = ? AND owner_id = ?",
+      "SELECT domain, send_verified, relay_url, relay_secret_enc FROM domains WHERE domain = ? AND (owner_id = ? OR public = 1) ORDER BY owner_id = ? DESC, send_verified DESC LIMIT 1",
     )
-      .bind(fromDomain, user.id)
+      .bind(fromDomain, user.id, user.id)
       .first();
     if (!ownDom?.send_verified) {
       const err = new Error(
