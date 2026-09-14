@@ -1,5 +1,5 @@
 import { sendMessage } from "./send.js";
-import { deleteMessageRow, recordChanges } from "./store.js";
+import { deleteMessageRow, recordChanges, updateStorage } from "./store.js";
 import { now } from "./util.js";
 
 export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -21,6 +21,25 @@ export async function purgeOldTrash(env) {
       await deleteMessageRow(env, row.user_id, row.id);
     } catch (e) {
       console.error("purge trash failed", row.id, e?.stack || e);
+    }
+  }
+}
+
+export async function purgeStaleUploads(env) {
+  const due = await env.DB.prepare(
+    "SELECT id, user_id, r2_key, size FROM attachments WHERE message_id IS NULL AND created_at < ? LIMIT 200",
+  )
+    .bind(now() - 24 * 60 * 60 * 1000)
+    .all();
+  for (const row of due.results || []) {
+    try {
+      await env.R2.delete(row.r2_key);
+      await env.DB.prepare("DELETE FROM attachments WHERE id = ? AND message_id IS NULL")
+        .bind(row.id)
+        .run();
+      await updateStorage(env, row.user_id, -(row.size || 0));
+    } catch (e) {
+      console.error("purge upload failed", row.id, e?.stack || e);
     }
   }
 }

@@ -6,6 +6,8 @@ import { expandHtmlBlocks, sanitizeEmailHtml, textToHtml } from "./sanitize.js";
 import { bumpContact, htmlKey, insertMessage, resolveThread, updateStorage } from "./store.js";
 import { escapeHtml, isValidEmail, normalizeAddr, now, snippetFrom, uuid } from "./util.js";
 
+const noCrlf = (s) => String(s ?? "").replace(/[\r\n]+/g, " ");
+
 async function pgpEncryptToSelf(env, userId, content) {
   const row = await env.DB.prepare(
     "SELECT pgp_public_key FROM users WHERE id = ? AND pgp_enabled = 1",
@@ -67,8 +69,8 @@ export async function forwardInbound(env, { userId, fromAddr, fromName, to, pars
 
   const origFrom = parsed.from || {};
   const origAddr = normalizeAddr(origFrom.address || "");
-  const origName = origFrom.name || origAddr;
-  const origSubject = parsed.subject || "(no subject)";
+  const origName = noCrlf(origFrom.name || origAddr);
+  const origSubject = noCrlf(parsed.subject || "(no subject)");
   const subject = /^fwd:/i.test(origSubject) ? origSubject : `Fwd: ${origSubject}`;
   const origDate = parsed.date ? new Date(parsed.date).toUTCString() : "";
   const origTo = (parsed.to || [])
@@ -104,11 +106,11 @@ export async function forwardInbound(env, { userId, fromAddr, fromName, to, pars
   }
 
   const headers = { "X-Estrogen-Forward-Hops": String(hops) };
-  if (origAddr) headers["Reply-To"] = `${origName} <${origAddr}>`;
+  if (origAddr) headers["Reply-To"] = `${origName} <${noCrlf(origAddr)}>`;
 
   const sendPayload = {
     to: [dest],
-    from: { email: fromAddr, name: fromName || fromAddr.split("@")[0] },
+    from: { email: fromAddr, name: noCrlf(fromName || fromAddr.split("@")[0]) },
     subject,
     text,
     headers,
@@ -155,7 +157,7 @@ export async function sendMessage(env, user, payload) {
   }
 
   let fromAddr = user.address;
-  let fromName = user.display_name || user.username;
+  let fromName = noCrlf(user.display_name || user.username);
   let sigText = user.signature || "";
   {
     const owned = await env.DB.prepare(
@@ -166,10 +168,10 @@ export async function sendMessage(env, user, payload) {
     if (owned) {
       fromAddr = owned.address;
       if (owned.kind === "hidden") {
-        fromName = owned.display_name || owned.label || fromAddr.split("@")[0];
+        fromName = noCrlf(owned.display_name || owned.label || fromAddr.split("@")[0]);
         sigText = owned.signature != null ? owned.signature : "";
       } else {
-        if (owned.display_name) fromName = owned.display_name;
+        if (owned.display_name) fromName = noCrlf(owned.display_name);
         if (owned.signature !== null && owned.signature !== undefined) sigText = owned.signature;
       }
     }
@@ -193,7 +195,7 @@ export async function sendMessage(env, user, payload) {
     if (ownDom.relay_url) relayDomain = ownDom;
   }
 
-  const subject = (payload.subject || "(no subject)").slice(0, 988);
+  const subject = noCrlf(payload.subject || "(no subject)").slice(0, 988);
   const text = payload.text || "";
   const expandedHtml = expandHtmlBlocks(payload.html || "");
   const html = expandedHtml
@@ -233,9 +235,9 @@ export async function sendMessage(env, user, payload) {
   const headers = {};
   const refs = [];
   if (inReplyTo) {
-    headers["In-Reply-To"] = inReplyTo;
+    headers["In-Reply-To"] = noCrlf(inReplyTo);
     refs.push(...(payload.references || []).filter(validMsgId).map((r) => r.trim()), inReplyTo);
-    if (refs.length) headers.References = refs.slice(-20).join(" ");
+    if (refs.length) headers.References = noCrlf(refs.slice(-20).join(" "));
   }
 
   const isE2E = payload.pgp === true && text.includes("-----BEGIN PGP MESSAGE-----");
@@ -261,7 +263,9 @@ export async function sendMessage(env, user, payload) {
 
   const messageId = uuid();
   const wireId =
-    typeof result?.messageId === "string" && validMsgId(result.messageId) ? result.messageId.trim() : null;
+    typeof result?.messageId === "string" && validMsgId(result.messageId)
+      ? result.messageId.trim()
+      : null;
   const rfcId = wireId || `<${messageId}@${env.MAIL_DOMAIN}>`;
   const threadId = (await resolveThread(env, user.id, inReplyTo, refs)) || messageId;
 
