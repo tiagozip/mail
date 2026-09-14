@@ -21,6 +21,7 @@ import {
 } from "./byod.js";
 import { encryptBytes, encryptText, tryDecryptBytes, tryDecryptText } from "./crypto.js";
 import { checkOwnership, checkSendingDns, lookupMx } from "./domains.js";
+import { proxyImage, proxyUrl } from "./img.js";
 import {
   authorizeUrl,
   challengeFor,
@@ -31,7 +32,6 @@ import {
   verifyIdToken,
 } from "./oidc.js";
 import { isAllowedPushEndpoint } from "./push.js";
-import { proxyImage, proxyUrl } from "./img.js";
 import { clientIp, consume, enforce, tooMany, withRateLimitHeaders } from "./ratelimit.js";
 import { sanitizeEmailHtml, stripTrackers } from "./sanitize.js";
 import { sendMessage } from "./send.js";
@@ -46,9 +46,11 @@ import {
   recordChange,
   recordChanges,
   updateStorage,
+  userStorageQuota,
   validateLabelRule,
 } from "./store.js";
 import {
+  chunk,
   clampInt,
   error,
   isValidEmail,
@@ -72,6 +74,8 @@ async function readJson(request) {
 function isSecure(request) {
   return new URL(request.url).protocol === "https:";
 }
+
+const SQL_VARS = 90;
 
 const AVATAR_TYPES = new Set([
   "image/png",
@@ -115,16 +119,20 @@ function listItem(row) {
 
 async function withLabels(env, userId, items) {
   if (!items.length) return items;
-  const ids = items.map((i) => i.id);
-  const ph = ids.map(() => "?").join(",");
-  const res = await env.DB.prepare(
-    `SELECT ml.message_id, l.id, l.name, l.color FROM message_labels ml JOIN labels l ON l.id = ml.label_id WHERE l.user_id = ? AND ml.message_id IN (${ph})`,
-  )
-    .bind(userId, ...ids)
-    .all();
   const byMsg = {};
-  for (const r of res.results || []) {
-    (byMsg[r.message_id] ||= []).push({ id: r.id, name: r.name, color: r.color });
+  for (const ids of chunk(
+    items.map((i) => i.id),
+    SQL_VARS,
+  )) {
+    const ph = ids.map(() => "?").join(",");
+    const res = await env.DB.prepare(
+      `SELECT ml.message_id, l.id, l.name, l.color FROM message_labels ml JOIN labels l ON l.id = ml.label_id WHERE l.user_id = ? AND ml.message_id IN (${ph})`,
+    )
+      .bind(userId, ...ids)
+      .all();
+    for (const r of res.results || []) {
+      (byMsg[r.message_id] ||= []).push({ id: r.id, name: r.name, color: r.color });
+    }
   }
   for (const i of items) i.labels = byMsg[i.id] || [];
   return items;
@@ -134,14 +142,16 @@ async function attachSenderAvatars(env, items) {
   const list = (items || []).filter(Boolean);
   const addrs = [...new Set(list.map((i) => i.from?.address).filter(Boolean))];
   if (!addrs.length) return items;
-  const ph = addrs.map(() => "?").join(",");
-  const res = await env.DB.prepare(
-    `SELECT a.address, COALESCE(a.avatar_url, u.avatar_url) AS avatar_url FROM addresses a JOIN users u ON u.id = a.user_id WHERE a.address IN (${ph}) AND COALESCE(a.avatar_url, u.avatar_url) IS NOT NULL`,
-  )
-    .bind(...addrs)
-    .all();
   const map = {};
-  for (const r of res.results || []) map[r.address] = r.avatar_url;
+  for (const batch of chunk(addrs, SQL_VARS)) {
+    const ph = batch.map(() => "?").join(",");
+    const res = await env.DB.prepare(
+      `SELECT a.address, COALESCE(a.avatar_url, u.avatar_url) AS avatar_url FROM addresses a JOIN users u ON u.id = a.user_id WHERE a.address IN (${ph}) AND COALESCE(a.avatar_url, u.avatar_url) IS NOT NULL`,
+    )
+      .bind(...batch)
+      .all();
+    for (const r of res.results || []) map[r.address] = r.avatar_url;
+  }
   for (const i of list) {
     if (i.from?.address && map[i.from.address]) i.from.avatar = map[i.from.address];
   }
@@ -194,8 +204,7 @@ async function oidcCallback(request, env) {
   const params = url.searchParams;
   const secure = isSecure(request);
   const clearFlow = clearOidcFlowCookie(secure);
-  const fail = (reason) =>
-    redirectTo(`${home}?auth_error=${reason}`, { "set-cookie": clearFlow });
+  const fail = (reason) => redirectTo(`${home}?auth_error=${reason}`, { "set-cookie": clearFlow });
   const errParam = params.get("error");
   if (errParam)
     return redirectTo(`${home}?auth_error=${encodeURIComponent(errParam)}`, {
@@ -256,7 +265,9 @@ async function nativeExchange(request, env) {
   if (!raw) return error(400, "invalid or expired code");
   await env.KV.delete(`nativeauth:${code}`);
   const { userId } = JSON.parse(raw);
-  const user = await env.DB.prepare("SELECT id, address FROM users WHERE id = ?").bind(userId).first();
+  const user = await env.DB.prepare("SELECT id, address FROM users WHERE id = ?")
+    .bind(userId)
+    .first();
   if (!user) return error(400, "user not found");
   const key = `emk_${randomToken(20)}`;
   const prefix = key.slice(0, 12);
@@ -281,7 +292,7 @@ async function upsertOidcUser(env, claims) {
 
   const existing = await env.DB.prepare("SELECT * FROM users WHERE oidc_sub = ?").bind(sub).first();
   if (existing) {
-    const isAdmin = adminFromGroup || existing.is_admin ? 1 : 0;
+    const isAdmin = adminFromGroup ? 1 : 0;
     const avatar = existing.avatar_url || picture || null;
     await env.DB.prepare(
       "UPDATE users SET display_name = ?, email = ?, is_admin = ?, avatar_url = ?, last_login = ? WHERE id = ?",
@@ -560,20 +571,8 @@ async function listMessages(request, env, user) {
     if (text) {
       const term = text.replace(/[^\w\s@.-]/g, " ").trim();
       if (!term) return json({ messages: [], nextCursor: null });
-      let ftsIds;
-      try {
-        ftsIds = await env.DB.prepare(
-          "SELECT mid FROM messages_fts WHERE uid = ? AND messages_fts MATCH ? LIMIT 300",
-        )
-          .bind(user.id, `"${term}"*`)
-          .all();
-      } catch {
-        return json({ messages: [], nextCursor: null });
-      }
-      const ids = (ftsIds.results || []).map((r) => r.mid);
-      if (!ids.length) return json({ messages: [], nextCursor: null });
-      where.push(`m.id IN (${ids.map(() => "?").join(",")})`);
-      binds.push(...ids);
+      where.push("m.id IN (SELECT mid FROM messages_fts WHERE uid = ? AND messages_fts MATCH ?)");
+      binds.push(user.id, `"${term}"*`);
     } else if (where.length === 1) {
       return json({ messages: [], nextCursor: null });
     }
@@ -695,9 +694,7 @@ async function getMessage(env, user, id, allowRemote) {
 }
 
 async function currentCursor(env, userId) {
-  const row = await env.DB.prepare(
-    "SELECT MAX(seq) AS seq FROM mailbox_changes WHERE user_id = ?",
-  )
+  const row = await env.DB.prepare("SELECT MAX(seq) AS seq FROM mailbox_changes WHERE user_id = ?")
     .bind(userId)
     .first();
   return row?.seq || 0;
@@ -727,11 +724,14 @@ async function syncChanges(env, user, since, limit) {
 
   let upserts = [];
   if (upsertIds.length) {
-    const ph = upsertIds.map(() => "?").join(",");
-    const r = await env.DB.prepare(`SELECT * FROM messages WHERE user_id = ? AND id IN (${ph})`)
-      .bind(user.id, ...upsertIds)
-      .all();
-    const found = r.results || [];
+    const found = [];
+    for (const ids of chunk(upsertIds, SQL_VARS)) {
+      const ph = ids.map(() => "?").join(",");
+      const r = await env.DB.prepare(`SELECT * FROM messages WHERE user_id = ? AND id IN (${ph})`)
+        .bind(user.id, ...ids)
+        .all();
+      found.push(...(r.results || []));
+    }
     upserts = found.map(listItem);
     await withLabels(env, user.id, upserts);
     await attachSenderAvatars(env, upserts);
@@ -742,10 +742,12 @@ async function syncChanges(env, user, since, limit) {
 }
 
 async function markRead(env, user, ids, read) {
-  const ph = ids.map(() => "?").join(",");
-  await env.DB.prepare(`UPDATE messages SET is_read = ? WHERE user_id = ? AND id IN (${ph})`)
-    .bind(read ? 1 : 0, user.id, ...ids)
-    .run();
+  for (const batch of chunk(ids, SQL_VARS)) {
+    const ph = batch.map(() => "?").join(",");
+    await env.DB.prepare(`UPDATE messages SET is_read = ? WHERE user_id = ? AND id IN (${ph})`)
+      .bind(read ? 1 : 0, user.id, ...batch)
+      .run();
+  }
   await recordChanges(env, user.id, ids, "upsert");
 }
 
@@ -773,6 +775,9 @@ async function uploadAttachment(request, env, user) {
   if (!file || typeof file === "string") return error(400, "no file");
   const size = file.size;
   if (size > max) return error(413, `file too large (max ${Math.floor(max / 1048576)} MiB)`);
+  if ((user.storage_used || 0) + size > (await userStorageQuota(env))) {
+    return error(413, "mailbox is full");
+  }
 
   const id = uuid();
   const key = attKey(user.id, id, file.name || "file");
@@ -832,6 +837,9 @@ async function saveDraft(request, env, user, draftId) {
   const html = String(body.html || "").slice(0, 1_000_000);
   const snippet = snippetFrom(text || html.replace(/<[^>]+>/g, " "));
   const ts = now();
+  if ((user.storage_used || 0) + text.length + html.length > (await userStorageQuota(env))) {
+    return error(413, "mailbox is full");
+  }
 
   if (draftId) {
     const existing = await env.DB.prepare(
@@ -1119,32 +1127,44 @@ async function routeApi(request, env, ctx, auth) {
     const b = await readJson(request);
     const ids = (b.ids || []).filter(Boolean).slice(0, 200);
     if (!ids.length) return error(400, "no ids");
-    const ph = ids.map(() => "?").join(",");
+    const batches = chunk(ids, SQL_VARS);
     if (b.action === "read") await markRead(env, user, ids, b.value !== false);
     else if (b.action === "star") {
-      await env.DB.prepare(`UPDATE messages SET is_starred = ? WHERE user_id = ? AND id IN (${ph})`)
-        .bind(b.value !== false ? 1 : 0, user.id, ...ids)
-        .run();
+      for (const batch of batches) {
+        const ph = batch.map(() => "?").join(",");
+        await env.DB.prepare(
+          `UPDATE messages SET is_starred = ? WHERE user_id = ? AND id IN (${ph})`,
+        )
+          .bind(b.value !== false ? 1 : 0, user.id, ...batch)
+          .run();
+      }
       await recordChanges(env, user.id, ids, "upsert");
     } else if (b.action === "movefolder" && b.value) {
       const owned = await env.DB.prepare("SELECT 1 FROM folders WHERE id = ? AND user_id = ?")
         .bind(b.value, user.id)
         .first();
       if (!owned) return error(400, "unknown folder");
-      await env.DB.prepare(
-        `UPDATE messages SET folder_id = ?, folder = 'inbox', trashed_at = NULL WHERE user_id = ? AND id IN (${ph})`,
-      )
-        .bind(b.value, user.id, ...ids)
-        .run();
+      for (const batch of batches) {
+        const ph = batch.map(() => "?").join(",");
+        await env.DB.prepare(
+          `UPDATE messages SET folder_id = ?, folder = 'inbox', trashed_at = NULL WHERE user_id = ? AND id IN (${ph})`,
+        )
+          .bind(b.value, user.id, ...batch)
+          .run();
+      }
       await recordChanges(env, user.id, ids, "upsert");
     } else if (b.action === "move" && FOLDERS.includes(b.value)) {
-      await env.DB.prepare(
-        `UPDATE messages SET folder = ?, folder_id = NULL, trashed_at = ? WHERE user_id = ? AND id IN (${ph})`,
-      )
-        .bind(b.value, b.value === "trash" ? now() : null, user.id, ...ids)
-        .run();
+      for (const batch of batches) {
+        const ph = batch.map(() => "?").join(",");
+        await env.DB.prepare(
+          `UPDATE messages SET folder = ?, folder_id = NULL, trashed_at = ? WHERE user_id = ? AND id IN (${ph})`,
+        )
+          .bind(b.value, b.value === "trash" ? now() : null, user.id, ...batch)
+          .run();
+      }
       await recordChanges(env, user.id, ids, "upsert");
-    } else if (b.action === "delete") for (const id of ids) await deleteMessageRow(env, user.id, id);
+    } else if (b.action === "delete")
+      for (const id of ids) await deleteMessageRow(env, user.id, id);
     else return error(400, "bad action");
     return json({ ok: true, count: ids.length });
   }
@@ -1654,7 +1674,9 @@ async function routeApi(request, env, ctx, auth) {
       .first();
     if (!owned) return error(404, "not found");
     const b = await readJson(request);
-    const displayName = String(b.displayName ?? "").slice(0, 80);
+    const displayName = String(b.displayName ?? "")
+      .replace(/[\r\n]+/g, " ")
+      .slice(0, 80);
     const signature = String(b.signature ?? "").slice(0, 2000);
     await env.DB.prepare(
       "UPDATE addresses SET display_name = ?, signature = ? WHERE address = ? AND user_id = ?",
@@ -1941,7 +1963,8 @@ async function routeApi(request, env, ctx, auth) {
     if (!isAllowedPushEndpoint(endpoint)) return error(400, "invalid push endpoint");
     await env.DB.prepare(
       `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?,?,?,?,?,?)
-       ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`,
+       ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth
+       WHERE push_subscriptions.user_id = excluded.user_id`,
     )
       .bind(uuid(), user.id, endpoint, p256dh, authKey, now())
       .run();
@@ -1987,7 +2010,9 @@ async function routeApi(request, env, ctx, auth) {
       "UPDATE users SET display_name = ?, signature = ?, settings_json = ? WHERE id = ?",
     )
       .bind(
-        String(b.displayName ?? user.display_name).slice(0, 80),
+        String(b.displayName ?? user.display_name)
+          .replace(/[\r\n]+/g, " ")
+          .slice(0, 80),
         String(b.signature ?? user.signature).slice(0, 2000),
         settings,
         user.id,
@@ -2307,14 +2332,12 @@ async function routeApi(request, env, ctx, auth) {
       .run();
     if (approve && target?.owner_addr) {
       ctx.waitUntil(
-        env.EMAIL
-          .send({
-            to: target.owner_addr,
-            from: { email: `noreply@${env.MAIL_DOMAIN}`, name: "estrogen.mail" },
-            subject: `${target.domain} is now in the public directory`,
-            text: `Your domain ${target.domain} has been approved and is now listed in the estrogen.delivery public directory. Anyone here can create addresses on it.`,
-          })
-          .catch(() => {}),
+        env.EMAIL.send({
+          to: target.owner_addr,
+          from: { email: `noreply@${env.MAIL_DOMAIN}`, name: "estrogen.mail" },
+          subject: `${target.domain} is now in the public directory`,
+          text: `Your domain ${target.domain} has been approved and is now listed in the estrogen.delivery public directory. Anyone here can create addresses on it.`,
+        }).catch(() => {}),
       );
     }
     return json({ ok: true });
