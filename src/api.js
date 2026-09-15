@@ -2349,10 +2349,72 @@ async function routeApi(request, env, ctx, auth) {
 
   if (path === "/api/admin/users" && method === "GET") {
     if (!user.is_admin) return error(403, "admin only");
+    const [rows, msgs, aliases] = await env.DB.batch([
+      env.DB.prepare(
+        "SELECT id, username, address, email, display_name, is_admin, storage_used, created_at, last_login FROM users ORDER BY created_at DESC",
+      ),
+      env.DB.prepare("SELECT user_id, COUNT(*) AS n FROM messages GROUP BY user_id"),
+      env.DB.prepare("SELECT user_id, COUNT(*) AS n FROM addresses GROUP BY user_id"),
+    ]);
+    const msgBy = new Map((msgs.results || []).map((r) => [r.user_id, r.n]));
+    const aliasBy = new Map((aliases.results || []).map((r) => [r.user_id, r.n]));
+    return json({
+      users: (rows.results || []).map((u) => ({
+        ...u,
+        messages: msgBy.get(u.id) || 0,
+        aliases: aliasBy.get(u.id) || 0,
+      })),
+    });
+  }
+
+  if (path === "/api/admin/domains" && method === "GET") {
+    if (!user.is_admin) return error(403, "admin only");
     const res = await env.DB.prepare(
-      "SELECT id, username, address, email, display_name, is_admin, storage_used, created_at, last_login FROM users ORDER BY created_at DESC",
+      `SELECT d.id, d.domain, d.verified, d.send_verified, d.public, d.public_pending, d.created_at,
+        d.relay_url, d.relay_ok, d.relay_checked_at, d.relay_failing_since,
+        d.relay_secret_enc IS NOT NULL AS is_byod,
+        u.username AS owner,
+        (SELECT COUNT(*) FROM addresses a WHERE a.address LIKE '%@' || d.domain) AS addresses
+      FROM domains d LEFT JOIN users u ON u.id = d.owner_id
+      ORDER BY d.public_pending DESC, d.verified DESC, d.domain`,
     ).all();
-    return json({ users: res.results || [] });
+    return json({
+      domains: (res.results || []).map((r) => ({
+        id: r.id,
+        domain: r.domain,
+        owner: r.owner || "",
+        verified: !!r.verified,
+        sendVerified: !!r.send_verified,
+        public: !!r.public,
+        pending: !!r.public_pending,
+        isByod: !!r.is_byod,
+        relayUrl: r.relay_url || "",
+        relayOk: r.relay_ok === null || r.relay_ok === undefined ? null : !!r.relay_ok,
+        relayCheckedAt: r.relay_checked_at || null,
+        relayFailingSince: r.relay_failing_since || null,
+        addresses: r.addresses || 0,
+        createdAt: r.created_at,
+      })),
+    });
+  }
+
+  if ((m = path.match(/^\/api\/admin\/domains\/([\w-]+)\/health$/)) && method === "POST") {
+    if (!user.is_admin) return error(403, "admin only");
+    const row = await env.DB.prepare(
+      "SELECT id, domain, relay_url, relay_secret_enc FROM domains WHERE id = ?",
+    )
+      .bind(m[1])
+      .first();
+    if (!row) return error(404, "not found");
+    if (!row.relay_secret_enc || !row.relay_url) return error(400, "not a relay domain");
+    const health = await checkRelayHealth(env, row);
+    const ts = now();
+    await env.DB.prepare(
+      "UPDATE domains SET relay_ok = ?, relay_checked_at = ?, relay_failing_since = CASE WHEN ? THEN NULL ELSE COALESCE(relay_failing_since, ?) END WHERE id = ?",
+    )
+      .bind(health.ok ? 1 : 0, ts, health.ok ? 1 : 0, ts, row.id)
+      .run();
+    return json({ ok: health.ok, error: health.error || null, checkedAt: ts });
   }
 
   if (path === "/api/admin/stats" && method === "GET") {

@@ -1,8 +1,15 @@
-import { Badge, Button, Link, Loader } from "@cloudflare/kumo";
-import { ArrowLeft, ArrowSquareOut, Check, Globe, X } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { Badge, Button, Input, Link, Loader } from "@cloudflare/kumo";
+import {
+  ArrowLeft,
+  ArrowSquareOut,
+  ArrowsClockwise,
+  Check,
+  Globe,
+  X,
+} from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
-import { notifyError } from "../toast.js";
+import { notify, notifyError } from "../toast.js";
 import { humanSize, relativeTime } from "../util.js";
 
 function niceCeil(n) {
@@ -210,73 +217,136 @@ function Dashboard() {
   );
 }
 
-function PublicDomains() {
+function DomainStatus({ d }) {
+  if (!d.verified)
+    return (
+      <Badge variant="neutral" title="Ownership has not been proven yet">
+        unverified
+      </Badge>
+    );
+  if (d.isByod && d.relayFailingSince)
+    return (
+      <Badge variant="red" title={`Relay unreachable since ${relativeTime(d.relayFailingSince)}`}>
+        relay down {relativeTime(d.relayFailingSince)}
+      </Badge>
+    );
+  if (!d.sendVerified)
+    return (
+      <Badge variant="orange" title="Receiving works, sending is not set up">
+        receive only
+      </Badge>
+    );
+  return <Badge variant="green">verified</Badge>;
+}
+
+function Domains() {
   const [list, setList] = useState(null);
+  const [checking, setChecking] = useState(null);
 
   useEffect(() => {
     api
-      .adminPublicDomains()
+      .adminDomains()
       .then((d) => setList(d.domains || []))
       .catch(notifyError);
   }, []);
+
+  function patch(id, fields) {
+    setList((p) => (p || []).map((d) => (d.id === id ? { ...d, ...fields } : d)));
+  }
 
   async function act(id, approve) {
     try {
       if (approve) await api.approvePublicDomain(id);
       else await api.rejectPublicDomain(id);
-      setList((p) =>
-        approve
-          ? (p || []).map((d) => (d.id === id ? { ...d, public: true, pending: false } : d))
-          : (p || []).filter((d) => d.id !== id),
-      );
+      patch(id, { public: approve, pending: false });
     } catch (err) {
       notifyError(err);
     }
   }
 
+  async function check(d) {
+    setChecking(d.id);
+    try {
+      const r = await api.adminDomainHealth(d.id);
+      patch(d.id, {
+        relayOk: r.ok,
+        relayCheckedAt: r.checkedAt,
+        relayFailingSince: r.ok ? null : d.relayFailingSince || r.checkedAt,
+      });
+      if (r.ok) notify("Relay healthy", `${d.domain} answered the health check.`, "success");
+      else notify("Relay failing", r.error || `${d.domain} did not answer.`, "error");
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      setChecking(null);
+    }
+  }
+
+  const pending = (list || []).filter((d) => d.pending).length;
+
   return (
     <div className="em-card">
       <div className="em-card-head">
-        <h2 className="em-card-title">Public domains</h2>
+        <h2 className="em-card-title">
+          Domains
+          {pending > 0 && (
+            <Badge variant="orange" style={{ marginLeft: 8 }}>
+              {pending} awaiting review
+            </Badge>
+          )}
+        </h2>
         <p className="em-card-sub">
-          Approve a domain to list it in the public directory so anyone here can make addresses on
-          it. Reject removes it from the directory.
+          Every domain on the server. Approving one lists it in the public directory, so anyone here
+          can make addresses on it. A relay that stays down for three days loses its verification.
         </p>
       </div>
       {!list ? (
         <Loader size="sm" />
       ) : list.length === 0 ? (
-        <p className="em-card-sub">No domains have requested to be public yet.</p>
+        <p className="em-card-sub">No custom domains yet.</p>
       ) : (
         <div className="em-alias-list">
           {list.map((d) => (
-          <div key={d.id} className="em-domain-row">
-            <div className="em-domain-main">
-              <span className="em-alias-addr">{d.domain}</span>
-              {d.owner && <span className="em-hidden-meta">by {d.owner}</span>}
-              {d.pending ? (
-                <Badge variant="neutral">pending</Badge>
-              ) : (
-                <Badge variant="green" icon={Globe}>
-                  public
-                </Badge>
-              )}
-            </div>
-            <div className="em-alias-actions">
-              {d.pending && (
-                <Button size="sm" variant="outline" icon={Check} onClick={() => act(d.id, true)}>
-                  Approve
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={X}
-                onClick={() => act(d.id, false)}
-              >
-                {d.pending ? "Reject" : "Unpublish"}
-              </Button>
-            </div>
+            <div key={d.id} className="em-domain-row">
+              <div className="em-domain-main">
+                <span className="em-alias-addr">{d.domain}</span>
+                <DomainStatus d={d} />
+                {d.pending ? (
+                  <Badge variant="neutral">public pending</Badge>
+                ) : d.public ? (
+                  <Badge variant="green" icon={Globe}>
+                    public
+                  </Badge>
+                ) : null}
+                <span className="em-hidden-meta">
+                  {d.owner ? `by ${d.owner}` : "no owner"} · {d.isByod ? "relay" : "dns"} ·{" "}
+                  {d.addresses} {d.addresses === 1 ? "address" : "addresses"}
+                  {d.relayCheckedAt ? ` · checked ${relativeTime(d.relayCheckedAt)}` : ""}
+                </span>
+              </div>
+              <div className="em-alias-actions">
+                {d.isByod && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={ArrowsClockwise}
+                    loading={checking === d.id}
+                    onClick={() => check(d)}
+                  >
+                    Check relay
+                  </Button>
+                )}
+                {d.pending && (
+                  <Button size="sm" variant="outline" icon={Check} onClick={() => act(d.id, true)}>
+                    Approve
+                  </Button>
+                )}
+                {(d.pending || d.public) && (
+                  <Button size="sm" variant="ghost" icon={X} onClick={() => act(d.id, false)}>
+                    {d.pending ? "Reject" : "Unpublish"}
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -285,8 +355,20 @@ function PublicDomains() {
   );
 }
 
-export function Admin({ onBack }) {
+const MAILBOX_COLUMNS = [
+  { key: "address", label: "Address" },
+  { key: "display_name", label: "Name" },
+  { key: "email", label: "Account email" },
+  { key: "messages", label: "Messages", numeric: true },
+  { key: "aliases", label: "Aliases", numeric: true },
+  { key: "storage_used", label: "Storage", numeric: true },
+  { key: "last_login", label: "Last sign-in", numeric: true },
+];
+
+function Mailboxes() {
   const [users, setUsers] = useState(null);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState({ key: "last_login", desc: true });
 
   useEffect(() => {
     api
@@ -295,6 +377,98 @@ export function Admin({ onBack }) {
       .catch(notifyError);
   }, []);
 
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = (users || []).filter((u) =>
+      !q
+        ? true
+        : [u.address, u.display_name, u.email, u.username]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q)),
+    );
+    const col = MAILBOX_COLUMNS.find((c) => c.key === sort.key);
+    return [...filtered].sort((a, b) => {
+      const av = a[sort.key];
+      const bv = b[sort.key];
+      if (col?.numeric) return (sort.desc ? -1 : 1) * ((av || 0) - (bv || 0));
+      return (
+        (sort.desc ? -1 : 1) * String(av || "").localeCompare(String(bv || ""), undefined, { numeric: true })
+      );
+    });
+  }, [users, query, sort]);
+
+  function toggleSort(key) {
+    setSort((p) => (p.key === key ? { key, desc: !p.desc } : { key, desc: true }));
+  }
+
+  return (
+    <div className="em-card">
+      <div className="em-card-head em-chart-head">
+        <div>
+          <h2 className="em-card-title">Mailboxes</h2>
+          {users && (
+            <p className="em-card-sub">
+              {rows.length === users.length
+                ? `${users.length} total`
+                : `${rows.length} of ${users.length}`}
+            </p>
+          )}
+        </div>
+        <Input
+          size="sm"
+          placeholder="Filter mailboxes"
+          aria-label="Filter mailboxes"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+      {!users ? (
+        <Loader size="sm" />
+      ) : (
+        <table className="em-table">
+          <thead>
+            <tr>
+              {MAILBOX_COLUMNS.map((c) => (
+                <th key={c.key}>
+                  <button
+                    type="button"
+                    className={`em-sort ${sort.key === c.key ? "active" : ""}`}
+                    onClick={() => toggleSort(c.key)}
+                  >
+                    {c.label}
+                    {sort.key === c.key && <span aria-hidden="true">{sort.desc ? "↓" : "↑"}</span>}
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  {u.address}
+                  {u.is_admin ? (
+                    <Badge variant="purple" style={{ marginLeft: 6 }}>
+                      admin
+                    </Badge>
+                  ) : null}
+                </td>
+                <td>{u.display_name || "-"}</td>
+                <td>{u.email || "-"}</td>
+                <td>{(u.messages || 0).toLocaleString()}</td>
+                <td>{u.aliases || 0}</td>
+                <td>{humanSize(u.storage_used || 0)}</td>
+                <td>{u.last_login ? relativeTime(u.last_login) : "never"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+export function Admin({ onBack }) {
   return (
     <div className="em-read-pane">
       <div className="em-topbar">
@@ -305,58 +479,18 @@ export function Admin({ onBack }) {
       </div>
       <div className="em-section">
         <div className="em-section-inner">
-        <h1 className="em-display">Admin</h1>
-        <p className="em-section-lede">
-          Accounts, groups, and sign-in are managed in hrtID. Anyone you provision there with
-          access to this app gets a mailbox here on first sign-in.{" "}
-          <Link href="https://id.estrogen.delivery" target="_blank" rel="noreferrer">
-            Open hrtID <ArrowSquareOut size={13} />
-          </Link>
-        </p>
+          <h1 className="em-display">Admin</h1>
+          <p className="em-section-lede">
+            Accounts, groups, and sign-in are managed in hrtID. Anyone you provision there with
+            access to this app gets a mailbox here on first sign-in.{" "}
+            <Link href="https://id.estrogen.delivery" target="_blank" rel="noreferrer">
+              Open hrtID <ArrowSquareOut size={13} />
+            </Link>
+          </p>
 
-        <Dashboard />
-
-        <div className="em-card">
-          <div className="em-card-head">
-            <h2 className="em-card-title">Mailboxes</h2>
-          </div>
-        {!users ? (
-          <Loader size="sm" />
-        ) : (
-          <table className="em-table">
-            <thead>
-              <tr>
-                <th>Address</th>
-                <th>Name</th>
-                <th>Account email</th>
-                <th>Storage</th>
-                <th>Last sign-in</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td>
-                    {u.address}
-                    {u.is_admin ? (
-                      <Badge variant="purple" style={{ marginLeft: 6 }}>
-                        admin
-                      </Badge>
-                    ) : null}
-                  </td>
-                  <td>{u.display_name || "-"}</td>
-                  <td>{u.email || "-"}</td>
-                  <td>{humanSize(u.storage_used || 0)}</td>
-                  <td>{u.last_login ? relativeTime(u.last_login) : "never"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        </div>
-
-        <PublicDomains />
-
+          <Dashboard />
+          <Mailboxes />
+          <Domains />
         </div>
       </div>
     </div>

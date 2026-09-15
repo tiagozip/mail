@@ -151,6 +151,8 @@ export const api = {
   setDomainPublic: (id, isPublic) => req("PATCH", `/api/domains/${id}`, { public: isPublic }),
   removeDomain: (id) => req("DELETE", `/api/domains/${id}`),
   adminPublicDomains: () => req("GET", "/api/admin/public-domains"),
+  adminDomains: () => req("GET", "/api/admin/domains"),
+  adminDomainHealth: (id) => req("POST", `/api/admin/domains/${id}/health`),
   approvePublicDomain: (id) => req("POST", `/api/admin/public-domains/${id}/approve`),
   rejectPublicDomain: (id) => req("POST", `/api/admin/public-domains/${id}/reject`),
 };
