@@ -2305,21 +2305,6 @@ async function routeApi(request, env, ctx, auth) {
     return json({ ok: true });
   }
 
-  if (path === "/api/admin/public-domains" && method === "GET") {
-    if (!user.is_admin) return error(403, "admin only");
-    const res = await env.DB.prepare(
-      "SELECT d.id, d.domain, d.public, d.public_pending, u.username AS owner FROM domains d LEFT JOIN users u ON u.id = d.owner_id WHERE d.public = 1 OR d.public_pending = 1 ORDER BY d.public_pending DESC, d.domain",
-    ).all();
-    return json({
-      domains: (res.results || []).map((r) => ({
-        id: r.id,
-        domain: r.domain,
-        public: !!r.public,
-        pending: !!r.public_pending,
-        owner: r.owner || "",
-      })),
-    });
-  }
   if (
     (m = path.match(/^\/api\/admin\/public-domains\/([\w-]+)\/(approve|reject)$/)) &&
     method === "POST"
