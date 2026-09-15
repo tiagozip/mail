@@ -2,6 +2,8 @@ import { checkRelayHealth } from "./byod.js";
 
 const CF_MX_RE = /(?:^|\.)mx\.cloudflare\.net\.?$/;
 const CF_SPF_INCLUDE = "_spf.mx.cloudflare.net";
+const RELAY_GRACE_MS = 72 * 60 * 60 * 1000;
+
 const DKIM_SELECTORS = ["cf2024-1", "cf2024-2", "cf2025-1", "cf2026-1"];
 
 async function lookupTxt(name) {
@@ -81,21 +83,36 @@ async function notifyDowngrade(env, d) {
 
 export async function reverifyAllDomains(env) {
   const res = await env.DB.prepare(
-    "SELECT id, domain, verified, send_verified, public, owner_id, relay_secret_enc, relay_url FROM domains",
+    "SELECT id, domain, verified, send_verified, public, owner_id, relay_secret_enc, relay_url, relay_failing_since FROM domains",
   ).all();
   for (const d of res.results || []) {
     if (d.relay_secret_enc) {
       if (!d.relay_url) continue;
       const health = await checkRelayHealth(env, d);
-      const verified = health.ok && d.verified ? 1 : 0;
-      const sendVerified = health.ok && d.send_verified ? 1 : 0;
-      const pub = verified ? d.public : 0;
+      const ts = Date.now();
+      if (health.ok) {
+        await env.DB.prepare(
+          "UPDATE domains SET relay_ok = 1, relay_checked_at = ?, relay_failing_since = NULL WHERE id = ?",
+        )
+          .bind(ts, d.id)
+          .run();
+        continue;
+      }
+      const failingSince = d.relay_failing_since || ts;
+      if (ts - failingSince < RELAY_GRACE_MS) {
+        await env.DB.prepare(
+          "UPDATE domains SET relay_ok = 0, relay_checked_at = ?, relay_failing_since = ? WHERE id = ?",
+        )
+          .bind(ts, failingSince, d.id)
+          .run();
+        continue;
+      }
       await env.DB.prepare(
-        "UPDATE domains SET relay_ok = ?, relay_checked_at = ?, verified = ?, send_verified = ?, public = ? WHERE id = ?",
+        "UPDATE domains SET relay_ok = 0, relay_checked_at = ?, relay_failing_since = ?, verified = 0, send_verified = 0, public = 0 WHERE id = ?",
       )
-        .bind(health.ok ? 1 : 0, Date.now(), verified, sendVerified, pub, d.id)
+        .bind(ts, failingSince, d.id)
         .run();
-      if (d.verified && !verified) await notifyDowngrade(env, d);
+      if (d.verified) await notifyDowngrade(env, d);
       continue;
     }
     let mx;

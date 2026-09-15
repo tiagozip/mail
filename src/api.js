@@ -2205,8 +2205,10 @@ async function routeApi(request, env, ctx, auth) {
     if (!row?.relay_secret_enc) return error(404, "not a bring-your-own-domain");
     if (!row.relay_url) return error(400, "relay not set up yet");
     const health = await checkRelayHealth(env, row);
-    await env.DB.prepare("UPDATE domains SET relay_ok = ?, relay_checked_at = ? WHERE id = ?")
-      .bind(health.ok ? 1 : 0, now(), row.id)
+    await env.DB.prepare(
+      "UPDATE domains SET relay_ok = ?, relay_checked_at = ?, relay_failing_since = CASE WHEN ? THEN NULL ELSE COALESCE(relay_failing_since, ?) END WHERE id = ?",
+    )
+      .bind(health.ok ? 1 : 0, now(), health.ok ? 1 : 0, now(), row.id)
       .run();
     return json({ ok: health.ok, error: health.error || null, checkedAt: now() });
   }
@@ -2220,7 +2222,7 @@ async function routeApi(request, env, ctx, auth) {
     const secret = generateRelaySecret();
     const secretEnc = await encryptSecret(env, row.domain, secret);
     await env.DB.prepare(
-      "UPDATE domains SET relay_secret_enc = ?, verified = 0, send_verified = 0, relay_ok = NULL, relay_checked_at = NULL WHERE id = ?",
+      "UPDATE domains SET relay_secret_enc = ?, verified = 0, send_verified = 0, relay_ok = NULL, relay_checked_at = NULL, relay_failing_since = NULL WHERE id = ?",
     )
       .bind(secretEnc, row.id)
       .run();
