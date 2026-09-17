@@ -359,7 +359,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
         });
         if (verdict?.spam && verdict.score >= 0.7) {
           folder = "spam";
-          console.log("ai-spam", fromAddr, verdict.score, verdict.reason);
+          console.log("ai-spam", verdict.via, fromAddr, verdict.score, verdict.reason);
         }
       }
     }
