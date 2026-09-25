@@ -824,7 +824,12 @@ function KeyRing() {
   );
 }
 
-const FIELD_LABELS = { from: "From", to: "To", subject: "Subject" };
+const FIELD_LABELS = {
+  from: "From",
+  to: "To",
+  delivered_to: "Delivered to",
+  subject: "Subject",
+};
 const ACTION_LABELS = {
   read: "mark as read",
   archive: "archive it",
@@ -892,7 +897,9 @@ function Filters() {
         <h2 className="em-card-title">Filters</h2>
         <p className="em-card-sub">
           Rules run on incoming mail, top to bottom. Matching is a simple contains check, not
-          case-sensitive.
+          case-sensitive. Use <strong>Delivered to</strong> to match the alias a message arrived at,
+          which catches mail that was bcc'd or sent to a list. Forwarding sends a copy and still
+          keeps the message in your inbox.
         </p>
       </div>
 

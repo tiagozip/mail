@@ -18,7 +18,7 @@ import {
   updateStorage,
   userStorageQuota,
 } from "./store.js";
-import { normalizeAddr, now, snippetFrom, uuid } from "./util.js";
+import { normalizeAddr, now, readableBody, snippetFrom, uuid } from "./util.js";
 
 function toBytes(input) {
   if (input instanceof Uint8Array) return input;
@@ -303,7 +303,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
   }));
   let snippetEnc = null;
   if (pgpEncrypt) {
-    const plainSnippet = snippetFrom(parsed.text || parsed.html?.replace(/<[^>]+>/g, " ") || "");
+    const plainSnippet = snippetFrom(readableBody(parsed));
     if (plainSnippet) snippetEnc = await encryptToPgpText(plainSnippet);
   }
 
@@ -316,6 +316,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
       fromAddr,
       fromName,
       to: toList,
+      deliveredTo: matchedAddress || "",
       subject: parsed.subject || "",
     });
     if (applied.folder) folder = applied.folder;
@@ -328,7 +329,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     )
       .bind(userId)
       .all();
-    const bodyText = parsed.text || parsed.html?.replace(/<[^>]+>/g, " ") || "";
+    const bodyText = readableBody(parsed);
     autoLabels = labelsForMessage(ruled.results || [], {
       fromAddr,
       fromName,
@@ -360,6 +361,21 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
         if (verdict?.spam && verdict.score >= 0.7) {
           folder = "spam";
           console.log("ai-spam", verdict.via, fromAddr, verdict.score, verdict.reason);
+        } else if ((verdict?.bounce || 0) >= 0.7) {
+          const cited = [...`${parsed.subject || ""} ${bodyText}`.matchAll(/<([^<>@\s]+@[^<>\s]+)>/g)]
+            .map((hit) => `<${hit[1]}>`)
+            .slice(0, 20);
+          const ours = cited.length
+            ? await env.DB.prepare(
+                `SELECT 1 FROM messages WHERE user_id = ? AND folder = 'sent' AND rfc_message_id IN (${cited.map(() => "?").join(",")}) LIMIT 1`,
+              )
+                .bind(userId, ...cited)
+                .first()
+            : null;
+          if (!ours) {
+            folder = "spam";
+            console.log("backscatter", fromAddr, cited.length);
+          }
         }
       }
     }
@@ -400,7 +416,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     subject: parsed.subject || "(no subject)",
     snippet: pgpFlag
       ? "Encrypted message"
-      : snippetFrom(parsed.text || parsed.html?.replace(/<[^>]+>/g, " ") || ""),
+      : snippetFrom(readableBody(parsed)),
     snippet_enc: snippetEnc,
     body_text: pgpFlag ? "" : parsed.text || "",
     has_html: hasHtml,

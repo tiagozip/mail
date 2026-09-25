@@ -1,7 +1,7 @@
 import { normalizeAddr, now, snippetFrom, uuid } from "./util.js";
 
 export const FOLDERS = ["inbox", "sent", "drafts", "archive", "trash", "spam"];
-export const FILTER_FIELDS = ["from", "to", "subject"];
+export const FILTER_FIELDS = ["from", "to", "delivered_to", "subject"];
 export const FILTER_ACTIONS = ["read", "archive", "star", "spam", "forward"];
 export const MAX_FORWARD_TARGETS = 5;
 export const LABEL_RULE_FIELDS = ["from", "to", "subject", "body"];
@@ -78,6 +78,7 @@ export async function applyFilters(env, userId, ctx) {
       .map((t) => `${t.name || ""} ${t.address || ""}`)
       .join(" ")
       .toLowerCase(),
+    delivered_to: String(ctx.deliveredTo || "").toLowerCase(),
     subject: String(ctx.subject || "").toLowerCase(),
   };
   const out = { folder: null, read: false, star: false, forwards: [] };
@@ -117,7 +118,9 @@ export function attKey(userId, attachmentId, filename) {
 
 export async function recordChange(env, userId, messageId, kind) {
   if (!userId || !messageId) return;
-  await env.DB.prepare("INSERT INTO mailbox_changes (user_id, message_id, kind, ts) VALUES (?,?,?,?)")
+  await env.DB.prepare(
+    "INSERT INTO mailbox_changes (user_id, message_id, kind, ts) VALUES (?,?,?,?)",
+  )
     .bind(userId, messageId, kind, now())
     .run();
 }

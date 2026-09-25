@@ -47,6 +47,23 @@ export function snippetFrom(text, len = 200) {
     .slice(0, len);
 }
 
+export function readableBody(parsed) {
+  const plain = String(parsed?.text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const stripped = String(parsed?.html ?? "")
+    .replace(/<(script|style|head)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#\d+;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain.length >= 80 || plain.length >= stripped.length ? plain : stripped;
+}
+
 export function parseCookies(request) {
   const header = request.headers.get("cookie") || "";
   const out = {};
