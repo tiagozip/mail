@@ -98,7 +98,18 @@ async function resolveRecipient(env, to) {
     .first();
   if (direct?.user_id) {
     if (!direct.enabled) return { disabled: true };
-    return { userId: direct.user_id, address: addr };
+    return { userId: direct.user_id, address: addr, deliveredTo: addr };
+  }
+  const plus = addr.match(/^([^+@]+)\+[a-z0-9._-]{1,64}@([^@]+)$/);
+  if (plus) {
+    const base = `${plus[1]}@${plus[2]}`;
+    const owner = await env.DB.prepare("SELECT user_id, enabled FROM addresses WHERE address = ?")
+      .bind(base)
+      .first();
+    if (owner?.user_id) {
+      if (!owner.enabled) return { disabled: true };
+      return { userId: owner.user_id, address: base, deliveredTo: addr };
+    }
   }
   const domain = (addr.split("@")[1] || "").toLowerCase();
   if (domain && domain !== String(env.MAIL_DOMAIN || "").toLowerCase()) {
@@ -147,6 +158,7 @@ export async function handleEmail(message, env, ctx) {
       raw,
       userId: resolved.userId,
       matchedAddress: resolved.address || null,
+      deliveredTo: resolved.deliveredTo || null,
       envelopeFrom: message.from,
     });
   } catch (e) {
@@ -158,7 +170,11 @@ export async function handleEmail(message, env, ctx) {
   }
 }
 
-export async function storeInbound(env, ctx, { raw, userId, matchedAddress, envelopeFrom }) {
+export async function storeInbound(
+  env,
+  ctx,
+  { raw, userId, matchedAddress, deliveredTo, envelopeFrom },
+) {
   let parsed;
   try {
     parsed = await PostalMime.parse(raw);
@@ -316,7 +332,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
       fromAddr,
       fromName,
       to: toList,
-      deliveredTo: matchedAddress || "",
+      deliveredTo: deliveredTo || matchedAddress || "",
       subject: parsed.subject || "",
     });
     if (applied.folder) folder = applied.folder;
@@ -410,7 +426,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     refs: refs.join(" "),
     folder,
     folder_id: folderId,
-    delivered_to: matchedAddress || null,
+    delivered_to: deliveredTo || matchedAddress || null,
     auth_status: auth.status,
     auth_detail: JSON.stringify({
       spf: auth.spf,
