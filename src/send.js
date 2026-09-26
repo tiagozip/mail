@@ -333,7 +333,7 @@ export async function sendMessage(env, user, payload) {
   }
   await updateStorage(env, user.id, attBytes + (hKey ? html.length : 0));
 
-  for (const addr of [...to, ...cc]) await bumpContact(env, user.id, addr, "");
+  for (const addr of [...to, ...cc]) await bumpContact(env, user.id, addr, "", true);
 
   return { id: messageId, threadId, messageId: result?.messageId || rfcId };
 }

@@ -273,14 +273,16 @@ export async function updateStorage(env, userId, delta) {
     .run();
 }
 
-export async function bumpContact(env, userId, address, name) {
+export async function bumpContact(env, userId, address, name, sent = false) {
   if (!address) return;
+  const delta = sent ? 1 : 0;
   await env.DB.prepare(
-    `INSERT INTO contacts (user_id, address, name, count, last_seen) VALUES (?,?,?,1,?)
-     ON CONFLICT(user_id, address) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen,
+    `INSERT INTO contacts (user_id, address, name, count, sent_count, last_seen) VALUES (?,?,?,1,?,?)
+     ON CONFLICT(user_id, address) DO UPDATE SET count = count + 1,
+       sent_count = sent_count + ?, last_seen = excluded.last_seen,
        name = CASE WHEN excluded.name != '' THEN excluded.name ELSE contacts.name END`,
   )
-    .bind(userId, address, name || "", now())
+    .bind(userId, address, name || "", delta, now(), delta)
     .run();
 }
 

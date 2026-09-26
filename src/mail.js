@@ -347,7 +347,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
         trusted =
           !!internal ||
           !!(await env.DB.prepare(
-            "SELECT 1 FROM contacts WHERE user_id = ? AND address = ? LIMIT 1",
+            "SELECT 1 FROM contacts WHERE user_id = ? AND address = ? AND sent_count > 0 LIMIT 1",
           )
             .bind(userId, fromAddr)
             .first());
@@ -362,7 +362,9 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
           folder = "spam";
           console.log("ai-spam", verdict.via, fromAddr, verdict.score, verdict.reason);
         } else if ((verdict?.bounce || 0) >= 0.7) {
-          const cited = [...`${parsed.subject || ""} ${bodyText}`.matchAll(/<([^<>@\s]+@[^<>\s]+)>/g)]
+          const cited = [
+            ...`${parsed.subject || ""} ${bodyText}`.matchAll(/<([^<>@\s]+@[^<>\s]+)>/g),
+          ]
             .map((hit) => `<${hit[1]}>`)
             .slice(0, 20);
           const ours = cited.length
@@ -414,9 +416,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
     cc: (parsed.cc || []).map((a) => ({ name: a.name || "", address: normalizeAddr(a.address) })),
     reply_to: normalizeAddr(parsed.replyTo?.[0]?.address || ""),
     subject: parsed.subject || "(no subject)",
-    snippet: pgpFlag
-      ? "Encrypted message"
-      : snippetFrom(readableBody(parsed)),
+    snippet: pgpFlag ? "Encrypted message" : snippetFrom(readableBody(parsed)),
     snippet_enc: snippetEnc,
     body_text: pgpFlag ? "" : parsed.text || "",
     has_html: hasHtml,
@@ -460,7 +460,7 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
   }
 
   await updateStorage(env, userId, used - (user?.storage_used || 0));
-  ctx.waitUntil(bumpContact(env, userId, fromAddr, fromName));
+  if (folder !== "spam") ctx.waitUntil(bumpContact(env, userId, fromAddr, fromName));
   if (matchedAddress) {
     ctx.waitUntil(
       env.DB.prepare(
