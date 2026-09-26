@@ -362,8 +362,16 @@ export async function storeInbound(env, ctx, { raw, userId, matchedAddress, enve
           folder = "spam";
           console.log("ai-spam", verdict.via, fromAddr, verdict.score, verdict.reason);
         } else if ((verdict?.bounce || 0) >= 0.7) {
+          const reported = (parsed.attachments || [])
+            .filter((a) => String(a.mimeType || "").startsWith("message/"))
+            .map((a) =>
+              typeof a.content === "string" ? a.content : new TextDecoder().decode(a.content),
+            )
+            .join(" ");
           const cited = [
-            ...`${parsed.subject || ""} ${bodyText}`.matchAll(/<([^<>@\s]+@[^<>\s]+)>/g),
+            ...`${parsed.subject || ""} ${bodyText} ${reported}`.matchAll(
+              /<([^<>@\s]+@[^<>\s]+)>/g,
+            ),
           ]
             .map((hit) => `<${hit[1]}>`)
             .slice(0, 20);
