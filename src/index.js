@@ -4,6 +4,7 @@ import { handleEmail } from "./mail.js";
 import { purgeRateLimits } from "./ratelimit.js";
 import {
   processScheduledSends,
+  purgeOldChanges,
   purgeOldTrash,
   purgeStaleUploads,
   wakeSnoozed,
@@ -105,6 +106,7 @@ export default {
           purgeRateLimits(env).catch((e) => console.error("rate purge error", e?.stack || e)),
           purgeOldTrash(env).catch((e) => console.error("trash purge error", e?.stack || e)),
           purgeStaleUploads(env).catch((e) => console.error("upload purge error", e?.stack || e)),
+          purgeOldChanges(env).catch((e) => console.error("changes purge error", e?.stack || e)),
         ]),
       );
       return;

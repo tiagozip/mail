@@ -283,8 +283,8 @@ async function nativeExchange(request, env) {
 async function upsertOidcUser(env, claims) {
   const sub = String(claims.sub);
   const base = claims.preferred_username || claims.email?.split("@")[0] || sub;
-  const username = normalizeAddr(base).replace(/[^a-z0-9._-]/g, "") || `user${sub.slice(0, 8)}`;
-  const displayName = String(claims.name || username).slice(0, 80);
+  const requested = normalizeAddr(base).replace(/[^a-z0-9._-]/g, "") || `user${sub.slice(0, 8)}`;
+  const displayName = String(claims.name || requested).slice(0, 80);
   const email = claims.email || "";
   const picture = typeof claims.picture === "string" ? claims.picture : "";
   const groups = Array.isArray(claims.groups) ? claims.groups : [];
@@ -305,6 +305,8 @@ async function upsertOidcUser(env, claims) {
   const countRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
   const firstUser = (countRow?.n || 0) === 0;
   const isAdmin = adminFromGroup || firstUser ? 1 : 0;
+  const username =
+    !isAdmin && isReservedLocalPart(requested) ? `user${sub.slice(0, 8)}` : requested;
   const address = `${username}@${env.MAIL_DOMAIN}`;
   const id = uuid();
   const ts = now();
@@ -320,7 +322,49 @@ async function upsertOidcUser(env, claims) {
 }
 
 const ALIAS_RE = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
+const RESERVED_LOCAL_PARTS = new Set([
+  "abuse",
+  "admin",
+  "administrator",
+  "billing",
+  "dmarc",
+  "do-not-reply",
+  "donotreply",
+  "ftp",
+  "hostmaster",
+  "info",
+  "mailer-daemon",
+  "marketing",
+  "news",
+  "no-reply",
+  "noc",
+  "noreply",
+  "postmaster",
+  "root",
+  "sales",
+  "security",
+  "support",
+  "usenet",
+  "uucp",
+  "verify",
+  "webmaster",
+  "www",
+]);
+const isReservedLocalPart = (localPart) =>
+  RESERVED_LOCAL_PARTS.has(localPart) || localPart.startsWith("estrogen-verify-");
+const isReservedFor = async (env, user, localPart, domain) => {
+  if (user.is_admin || !isReservedLocalPart(localPart)) return false;
+  if (domain === String(env.MAIL_DOMAIN).toLowerCase()) return true;
+  const own = await env.DB.prepare(
+    "SELECT 1 FROM domains WHERE domain = ? AND owner_id = ? AND verified = 1",
+  )
+    .bind(domain, user.id)
+    .first();
+  return !own;
+};
 const ALIAS_LIMIT = 100;
+const DRAFT_LIMIT = 500;
+const DRAFT_RECIPIENT_LIMIT = 100;
 const HIDDEN_LIMIT = 500;
 const HIDDEN_ADJ = [
   "amber",
@@ -831,53 +875,79 @@ async function downloadAttachment(env, user, id, inline) {
 
 async function saveDraft(request, env, user, draftId) {
   const body = await readJson(request);
-  const to = (body.to || []).map(normalizeAddr).filter(Boolean);
-  const cc = (body.cc || []).map(normalizeAddr).filter(Boolean);
-  const bcc = (body.bcc || []).map(normalizeAddr).filter(Boolean);
+  const recipients = (list) =>
+    (Array.isArray(list) ? list : [])
+      .map(normalizeAddr)
+      .filter((a) => a.length <= 254 && isValidEmail(a));
+  const to = recipients(body.to);
+  const cc = recipients(body.cc);
+  const bcc = recipients(body.bcc);
+  if (Math.max(to.length, cc.length, bcc.length) > DRAFT_RECIPIENT_LIMIT) {
+    return error(400, `too many recipients (${DRAFT_RECIPIENT_LIMIT} per field)`);
+  }
   const subject = String(body.subject || "").slice(0, 988);
-  const text = String(body.text || "");
+  const text = String(body.text || "").slice(0, 200000);
   const html = String(body.html || "").slice(0, 1_000_000);
   const snippet = snippetFrom(text || html.replace(/<[^>]+>/g, " "));
+  const toJson = JSON.stringify(to.map((a) => ({ address: a, name: "" })));
+  const ccJson = JSON.stringify(cc.map((a) => ({ address: a, name: "" })));
+  const bccJson = JSON.stringify(bcc.map((a) => ({ address: a, name: "" })));
+  const encoder = new TextEncoder();
+  const size = [toJson, ccJson, bccJson, subject, text, html, snippet].reduce(
+    (sum, field) => sum + encoder.encode(field).byteLength,
+    0,
+  );
   const ts = now();
-  if ((user.storage_used || 0) + text.length + html.length > (await userStorageQuota(env))) {
+  const existing = draftId
+    ? await env.DB.prepare(
+        "SELECT id, html_key, size FROM messages WHERE id = ? AND user_id = ? AND folder = 'drafts'",
+      )
+        .bind(draftId, user.id)
+        .first()
+    : null;
+  if ((user.storage_used || 0) + size - (existing?.size || 0) > (await userStorageQuota(env))) {
     return error(413, "mailbox is full");
   }
 
-  if (draftId) {
-    const existing = await env.DB.prepare(
-      "SELECT id, html_key FROM messages WHERE id = ? AND user_id = ? AND folder = 'drafts'",
-    )
-      .bind(draftId, user.id)
-      .first();
-    if (existing) {
-      const hKey = html ? htmlKey(user.id, draftId) : null;
-      if (hKey) {
-        await env.R2.put(hKey, await encryptText(env, html), {
-          httpMetadata: { contentType: "text/html; charset=utf-8" },
-        });
-      } else if (existing.html_key) {
-        await env.R2.delete(existing.html_key).catch(() => {});
-      }
-      await env.DB.prepare(
-        "UPDATE messages SET to_json=?, cc_json=?, bcc_json=?, subject=?, body_text=?, snippet=?, has_html=?, html_key=?, date=? WHERE id = ? AND user_id = ?",
-      )
-        .bind(
-          JSON.stringify(to.map((a) => ({ address: a, name: "" }))),
-          JSON.stringify(cc.map((a) => ({ address: a, name: "" }))),
-          JSON.stringify(bcc.map((a) => ({ address: a, name: "" }))),
-          subject,
-          text,
-          snippet,
-          hKey ? 1 : 0,
-          hKey,
-          ts,
-          draftId,
-          user.id,
-        )
-        .run();
-      await recordChange(env, user.id, draftId, "upsert");
-      return json({ id: draftId });
+  if (existing) {
+    const hKey = html ? htmlKey(user.id, draftId) : null;
+    if (hKey) {
+      await env.R2.put(hKey, await encryptText(env, html), {
+        httpMetadata: { contentType: "text/html; charset=utf-8" },
+      });
+    } else if (existing.html_key) {
+      await env.R2.delete(existing.html_key).catch(() => {});
     }
+    await env.DB.prepare(
+      "UPDATE messages SET to_json=?, cc_json=?, bcc_json=?, subject=?, body_text=?, snippet=?, has_html=?, html_key=?, size=?, date=? WHERE id = ? AND user_id = ?",
+    )
+      .bind(
+        toJson,
+        ccJson,
+        bccJson,
+        subject,
+        text,
+        snippet,
+        hKey ? 1 : 0,
+        hKey,
+        size,
+        ts,
+        draftId,
+        user.id,
+      )
+      .run();
+    await updateStorage(env, user.id, size - (existing.size || 0));
+    await recordChange(env, user.id, draftId, "upsert");
+    return json({ id: draftId });
+  }
+
+  const drafts = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM messages WHERE user_id = ? AND folder = 'drafts'",
+  )
+    .bind(user.id)
+    .first();
+  if ((drafts?.n || 0) >= DRAFT_LIMIT) {
+    return error(400, `draft limit reached (${DRAFT_LIMIT}), delete some drafts first`);
   }
 
   const id = uuid();
@@ -905,9 +975,11 @@ async function saveDraft(request, env, user, draftId) {
     body_text: text,
     has_html: hKey ? 1 : 0,
     html_key: hKey,
+    size,
     date: ts,
     received_at: ts,
   });
+  await updateStorage(env, user.id, size);
   return json({ id });
 }
 
@@ -1377,6 +1449,8 @@ async function routeApi(request, env, ctx, auth) {
         .toLowerCase();
       const allowed = await verifiedDomainSet(env, user.id);
       if (!allowed.has(domain)) return error(400, "unknown or unverified domain");
+      if (await isReservedFor(env, user, localPart, domain))
+        return error(400, "that address is reserved");
       const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?")
         .bind(user.id)
         .first();
@@ -1435,6 +1509,8 @@ async function routeApi(request, env, ctx, auth) {
         .toLowerCase();
       const allowed = await verifiedDomainSet(env, user.id);
       if (!allowed.has(dom)) return error(400, "unknown or unverified domain");
+      if (await isReservedFor(env, user, localPart, dom))
+        return error(400, "that address is reserved");
       const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?")
         .bind(user.id)
         .first();
@@ -1653,6 +1729,8 @@ async function routeApi(request, env, ctx, auth) {
       .toLowerCase();
     const allowed = await verifiedDomainSet(env, user.id);
     if (!allowed.has(domain)) return error(400, "unknown or unverified domain");
+    if (await isReservedFor(env, user, localPart, domain))
+      return error(400, "that address is reserved");
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM addresses WHERE user_id = ?")
       .bind(user.id)
       .first();

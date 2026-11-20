@@ -118,6 +118,7 @@ export function attKey(userId, attachmentId, filename) {
 
 export async function recordChange(env, userId, messageId, kind) {
   if (!userId || !messageId) return;
+  if (kind !== "delete") return recordChanges(env, userId, [messageId], kind);
   await env.DB.prepare(
     "INSERT INTO mailbox_changes (user_id, message_id, kind, ts) VALUES (?,?,?,?)",
   )
@@ -132,8 +133,8 @@ export async function recordChanges(env, userId, messageIds, kind) {
   await env.DB.batch(
     ids.map((id) =>
       env.DB.prepare(
-        "INSERT INTO mailbox_changes (user_id, message_id, kind, ts) VALUES (?,?,?,?)",
-      ).bind(userId, id, kind, ts),
+        "INSERT INTO mailbox_changes (user_id, message_id, kind, ts) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM messages WHERE id = ? AND user_id = ?)",
+      ).bind(userId, id, kind, ts, id, userId),
     ),
   );
 }
@@ -240,6 +241,12 @@ export async function insertMessage(env, row) {
 }
 
 export async function deleteMessageRow(env, userId, messageId) {
+  const msg = await env.DB.prepare(
+    "SELECT raw_key, html_key, size FROM messages WHERE id = ? AND user_id = ?",
+  )
+    .bind(messageId, userId)
+    .first();
+  if (!msg) return;
   const atts = await env.DB.prepare(
     "SELECT id, r2_key, size FROM attachments WHERE message_id = ? AND user_id = ?",
   )
@@ -250,20 +257,15 @@ export async function deleteMessageRow(env, userId, messageId) {
     await env.R2.delete(a.r2_key).catch(() => {});
     freed += a.size || 0;
   }
-  const msg = await env.DB.prepare(
-    "SELECT raw_key, html_key, size FROM messages WHERE id = ? AND user_id = ?",
-  )
-    .bind(messageId, userId)
-    .first();
-  if (msg?.raw_key) await env.R2.delete(msg.raw_key).catch(() => {});
-  if (msg?.html_key) await env.R2.delete(msg.html_key).catch(() => {});
+  if (msg.raw_key) await env.R2.delete(msg.raw_key).catch(() => {});
+  if (msg.html_key) await env.R2.delete(msg.html_key).catch(() => {});
   await env.DB.batch([
     env.DB.prepare("DELETE FROM attachments WHERE message_id = ?").bind(messageId),
     env.DB.prepare("DELETE FROM messages_fts WHERE mid = ?").bind(messageId),
     env.DB.prepare("DELETE FROM messages WHERE id = ? AND user_id = ?").bind(messageId, userId),
   ]);
   await recordChange(env, userId, messageId, "delete");
-  await updateStorage(env, userId, -(freed + (msg?.size || 0)));
+  await updateStorage(env, userId, -(freed + (msg.size || 0)));
 }
 
 export async function updateStorage(env, userId, delta) {

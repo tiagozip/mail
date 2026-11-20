@@ -3,6 +3,7 @@ import { deleteMessageRow, recordChanges, updateStorage } from "./store.js";
 import { now } from "./util.js";
 
 export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const CHANGES_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export async function purgeOldTrash(env) {
   const t = now();
@@ -23,6 +24,14 @@ export async function purgeOldTrash(env) {
       console.error("purge trash failed", row.id, e?.stack || e);
     }
   }
+}
+
+export async function purgeOldChanges(env) {
+  await env.DB.prepare(
+    "DELETE FROM mailbox_changes WHERE ts < ? AND seq NOT IN (SELECT MAX(seq) FROM mailbox_changes GROUP BY user_id)",
+  )
+    .bind(now() - CHANGES_RETENTION_MS)
+    .run();
 }
 
 export async function purgeStaleUploads(env) {

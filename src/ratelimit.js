@@ -57,7 +57,7 @@ export const LIMITS = {
   "alias:write": { limit: 120, window: HOUR, scope: "user" },
   upload: { limit: 200, window: HOUR, scope: "user", message: "too many uploads" },
   avatar: { limit: 30, window: HOUR, scope: "user", message: "too many avatar uploads" },
-  draft: { limit: 240, window: MINUTE, scope: "user" },
+  draft: { limit: 30, window: MINUTE, scope: "user", message: "saving drafts too fast" },
   label: { limit: 60, window: HOUR, scope: "user" },
   folder: { limit: 60, window: HOUR, scope: "user" },
   filter: { limit: 60, window: HOUR, scope: "user" },
