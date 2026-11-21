@@ -1,4 +1,3 @@
-import { Loader } from "@cloudflare/kumo";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
@@ -16,11 +15,11 @@ const Admin = lazy(() => import("./Admin.jsx").then((m) => ({ default: m.Admin }
 const Shortcuts = lazy(() => import("./Shortcuts.jsx").then((m) => ({ default: m.Shortcuts })));
 const ThreadView = lazy(() => import("./ThreadView.jsx").then((m) => ({ default: m.ThreadView })));
 
-const readerFallback = (
-  <div className="em-reader-loading">
-    <Loader size="sm" />
-  </div>
-);
+const readerFallback = <div className="em-reader-loading" />;
+setTimeout(() => {
+  import("./ThreadView.jsx");
+  import("./RichEditor.jsx");
+}, 800);
 
 const PATH_FOLDERS = ["inbox", "sent", "drafts", "archive", "spam", "trash"];
 
@@ -267,6 +266,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         return;
       }
       if (e.key === "c") {
+        e.preventDefault();
         openCompose();
         return;
       }
@@ -275,14 +275,16 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         searchRef.current?.focus();
         return;
       }
+      const openIdx = threads.findIndex((t) => t.id === store.openId || t._members?.some((m) => m.id === store.openId));
+      const at = openIdx >= 0 ? openIdx : cursor;
       if (e.key === "j") {
-        const next = Math.min(threads.length - 1, cursor + 1);
+        const next = Math.min(threads.length - 1, at + 1);
         setCursor(next);
         openByIndex(next);
         return;
       }
       if (e.key === "k") {
-        const next = Math.max(0, cursor - 1);
+        const next = Math.max(0, at - 1);
         setCursor(next);
         openByIndex(next);
         return;
@@ -301,7 +303,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
       if (e.key === "e") store.moveMessage(open, "archive");
       else if (e.key === "#") store.moveMessage(open, "trash");
       else if (e.key === "s") store.toggleStar(open);
-      else if (e.key === "r") startReply(open, "reply");
+      else if (e.key === "r") return;
       else if (e.key === "u") {
         store.setReadState(open, false);
         closeReader();
@@ -510,6 +512,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         onClose={goBack}
         onSent={onComposeSent}
       />
+
       {undoBar && (
         <div className="em-undobar">
           <span className="em-undobar-text">Message sent</span>

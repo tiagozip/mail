@@ -1,4 +1,4 @@
-import { Badge, Button, Input, Link, Loader } from "@cloudflare/kumo";
+import { Badge, Button, Input, Link } from "@cloudflare/kumo";
 import {
   ArrowLeft,
   ArrowSquareOut,
@@ -186,7 +186,7 @@ function Dashboard() {
   if (!stats) {
     return (
       <div className="em-card">
-        <Loader size="sm" />
+        <div className="em-admin-skel" aria-hidden="true" />
       </div>
     );
   }
@@ -301,7 +301,7 @@ function Domains() {
         </p>
       </div>
       {!list ? (
-        <Loader size="sm" />
+        <div className="em-admin-skel" aria-hidden="true" />
       ) : list.length === 0 ? (
         <p className="em-card-sub">No custom domains yet.</p>
       ) : (
@@ -423,7 +423,7 @@ function Mailboxes() {
         />
       </div>
       {!users ? (
-        <Loader size="sm" />
+        <div className="em-admin-skel" aria-hidden="true" />
       ) : (
         <table className="em-table">
           <thead>

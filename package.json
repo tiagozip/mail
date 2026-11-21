@@ -24,6 +24,7 @@
     "@tiptap/pm": "^3.27.1",
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
+    "@tiptap/suggestion": "3.34.0",
     "lettersanitizer": "^1.0.7",
     "openpgp": "^6.3.1",
     "postal-mime": "^2.4.4",

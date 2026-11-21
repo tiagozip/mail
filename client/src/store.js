@@ -33,6 +33,7 @@ export function useMailStore(initialUser) {
   const reqSeq = useRef(0);
   const threadSeq = useRef(0);
   const threadCache = useRef(new Map());
+  const listCache = useRef(new Map());
   const inflight = useRef(new Set());
   const viewRef = useRef(view);
   const syncing = useRef(false);
@@ -97,12 +98,14 @@ export function useMailStore(initialUser) {
   const loadList = useCallback(
     (v) => {
       const seq = ++reqSeq.current;
-      setListLoading(true);
-      setMessages([]);
-      setNextCursor(null);
+      const key = JSON.stringify(v);
+      const mem = listCache.current.get(key);
+      setListLoading(!mem);
+      setMessages(mem?.messages || []);
+      setNextCursor(mem?.nextCursor || null);
       setSelectedIds(new Set());
       cache.viewFromCache(v).then((cached) => {
-        if (seq !== reqSeq.current || !cached.length) return;
+        if (seq !== reqSeq.current || !cached.length || listCache.current.has(key)) return;
         setMessages(cached);
         setListLoading(false);
       });
@@ -113,6 +116,7 @@ export function useMailStore(initialUser) {
           const list = d.messages || [];
           setMessages(list);
           setNextCursor(d.nextCursor || null);
+          listCache.current.set(key, { messages: list, nextCursor: d.nextCursor || null });
           cache.putMessages(list).then(() => cache.pruneToCap());
           const ids = [
             ...new Set(list.slice(0, 8).map((mm) => mm.threadId).filter(Boolean)),
@@ -270,8 +274,7 @@ export function useMailStore(initialUser) {
 
   const goView = useCallback((v) => {
     threadSeq.current++;
-    threadCache.current.clear();
-    inflight.current.clear();
+    if (threadCache.current.size > 200) threadCache.current.clear();
     setOpenId(null);
     setThread(null);
     setView(v);
@@ -524,8 +527,8 @@ export function useMailStore(initialUser) {
   }, [messages, refreshCounts, loadList, view]);
 
   const bulkAction = useCallback(
-    (action, value) => {
-      const ids = [...selectedIds];
+    (action, value, only) => {
+      const ids = only ?? [...selectedIds];
       if (!ids.length) return;
       const idSet = new Set(ids);
       if (action === "read" || action === "star") {
@@ -548,7 +551,7 @@ export function useMailStore(initialUser) {
         cache.removeMessages(ids);
         removeFromList(ids);
       }
-      setSelectedIds(new Set());
+      if (!only) setSelectedIds(new Set());
       api
         .bulk(ids, action, value)
         .then(() => refreshCounts())

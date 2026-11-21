@@ -9,6 +9,8 @@ import {
   ArrowRight,
   CalendarBlank,
   CaretDown,
+  CaretLeft,
+  CaretRight,
   Clock,
   DotsThree,
   DownloadSimple,
@@ -23,7 +25,6 @@ import {
   Folder,
   Image as ImageIcon,
   Lock,
-  LockKeyOpen,
   Paperclip,
   PaperPlaneTilt,
   Printer,
@@ -35,12 +36,14 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { sanitize } from "lettersanitizer";
+import { createPortal } from "react-dom";
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { expandHtmlBlocks, stripTrackers } from "../../../src/sanitize.js";
 import { notify, notifyError } from "../toast.js";
 import { SendAtDialog } from "./SendAtDialog.jsx";
+import { SenderAvatar } from "./SenderAvatar.jsx";
 import {
   escapeHtml,
   FOLDER_LABELS,
@@ -48,7 +51,6 @@ import {
   hasBodyContent,
   htmlHasBlockedImages,
   humanSize,
-  identityLabel,
   imagesDefaultOn,
   initials,
   linkifyParts,
@@ -62,6 +64,7 @@ import {
   splitQuoted,
 } from "../util.js";
 const RichEditor = lazy(() => import("./RichEditor.jsx").then((m) => ({ default: m.RichEditor })));
+setTimeout(() => import("./RichEditor.jsx"), 1500);
 
 const CodeHighlight = lazy(() => import("../CodeHighlight.jsx"));
 
@@ -223,29 +226,28 @@ function PgpLock({ onUnlocked }) {
 
   return (
     <form className="em-pgp-lock" onSubmit={submit}>
-      <div className="em-pgp-lock-head">
-        <Lock size={16} weight="fill" />
-        <span>This message is encrypted. Enter your passphrase to read it.</span>
-      </div>
       <div className="em-pgp-lock-row">
-        <Input
+        <Lock size={16} className="em-pgp-lock-icon" />
+        <input
+          className="em-pgp-lock-input"
           type="password"
           aria-label="Passphrase"
-          placeholder="Passphrase"
+          aria-invalid={!!error}
+          placeholder="Passphrase to decrypt"
           value={pass}
           onChange={(e) => {
             setPass(e.target.value);
             setError("");
           }}
         />
-        <Button type="submit" variant="primary" icon={LockKeyOpen} loading={busy} disabled={!pass}>
+        <label className="em-pgp-remember">
+          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+          <span>Remember</span>
+        </label>
+        <Button type="submit" size="sm" variant="secondary" loading={busy}>
           Unlock
         </Button>
       </div>
-      <label className="em-pgp-remember">
-        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-        <span>Remember on this device</span>
-      </label>
       {error && <div className="em-form-error">{error}</div>}
     </form>
   );
@@ -390,51 +392,151 @@ function attIcon(mime) {
   return FileIcon;
 }
 
-function Attachment({ att }) {
-  const mime = att.mime || att.contentType || "";
-  const isImage = mime.startsWith("image/");
-  const downloadHref = `/api/attachments/${att.id}`;
-  const inlineHref = `/api/attachments/${att.id}/inline`;
+function attKind(att) {
+  const mime = (att.mime || att.contentType || "").toLowerCase();
+  const name = (att.filename || "").toLowerCase();
+  if (mime.startsWith("image/") && !mime.includes("svg")) return "image";
+  if (mime === "application/pdf") return "pdf";
+  if (mime.startsWith("text/") || /\.(txt|md|csv|log|json|ics|vcf)$/.test(name)) return "text";
+  return "file";
+}
 
-  if (isImage) {
-    return (
-      <div className="em-att-image">
-        <a
-          href={inlineHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="em-att-image-thumb"
-        >
-          <img src={inlineHref} alt={att.filename} loading="lazy" />
-        </a>
-        <a
-          className="em-att-image-bar"
-          href={downloadHref}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <DownloadSimple size={13} />
-          <span className="em-att-name">{att.filename}</span>
+function attExt(att) {
+  const m = /\.([a-z0-9]{1,5})$/i.exec(att.filename || "");
+  return m ? m[1].toLowerCase() : "file";
+}
+
+function useTextSnippet(att, enabled, limit) {
+  const [text, setText] = useState(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    fetch(`/api/attachments/${att.id}`)
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((t) => alive && setText(t.slice(0, limit)))
+      .catch(() => alive && setText(""));
+    return () => {
+      alive = false;
+    };
+  }, [att.id, enabled, limit]);
+  return text;
+}
+
+function Attachment({ att, onOpen }) {
+  const kind = attKind(att);
+  const snippet = useTextSnippet(att, kind === "text" && att.size < 256000, 600);
+  const Glyph = attIcon(att.mime || att.contentType);
+  return (
+    <div className={`em-att-card is-${kind}`}>
+      <button
+        type="button"
+        className="em-att-preview"
+        onClick={onOpen}
+        aria-label={`Preview ${att.filename}`}
+      >
+        {kind === "image" ? (
+          <img src={`/api/attachments/${att.id}/inline`} alt="" loading="lazy" />
+        ) : kind === "text" && snippet ? (
+          <pre>{snippet}</pre>
+        ) : (
+          <span className="em-att-type">
+            <Glyph size={28} />
+            {Glyph === FileIcon && <span>{attExt(att)}</span>}
+          </span>
+        )}
+      </button>
+      <div className="em-att-foot">
+        <span className="em-att-meta">
+          <span className="em-att-name" title={att.filename}>
+            {att.filename}
+          </span>
           <span className="em-att-size">{humanSize(att.size)}</span>
+        </span>
+        <a className="em-att-dl" href={`/api/attachments/${att.id}`} aria-label={`Download ${att.filename}`} download>
+          <DownloadSimple size={16} />
         </a>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  const Glyph = attIcon(mime);
-  return (
-    <a className="em-att-chip" href={downloadHref} target="_blank" rel="noopener noreferrer">
-      <Glyph size={18} className="em-att-glyph" />
-      <span className="em-att-name">{att.filename}</span>
-      <span className="em-att-size">{humanSize(att.size)}</span>
-      <DownloadSimple size={14} className="em-att-dl" />
-    </a>
+function AttViewer({ list, index, onIndex, onClose }) {
+  const att = list[index];
+  const kind = att ? attKind(att) : null;
+  const text = useTextSnippet(att || { id: "" }, kind === "text", 200000);
+  useEffect(() => {
+    if (!att) return;
+    function onKey(e) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      } else if (e.key === "ArrowRight" && index < list.length - 1) onIndex(index + 1);
+      else if (e.key === "ArrowLeft" && index > 0) onIndex(index - 1);
+    }
+    addEventListener("keydown", onKey, true);
+    return () => removeEventListener("keydown", onKey, true);
+  }, [att, index, list.length, onIndex, onClose]);
+  if (!att) return null;
+  const Glyph = attIcon(att.mime || att.contentType);
+  return createPortal(
+    <div className="em-viewer" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <header className="em-viewer-bar">
+        <span className="em-viewer-title">
+          <span className="em-att-name">{att.filename}</span>
+          <span className="em-att-size">
+            {humanSize(att.size)}
+            {list.length > 1 && ` · ${index + 1} of ${list.length}`}
+          </span>
+        </span>
+        <a className="em-viewer-btn" href={`/api/attachments/${att.id}`} download aria-label="Download">
+          <DownloadSimple size={18} />
+        </a>
+        <button type="button" className="em-viewer-btn" onClick={onClose} aria-label="Close preview">
+          <X size={18} />
+        </button>
+      </header>
+      <div className="em-viewer-stage" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        {index > 0 && (
+          <button type="button" className="em-viewer-nav is-prev" onClick={() => onIndex(index - 1)} aria-label="Previous attachment">
+            <CaretLeft size={18} />
+          </button>
+        )}
+        {kind === "image" ? (
+          <img key={att.id} src={`/api/attachments/${att.id}/inline`} alt={att.filename} />
+        ) : kind === "pdf" ? (
+          <iframe key={att.id} className="em-viewer-pdf" src={`/api/attachments/${att.id}/inline#navpanes=0&view=FitH`} title={att.filename} />
+        ) : kind === "text" ? (
+          <pre className="em-viewer-text">{text ?? ""}</pre>
+        ) : (
+          <div className="em-viewer-file">
+            <Glyph size={40} />
+            <span className="em-att-name">{att.filename}</span>
+            {kind === "pdf" ? (
+              <a className="em-viewer-open" href={`/api/attachments/${att.id}/inline`} target="_blank" rel="noopener noreferrer">
+                Open PDF in a new tab
+              </a>
+            ) : (
+              <a className="em-viewer-open" href={`/api/attachments/${att.id}`} download>
+                Download file
+              </a>
+            )}
+          </div>
+        )}
+        {index < list.length - 1 && (
+          <button type="button" className="em-viewer-nav is-next" onClick={() => onIndex(index + 1)} aria-label="Next attachment">
+            <CaretRight size={18} />
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
 function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) {
   const [pgpScan, setPgpScan] = useState({ trackers: 0, hasRemote: false });
   const [pgpShown, setPgpShown] = useState(false);
+  const [viewing, setViewing] = useState(-1);
   const remoteShown = message.pgp ? pgpShown : message._imagesShown;
   const hasBlocked = message.pgp
     ? pgpScan.hasRemote && !pgpShown
@@ -470,13 +572,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
   return (
     <div className={`em-msg${expanded ? "" : " is-collapsed"}`}>
       <div className="em-msg-head" onClick={onToggle}>
-        {message.from?.avatar ? (
-          <img className="em-avatar em-avatar-img" src={message.from.avatar} alt="" />
-        ) : (
-          <span className="em-avatar" style={{ background: monoColor(seed) }}>
-            {initials(message.from)}
-          </span>
-        )}
+        <SenderAvatar from={message.from} />
         <div className="em-msg-head-main">
           <div className="em-msg-from">
             {message.from?.name || message.from?.address}
@@ -584,11 +680,12 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
           )}
           {shownAttachments.length > 0 && (
             <div className="em-att-row">
-              {shownAttachments.map((a) => (
-                <Attachment key={a.id} att={a} />
+              {shownAttachments.map((a, i) => (
+                <Attachment key={a.id} att={a} onOpen={() => setViewing(i)} />
               ))}
             </div>
           )}
+          <AttViewer list={shownAttachments} index={viewing} onIndex={setViewing} onClose={() => setViewing(-1)} />
         </div>
       )}
     </div>
@@ -606,6 +703,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
   const [atts, setAtts] = useState([]);
   const [dropImages, setDropImages] = useState(null);
   const [recipKey, setRecipKey] = useState(null);
+  const [open, setOpen] = useState(false);
   const editorRef = useRef(null);
   const fileInput = useRef(null);
   const ownKeyRef = useRef(null);
@@ -708,6 +806,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     setCc("");
     setShowCc(false);
     setAtts([]);
+    setOpen(false);
     editorRef.current?.commands.clearContent();
   }
 
@@ -819,18 +918,76 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
     !atts.some((a) => a.pending);
   const mainDisabled = !canSend || (pgpDefault && !canEncrypt);
 
+  useEffect(() => {
+    if (open) return;
+    const onKey = (e) => {
+      if (e.key !== "r" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target.closest?.("input, textarea, [contenteditable=true]")) return;
+      e.preventDefault();
+      setOpen(true);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const me = user.avatarUrl ? (
+    <img className="em-avatar em-avatar-img em-tl-me" src={user.avatarUrl} alt="" />
+  ) : (
+    <span className="em-avatar em-tl-me">{initials({ name: user.displayName, address: user.address })}</span>
+  );
+
+  if (!open && !hasBodyContent(html, text) && !atts.length) {
+    return (
+      <div className="em-replybar">
+        {me}
+        <div className="em-replybar-box">
+        <button type="button" className="em-replybar-main" onClick={() => setOpen(true)}>
+          <ArrowBendUpLeft size={16} />
+          <span>Reply to {replyName}</span>
+          <kbd className="em-kbd-hint">R</kbd>
+        </button>
+        <button type="button" className="em-replybar-chip" onClick={() => onReply(last, "replyAll")}>
+          Reply all
+        </button>
+        <button type="button" className="em-replybar-chip" onClick={() => onForward(last)}>
+          Forward
+        </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="em-quickreply">
-      <label className="em-reply-from em-reply-from-top">
-        <span>From</span>
-        <Select aria-label="From address" size="sm" value={fromAddr} onValueChange={setFromPick}>
-          {addresses.map((a) => (
-            <Select.Option key={a.address} value={a.address}>
-              {identityLabel(a)}
-            </Select.Option>
-          ))}
-        </Select>
-      </label>
+    <div className="em-replybar is-open">
+      {me}
+    <div
+      className="em-quickreply"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !mainDisabled && !sending) {
+          e.preventDefault();
+          send(undefined, pgpDefault);
+        }
+        if (e.key === "Escape" && !hasBodyContent(html, text) && !atts.length) setOpen(false);
+      }}
+    >
+      <div className="em-reply-head">
+        <ArrowBendUpLeft size={16} className="em-reply-head-icon" />
+        <span className="em-reply-head-to">Reply to {replyName}</span>
+        <span className="em-reply-head-from">
+          from
+          {addresses.length > 1 ? (
+            <select aria-label="From address" value={fromAddr} onChange={(e) => setFromPick(e.target.value)}>
+              {addresses.map((a) => (
+                <option key={a.address} value={a.address}>
+                  {a.address}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span>{fromAddr}</span>
+          )}
+        </span>
+      </div>
       {pgpDefault && (
         <div className="em-encrypt-box">
           {effectiveKey ? (
@@ -873,16 +1030,10 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           onChange={(e) => setCc(e.target.value)}
         />
       )}
-      <Suspense
-        fallback={
-          <div className="em-editor-loading">
-            <Loader size="sm" />
-          </div>
-        }
-      >
+      <Suspense fallback={<div className="em-editor-loading" />}>
         <RichEditor
           placeholder={
-            pgpDefault && canEncrypt ? `Reply encrypted to ${replyName}` : `Reply to ${replyName}`
+            pgpDefault && canEncrypt ? "Write an encrypted reply" : "Write a reply"
           }
           onUpdate={({ html: h, text: t }) => {
             setHtml(h);
@@ -890,8 +1041,10 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           }}
           onEditorReady={(ed) => {
             editorRef.current = ed;
+            requestAnimationFrame(() => !ed.isDestroyed && ed.commands.focus("end"));
           }}
           onFiles={handleFiles}
+          onPickImage={() => fileInput.current?.click()}
         />
       </Suspense>
       {dropImages && (
@@ -970,7 +1123,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
         <div className="em-split">
           <Button
             className="em-split-main"
-            size="sm"
+           
             variant="primary"
             icon={pgpDefault ? Lock : PaperPlaneTilt}
             loading={sending}
@@ -985,7 +1138,7 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
                 <Button
                   {...p}
                   className="em-split-caret"
-                  size="sm"
+                 
                   variant="primary"
                   shape="square"
                   aria-label="More send options"
@@ -1023,22 +1176,29 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
           }}
         />
         <Button
-          size="sm"
+         
           variant="ghost"
+          shape="square"
+          aria-label="Attach files"
           icon={Paperclip}
           onClick={() => fileInput.current?.click()}
-        >
-          Attach
-        </Button>
+        />
         {!showCc && (
-          <button type="button" className="em-quote-toggle" onClick={() => setShowCc(true)}>
+          <Button variant="ghost" onClick={() => setShowCc(true)}>
             Cc
-          </button>
+          </Button>
         )}
-        <button type="button" className="em-quote-toggle" onClick={() => onForward(last)}>
-          Forward
-        </button>
+        <Button
+          className="em-quickreply-discard"
+         
+          variant="ghost"
+          shape="square"
+          aria-label="Discard reply"
+          icon={Trash}
+          onClick={clearReply}
+        />
       </div>
+    </div>
     </div>
   );
 }
@@ -1046,9 +1206,9 @@ function QuickReply({ store, last, onReply, onForward, onSent }) {
 function BackBar({ onBack, label }) {
   return (
     <div className="em-reader-topbar">
-      <Button size="sm" variant="ghost" icon={ArrowLeft} onClick={onBack}>
-        {label}
-      </Button>
+      <Tooltip content={`Back to ${label}`}>
+        <Button size="sm" variant="ghost" shape="square" icon={ArrowLeft} onClick={onBack} aria-label={`Back to ${label}`} />
+      </Tooltip>
     </div>
   );
 }
@@ -1071,6 +1231,8 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
     setThread,
   } = store;
   const [expandedIds, setExpandedIds] = useState(() => new Set());
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => setShowAll(false), [thread?.threadId]);
   const [, setPgpTick] = useState(0);
 
   const listItem = messages.find((m) => m.id === openId);
@@ -1125,8 +1287,20 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
     return (
       <div className="em-pane em-pane-reader">
         <BackBar onBack={onBack} label={backLabel} />
-        <div className="em-center">
-          <Loader />
+        <div className="em-thread">
+          <div className="em-thread-inner">
+            <h1 className="em-thread-subject em-display">{listItem?.subject || "\u00a0"}</h1>
+            <div className="em-msg em-msg-ghost">
+              <div className="em-msg-head">
+                <div className="em-msg-from">{listItem?.from?.name || listItem?.from?.address}</div>
+              </div>
+              <div className="em-msg-body">
+                <div className="em-ghost-line" />
+                <div className="em-ghost-line" />
+                <div className="em-ghost-line em-ghost-short" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1268,11 +1442,11 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
           className="em-reader-back"
           size="sm"
           variant="ghost"
+          shape="square"
           icon={ArrowLeft}
           onClick={onBack}
-        >
-          {backLabel}
-        </Button>
+          aria-label={`Back to ${backLabel}`}
+        />
         <div className="em-spacer" />
         <Tooltip content={headerItem.isStarred ? "Unstar" : "Star"}>
           <Button
@@ -1364,12 +1538,16 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
               Download .eml
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
-            <DropdownMenu.Item icon={Warning} onClick={() => moveMessage(headerItem, "spam")}>
-              Move to spam
-            </DropdownMenu.Item>
-            <DropdownMenu.Item icon={Tray} onClick={() => moveMessage(headerItem, "inbox")}>
-              Move to inbox
-            </DropdownMenu.Item>
+            {headerItem.folder !== "spam" && (
+              <DropdownMenu.Item icon={Warning} onClick={() => moveMessage(headerItem, "spam")}>
+                Move to spam
+              </DropdownMenu.Item>
+            )}
+            {headerItem.folder !== "inbox" && (
+              <DropdownMenu.Item icon={Tray} onClick={() => moveMessage(headerItem, "inbox")}>
+                Move to inbox
+              </DropdownMenu.Item>
+            )}
             {inTrash && (
               <>
                 <DropdownMenu.Separator />
@@ -1389,16 +1567,29 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
       <div className="em-thread">
         <div className="em-thread-inner">
           <h1 className="em-thread-subject">{subject}</h1>
-          {msgs.map((m) => (
-            <MessageCard
-              key={m.id}
-              message={m}
-              expanded={expandedIds.has(m.id)}
-              onToggle={() => toggle(m.id)}
-              onShowImages={() => showImages(m)}
-              onUnlocked={() => setPgpTick((t) => t + 1)}
-            />
-          ))}
+          {msgs.map((m, i) => {
+            const folded = !showAll && msgs.length > 3 && i > 0 && i < msgs.length - 2;
+            if (folded && i > 1) return null;
+            if (folded)
+              return (
+                <button key="more" type="button" className="em-tl-more" onClick={() => setShowAll(true)}>
+                  <svg className="em-tl-curl" viewBox="0 0 40 28" aria-hidden="true">
+                    <path d="M3 0v10c0 6 2 10 7 10 4 0 6-3 5-6-1-3-5-3-7 0-3 5-1 12 8 12h22" />
+                  </svg>
+                  Show {msgs.length - 3} earlier
+                </button>
+              );
+            return (
+              <MessageCard
+                key={m.id}
+                message={m}
+                expanded={expandedIds.has(m.id)}
+                onToggle={() => toggle(m.id)}
+                onShowImages={() => showImages(m)}
+                onUnlocked={() => setPgpTick((t) => t + 1)}
+              />
+            );
+          })}
           {headerItem.folder !== "drafts" && (
             <QuickReply
               store={store}

@@ -96,11 +96,8 @@ const MONO_COLORS = [
   "#d2693f",
 ];
 
-export function monoColor(seed) {
-  const str = String(seed || "");
-  let h = 0;
-  for (let i = 0; i < str.length; i += 1) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  return MONO_COLORS[h % MONO_COLORS.length];
+export function monoColor() {
+  return "var(--color-kumo-fill)";
 }
 
 export function recipientLine(list) {

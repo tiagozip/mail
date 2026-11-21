@@ -110,3 +110,67 @@ export async function proxyImage(request) {
     },
   });
 }
+
+const FREE_MAIL = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "outlook.com",
+  "hotmail.com",
+  "live.com",
+  "yahoo.com",
+  "icloud.com",
+  "me.com",
+  "proton.me",
+  "protonmail.com",
+  "pm.me",
+  "aol.com",
+  "gmx.com",
+  "gmx.de",
+  "yandex.com",
+  "mail.ru",
+  "zoho.com",
+  "fastmail.com",
+  "tuta.io",
+  "estrogen.delivery",
+]);
+
+export function brandDomain(address) {
+  const host = String(address || "").split("@")[1]?.toLowerCase().trim();
+  if (!host || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) return null;
+  const parts = host.split(".");
+  const keep = parts.length > 2 && parts.at(-2).length <= 3 && parts.at(-1).length === 2 ? 3 : 2;
+  const root = parts.slice(-keep).join(".");
+  return FREE_MAIL.has(root) ? null : root;
+}
+
+export async function brandLogo(domain, ctx) {
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) || FREE_MAIL.has(domain)) return deny(404, "none");
+  const key = new Request(`https://logo.cache/${domain}`);
+  const cache = caches.default;
+  const hit = await cache.match(key);
+  if (hit) return hit;
+  const candidates = [
+    `https://${domain}/apple-touch-icon.png`,
+    `https://www.${domain}/apple-touch-icon.png`,
+    `https://${domain}/favicon.ico`,
+    `https://www.${domain}/favicon.ico`,
+  ];
+  let res = null;
+  for (const url of candidates) {
+    if (!isProxyableUrl(url)) continue;
+    try {
+      const r = await fetch(url, { cf: { cacheTtl: 86400 }, signal: AbortSignal.timeout(3000) });
+      const ct = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+      if (!r.ok || !ALLOWED_MIME.has(ct)) continue;
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength < 100 || buf.byteLength > 256 * 1024) continue;
+      res = new Response(buf, {
+        headers: { "content-type": ct, "cache-control": "private, max-age=604800" },
+      });
+      break;
+    } catch {}
+  }
+  if (!res) res = new Response(null, { status: 404, headers: { "cache-control": "private, max-age=86400" } });
+  ctx?.waitUntil?.(cache.put(key, res.clone()));
+  return res;
+}

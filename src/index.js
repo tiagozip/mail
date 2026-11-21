@@ -35,6 +35,16 @@ const SECURITY_HEADERS = {
 function harden(res) {
   const headers = new Headers(res.headers);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) headers.set(k, v);
+  const inlinePdf =
+    headers.get("content-type") === "application/pdf" &&
+    (headers.get("content-disposition") || "").startsWith("inline");
+  if (inlinePdf) {
+    headers.set(
+      "content-security-policy",
+      CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'"),
+    );
+    headers.set("x-frame-options", "SAMEORIGIN");
+  }
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 

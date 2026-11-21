@@ -1,7 +1,8 @@
-import { Button, Checkbox, DropdownMenu, Loader, Tooltip } from "@cloudflare/kumo";
+import { Button, DropdownMenu, Tooltip } from "@cloudflare/kumo";
 import spamton from "../assets/spamton.webp";
 import {
   Archive,
+  Check,
   Envelope,
   EnvelopeOpen,
   Folder,
@@ -10,18 +11,20 @@ import {
   NotePencil,
   Paperclip,
   PaperPlaneTilt,
-  PencilSimpleLine,
+  PencilSimple,
   ShieldWarning,
   Star,
   Tray,
   Trash,
+  X,
 } from "@phosphor-icons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import * as cache from "../cache.js";
 import * as pgp from "../pgp.js";
-import { FOLDER_LABELS, initials, monoColor, relativeTime, senderLabel } from "../util.js";
+import { SenderAvatar } from "./SenderAvatar.jsx";
+import { FOLDER_LABELS, initials, relativeTime, senderLabel } from "../util.js";
 
 function StarToggle({ on, onClick }) {
   return (
@@ -49,6 +52,7 @@ function Row({
   onPrefetch,
   onToggleSelect,
   onToggleStar,
+  onQuick,
 }) {
   const sender = senderLabel(item, selfAddresses);
   const addr = item.from?.address || "";
@@ -65,16 +69,23 @@ function Row({
       onMouseLeave={() => {
         if (hoverTimer.current) clearTimeout(hoverTimer.current);
       }}
+      onPointerDown={() => onPrefetch(item.threadId)}
     >
       <div className="em-row-avatar">
-        {item.from?.avatar ? (
-          <img className="em-avatar em-avatar-img" src={item.from.avatar} alt="" />
-        ) : (
-          <span className="em-avatar" style={{ background: monoColor(addr || sender) }}>
-            {initials({ name: sender, address: addr })}
-          </span>
-        )}
-        {!item.isRead && <span className="em-row-unread" />}
+        <SenderAvatar from={{ ...item.from, name: sender, address: addr }} />
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={selected}
+          aria-label="Select message"
+          className="em-check"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect(item.id);
+          }}
+        >
+          <Check size={12} weight="bold" />
+        </button>
       </div>
       <div className="em-row-body">
         <div className="em-row-line">
@@ -104,25 +115,36 @@ function Row({
         )}
       </div>
       <div className="em-row-actions" onClick={(e) => e.stopPropagation()}>
-        <StarToggle on={item.isStarred} onClick={() => onToggleStar(item)} />
-        <div className="em-row-check">
-          <Checkbox
-            checked={selected}
-            onCheckedChange={() => onToggleSelect(item.id)}
-            aria-label="Select message"
-          />
+        <div className="em-row-quick">
+          <button type="button" className="em-quick-btn" aria-label={item.isRead ? "Mark unread" : "Mark read"} title={item.isRead ? "Mark unread" : "Mark read"} onClick={() => onQuick(item, "read", !item.isRead)}>
+            {item.isRead ? <Envelope size={15} /> : <EnvelopeOpen size={15} />}
+          </button>
+          <button type="button" className="em-quick-btn" aria-label="Archive" title="Archive" onClick={() => onQuick(item, "move", "archive")}>
+            <Archive size={15} />
+          </button>
+          <button type="button" className="em-quick-btn" aria-label="Delete" title="Delete" onClick={() => onQuick(item, "move", "trash")}>
+            <Trash size={15} />
+          </button>
         </div>
+        <StarToggle on={item.isStarred} onClick={() => onToggleStar(item)} />
       </div>
     </div>
   );
 }
 
-function BulkBar({ store }) {
+function BulkBar({ store, total }) {
   const { selectedIds, bulkAction, selectAll, userFolders } = store;
   return (
     <div className="em-bulkbar">
-      <Checkbox checked onCheckedChange={() => selectAll(false)} aria-label="Clear selection" />
+      <Tooltip content="Clear selection">
+        <Button size="sm" variant="ghost" shape="square" aria-label="Clear selection" icon={X} onClick={() => selectAll(false)} />
+      </Tooltip>
       <span className="em-bulkbar-count">{selectedIds.size} selected</span>
+      {selectedIds.size < total && (
+        <button type="button" className="em-selectall" onClick={() => selectAll(true)}>
+          Select all {total}
+        </button>
+      )}
       <div className="em-bulkbar-spacer" />
       <Tooltip content="Archive">
         <Button size="sm" variant="ghost" shape="square" aria-label="Archive" icon={Archive} onClick={() => bulkAction("move", "archive")} />
@@ -137,7 +159,7 @@ function BulkBar({ store }) {
         <Button size="sm" variant="ghost" shape="square" aria-label="Mark unread" icon={Envelope} onClick={() => bulkAction("read", false)} />
       </Tooltip>
       <Tooltip content="Star">
-        <Button size="sm" variant="ghost" shape="square" aria-label="Star" icon={<Star weight="fill" />} onClick={() => bulkAction("star", true)} />
+        <Button size="sm" variant="ghost" shape="square" aria-label="Star" icon={Star} onClick={() => bulkAction("star", true)} />
       </Tooltip>
       <Tooltip content="Unstar">
         <Button size="sm" variant="ghost" shape="square" aria-label="Unstar" icon={<Star weight="regular" />} onClick={() => bulkAction("star", false)} />
@@ -192,6 +214,7 @@ export function MessageList({
     prefetchThread,
     toggleStar,
     emptyTrash,
+    bulkAction,
   } = store;
   const [query, setQuery] = useState("");
   const [decSnippets, setDecSnippets] = useState({});
@@ -314,9 +337,15 @@ export function MessageList({
   }
 
   const selecting = selectedIds.size > 0;
+  const [showSkel, setShowSkel] = useState(false);
+  useEffect(() => {
+    if (!listLoading) return setShowSkel(false);
+    const t = setTimeout(() => setShowSkel(true), 300);
+    return () => clearTimeout(t);
+  }, [listLoading]);
 
   return (
-    <div className="em-pane em-pane-list">
+    <div className={`em-pane em-pane-list${selecting ? " is-selecting" : ""}`}>
       <div className="em-pane-topbar">
         <Button
           className="em-menu-btn"
@@ -327,14 +356,7 @@ export function MessageList({
           icon={List}
           onClick={onMenu}
         />
-        {selecting && selectedIds.size < messages.length && (
-          <button type="button" className="em-selectall" onClick={() => selectAll(true)}>
-            Select all {messages.length}
-          </button>
-        )}
       </div>
-
-      {selecting && <BulkBar store={store} />}
 
       {inTrash && trashTotal > 0 && (
         <div className="em-trash-banner">
@@ -355,7 +377,7 @@ export function MessageList({
 
       <div className="em-list-scroll" ref={scrollRef} onScroll={onScroll}>
         {listLoading ? (
-          <div className="em-skel">
+          <div className={`em-skel${showSkel ? "" : " is-waiting"}`}>
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="em-skel-row">
                 <div className="em-skel-avatar" />
@@ -432,6 +454,7 @@ export function MessageList({
                       onPrefetch={prefetchThread}
                       onToggleSelect={toggleSelect}
                       onToggleStar={toggleStar}
+                      onQuick={(it, a, v) => bulkAction(a, v, it._members?.length ? it._members.map((m) => m.id) : [it.id])}
                     />
                   </div>
                 );
@@ -439,7 +462,7 @@ export function MessageList({
             </div>
             {nextCursor && (
               <div className="em-loadmore">
-                {loadingMore ? <Loader size="sm" /> : <Button variant="ghost" size="sm" onClick={loadMore}>Load more</Button>}
+                {!loadingMore && <Button variant="ghost" size="sm" onClick={loadMore}>Load more</Button>}
               </div>
             )}
           </>
@@ -447,21 +470,27 @@ export function MessageList({
       </div>
 
       <div className={`em-floatbar${floatHidden ? " is-hidden" : ""}`}>
+        {selecting ? (
+          <BulkBar store={store} total={messages.length} />
+        ) : (
+        <>
         <form className="em-floatbar-search" onSubmit={onSearch}>
           <MagnifyingGlass className="em-floatbar-icon" size={18} />
           <input
             ref={searchRef}
             className="em-floatbar-input"
-            placeholder="search your email..."
+            placeholder="Search mail"
             aria-label="Search mail"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </form>
         <button type="button" className="em-floatbar-compose" onClick={onCompose}>
-          <PencilSimpleLine size={18} weight="bold" />
+          <PencilSimple size={16} />
           <span>Write</span>
         </button>
+        </>
+        )}
       </div>
     </div>
   );

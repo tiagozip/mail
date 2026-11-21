@@ -21,7 +21,7 @@ import {
 } from "./byod.js";
 import { encryptBytes, encryptText, tryDecryptBytes, tryDecryptText } from "./crypto.js";
 import { checkOwnership, checkSendingDns, lookupMx } from "./domains.js";
-import { proxyImage, proxyUrl } from "./img.js";
+import { brandLogo, proxyImage, proxyUrl } from "./img.js";
 import {
   authorizeUrl,
   challengeFor,
@@ -1317,6 +1317,7 @@ async function routeApi(request, env, ctx, auth) {
     return saveDraft(request, env, user, m[1]);
 
   if (path === "/api/img" && method === "GET") return proxyImage(request);
+  if ((m = path.match(/^\/api\/logo\/([a-z0-9.-]+)$/)) && method === "GET") return brandLogo(m[1], ctx);
 
   if (path === "/api/attachments" && method === "POST") return uploadAttachment(request, env, user);
   if ((m = path.match(/^\/api\/attachments\/([\w-]+)\/inline$/)) && method === "GET")

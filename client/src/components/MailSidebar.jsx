@@ -18,7 +18,7 @@ import {
   Warning,
   UserCircleIcon
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { FOLDER_LABELS, initials, monoColor } from "../util.js";
 import { FolderSetup } from "./FolderSetup.jsx";
 import { LabelModal } from "./LabelModal.jsx";
@@ -56,6 +56,36 @@ export function MailSidebar({
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [editFolder, setEditFolder] = useState(null);
   const active = activeKey(view);
+  const navRef = useRef(null);
+  const [ind, setInd] = useState({ on: false, hover: false, ready: false });
+
+  const place = useCallback((el, hover) => {
+    const nav = navRef.current;
+    if (!nav || !el) return setInd((i) => ({ ...i, on: false }));
+    const a = nav.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    setInd((i) => ({ ...i, on: true, hover, x: b.left - a.left, y: b.top - a.top + nav.scrollTop, w: b.width, h: b.height }));
+  }, []);
+
+  const current = () => navRef.current?.querySelector(".em-nav-list .em-nav-item.is-active");
+  const revealRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    const reveal = revealRef.current;
+    if (!nav || !reveal) return;
+    const lists = [...nav.querySelectorAll(":scope > .em-nav-list")].map((n) => n.cloneNode(true));
+    for (const el of lists) {
+      for (const b of el.querySelectorAll("button")) b.tabIndex = -1;
+    }
+    reveal.replaceChildren(...lists);
+  });
+
+  useLayoutEffect(() => {
+    place(current(), false);
+    const id = requestAnimationFrame(() => setInd((i) => ({ ...i, ready: true })));
+    return () => cancelAnimationFrame(id);
+  }, [active, labels, userFolders, place]);
 
   function navigate(v) {
     goView(v);
@@ -79,7 +109,36 @@ export function MailSidebar({
   }
 
   return (
-    <div className="em-nav">
+    <div
+      className="em-nav"
+      ref={navRef}
+      onMouseOver={(e) => {
+        const el = e.target.closest(".em-nav-item");
+        if (el && !el.closest(".em-nav-reveal")) place(el, !el.classList.contains("is-active"));
+      }}
+      onMouseLeave={() => place(current(), false)}
+    >
+      <span
+        aria-hidden="true"
+        className={`em-nav-ind${ind.hover ? " is-hover" : ""}${ind.ready ? " is-ready" : ""}`}
+        style={{
+          opacity: ind.on ? 1 : 0,
+          translate: `${ind.x || 0}px ${ind.y || 0}px`,
+          width: ind.w || 0,
+          height: ind.h || 0,
+        }}
+      />
+      <div
+        ref={revealRef}
+        aria-hidden="true"
+        inert
+        className={`em-nav-reveal${ind.hover ? " is-hover" : ""}${ind.ready ? " is-ready" : ""}`}
+        style={{
+          clipPath: ind.on
+            ? `inset(${ind.y}px calc(100% - ${ind.x + ind.w}px) calc(100% - ${ind.y + ind.h}px) ${ind.x}px round 8px)`
+            : "inset(50%)",
+        }}
+      />
       <div className="em-nav-list">
         {FOLDERS.map(({ key, icon: Icon }) => {
           const unread = key === "inbox" ? counts?.[key]?.unread : 0;
@@ -91,7 +150,7 @@ export function MailSidebar({
               className={`em-nav-item${on ? " is-active" : ""}`}
               onClick={() => selectFolder(key)}
             >
-              <Icon size={18} weight={on ? "fill" : "regular"} />
+              <Icon size={18} />
               <span className="em-nav-label">{FOLDER_LABELS[key]}</span>
               {unread > 0 && <span className="em-nav-badge">{unread}</span>}
             </button>

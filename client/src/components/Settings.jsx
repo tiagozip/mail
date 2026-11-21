@@ -288,7 +288,7 @@ function Addresses({ user, setUser }) {
                   Identity
                 </Button>
                 {a.isPrimary ? (
-                  <Badge variant="purple">primary</Badge>
+                  <Badge variant="neutral">Primary</Badge>
                 ) : (
                   <>
                     <Button

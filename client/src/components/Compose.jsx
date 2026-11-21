@@ -1,4 +1,4 @@
-import { Button, Dialog, DialogRoot, DropdownMenu, Input, Loader, Select } from "@cloudflare/kumo";
+import { Button, DropdownMenu, Input, Loader, Select } from "@cloudflare/kumo";
 import {
   CalendarBlank,
   CaretDown,
@@ -631,10 +631,18 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   }
 
   return (
-    <DialogRoot open={open} onOpenChange={(o) => !o && onClose()}>
-      <Dialog
-        style={{ width: 640, maxWidth: "94vw", padding: 24 }}
-        className={dragOver ? "em-compose-dragging" : undefined}
+    open && (
+      <div className="em-compose-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <section
+        aria-label={draftId ? "Edit draft" : "New message"}
+        className={`em-dock${dragOver ? " em-compose-dragging" : ""}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !busy) {
+            e.preventDefault();
+            onSend(undefined, pgpDefault);
+          }
+          if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector(".em-slash")) onClose();
+        }}
         onPaste={onPaste}
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
@@ -647,9 +655,12 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             <span>Drop to attach</span>
           </div>
         )}
-        <Dialog.Title className="em-display" style={{ marginBottom: 16 }}>
-          {draftId ? "Edit draft" : "New message"}
-        </Dialog.Title>
+        <header className="em-dock-head">
+          <h2>{draftId ? "Edit draft" : "New message"}</h2>
+          <button type="button" className="em-dock-close" aria-label="Close and save draft" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </header>
         <div className="em-compose-fields">
           <div className="em-compose-from">
             <label>From</label>
@@ -666,23 +677,25 @@ export function Compose({ open, initial, user, onClose, onSent }) {
               ))}
             </Select>
           </div>
-          <RecipientField label="To" value={to} onChange={setTo} autoFocus />
+          <div className="em-to-row">
+            <RecipientField label="To" value={to} onChange={setTo} autoFocus />
+            {(!showCc || !showBcc) && (
+              <div className="em-recip-extra">
+                {!showCc && (
+                  <button type="button" onClick={() => setShowCc(true)}>
+                    Cc
+                  </button>
+                )}
+                {!showBcc && (
+                  <button type="button" onClick={() => setShowBcc(true)}>
+                    Bcc
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           {showCc && <RecipientField label="Cc" value={cc} onChange={setCc} />}
           {showBcc && <RecipientField label="Bcc" value={bcc} onChange={setBcc} />}
-          {(!showCc || !showBcc) && (
-            <div className="em-recip-extra">
-              {!showCc && (
-                <button type="button" className="em-linkbtn" onClick={() => setShowCc(true)}>
-                  Add Cc
-                </button>
-              )}
-              {!showBcc && (
-                <button type="button" className="em-linkbtn" onClick={() => setShowBcc(true)}>
-                  Add Bcc
-                </button>
-              )}
-            </div>
-          )}
           <Input
             className="em-compose-subject"
             aria-label="Subject"
@@ -690,9 +703,9 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
           />
-          <Suspense fallback={<div className="em-editor-loading"><Loader size="sm" /></div>}>
+          <Suspense fallback={<div className="em-editor-loading" />}>
             <RichEditor
-              placeholder="Write your message"
+              placeholder="Write, or type / for blocks"
               value={bodyHtml}
               onEditorReady={(ed) => {
                 editorRef.current = ed;
@@ -702,6 +715,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
                 setBodyText(text);
               }}
               onFiles={handleFiles}
+              onPickImage={() => fileRef.current?.click()}
             />
           </Suspense>
           {dropImages && (
@@ -821,9 +835,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
               </DropdownMenu.Content>
             </DropdownMenu>
           </div>
-          <Button variant="outline" icon={Paperclip} onClick={() => fileRef.current?.click()}>
-            Attach
-          </Button>
+          <Button variant="ghost" shape="square" aria-label="Attach files" icon={Paperclip} onClick={() => fileRef.current?.click()} />
           <Button variant="ghost" onClick={onSaveDraftClick}>
             Save draft
           </Button>
@@ -842,9 +854,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
               {encryptReason}
             </span>
           )}
-          <Button variant="secondary-destructive" icon={Trash} onClick={onDiscard}>
-            Discard
-          </Button>
+          <Button variant="ghost" shape="square" aria-label="Discard draft" icon={Trash} onClick={onDiscard} />
         </div>
         <SendAtDialog
           open={pickSendAt}
@@ -854,7 +864,8 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             onSend(ts, pgpDefault);
           }}
         />
-      </Dialog>
-    </DialogRoot>
+      </section>
+      </div>
+    )
   );
 }
