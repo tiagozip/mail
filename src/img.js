@@ -135,7 +135,10 @@ const FREE_MAIL = new Set([
 ]);
 
 export function brandDomain(address) {
-  const host = String(address || "").split("@")[1]?.toLowerCase().trim();
+  const host = String(address || "")
+    .split("@")[1]
+    ?.toLowerCase()
+    .trim();
   if (!host || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) return null;
   const parts = host.split(".");
   const keep = parts.length > 2 && parts.at(-2).length <= 3 && parts.at(-1).length === 2 ? 3 : 2;
@@ -145,7 +148,7 @@ export function brandDomain(address) {
 
 export async function brandLogo(domain, ctx) {
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) || FREE_MAIL.has(domain)) return deny(404, "none");
-  const key = new Request(`https://logo.cache/${domain}`);
+  const key = new Request(`https://logo.cache/v2/${domain}`);
   const cache = caches.default;
   const hit = await cache.match(key);
   if (hit) return hit;
@@ -156,21 +159,51 @@ export async function brandLogo(domain, ctx) {
     `https://www.${domain}/favicon.ico`,
   ];
   let res = null;
-  for (const url of candidates) {
-    if (!isProxyableUrl(url)) continue;
+  const tryIcon = async (url) => {
+    if (!isProxyableUrl(url)) return null;
     try {
       const r = await fetch(url, { cf: { cacheTtl: 86400 }, signal: AbortSignal.timeout(3000) });
       const ct = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-      if (!r.ok || !ALLOWED_MIME.has(ct)) continue;
+      if (!r.ok || !ALLOWED_MIME.has(ct)) return null;
       const buf = await r.arrayBuffer();
-      if (buf.byteLength < 100 || buf.byteLength > 256 * 1024) continue;
-      res = new Response(buf, {
+      if (buf.byteLength < 100 || buf.byteLength > 256 * 1024) return null;
+      return new Response(buf, {
         headers: { "content-type": ct, "cache-control": "private, max-age=604800" },
       });
-      break;
+    } catch {
+      return null;
+    }
+  };
+  for (const url of candidates) {
+    res = await tryIcon(url);
+    if (res) break;
+  }
+  if (!res) {
+    try {
+      const page = await fetch(`https://${domain}/`, { signal: AbortSignal.timeout(4000) });
+      const html = page.ok ? (await page.text()).slice(0, 300_000) : "";
+      const icons = [...html.matchAll(/<link\b[^>]*>/gi)]
+        .map(([tag]) => ({
+          rel: tag.match(/rel=["']?([^"'>]+)/i)?.[1]?.toLowerCase() || "",
+          href: tag.match(/href=["']?([^"'\s>]+)/i)?.[1],
+          size: Number(tag.match(/sizes=["']?(\d+)/i)?.[1] || 0),
+        }))
+        .filter((l) => l.href && /(^|\s)(apple-touch-icon|icon)(\s|$)/.test(l.rel))
+        .sort(
+          (a, b) =>
+            (b.rel.includes("apple") ? 1000 : b.size) - (a.rel.includes("apple") ? 1000 : a.size),
+        );
+      for (const icon of icons.slice(0, 4)) {
+        res = await tryIcon(new URL(icon.href.replaceAll("&amp;", "&"), page.url).href);
+        if (res) break;
+      }
     } catch {}
   }
-  if (!res) res = new Response(null, { status: 404, headers: { "cache-control": "private, max-age=86400" } });
+  if (!res)
+    res = new Response(null, {
+      status: 404,
+      headers: { "cache-control": "private, max-age=86400" },
+    });
   ctx?.waitUntil?.(cache.put(key, res.clone()));
   return res;
 }

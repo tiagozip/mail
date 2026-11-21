@@ -101,7 +101,10 @@ table{max-width:100%}
 blockquote{margin:0 0 0 12px;padding-left:12px;border-left:2px solid ${v("--color-kumo-line", "#333")}}
 .em-shiki{margin:12px 0;padding:12px 16px;border-radius:10px;overflow-x:auto;font-size:0.85rem;line-height:1.55;border:1px solid ${v("--color-kumo-hairline", "#333")};background-color:var(--shiki-dark-bg)!important}
 .em-shiki code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:none;padding:0}
-.em-shiki,.em-shiki span{color:var(--shiki-dark)!important}`;
+.em-shiki,.em-shiki span{color:var(--shiki-dark)!important}
+html.is-paper{color-scheme:light}
+html.is-paper body{color:#1f1a21}
+html.is-paper a{color:#1a5fd0}`;
 }
 
 const letterHeightCache = new Map();
@@ -125,6 +128,14 @@ function LetterBody({ html, allowRemote, resource }) {
     const doc = frameRef.current?.contentDocument;
     if (!doc?.body) return;
     setFrameBody(doc.body);
+    const width = doc.body.clientWidth || 1;
+    const paper = [...doc.body.querySelectorAll("*")].some((el) => {
+      const bg = doc.defaultView.getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+      if (!bg || (bg[3] !== undefined && Number(bg[3]) < 0.5)) return false;
+      const [r, g, b] = bg.map(Number);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b > 160 && el.getBoundingClientRect().width > width * 0.5;
+    });
+    doc.documentElement.classList.toggle("is-paper", paper);
     const measure = () => {
       const h = doc.documentElement.scrollHeight;
       if (!h) return;
