@@ -3708,8 +3708,8 @@ html[data-theme="nord"] {
 }
 
 .em-nav-foot > .em-account-chip {
-  flex: 1;
-  min-width: 0;
+  flex: none;
+  width: 148px;
 }
 
 .em-menu-btn {
