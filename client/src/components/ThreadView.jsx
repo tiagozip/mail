@@ -107,6 +107,17 @@ html.is-paper body{color:#1f1a21}
 html.is-paper a{color:#1a5fd0}`;
 }
 
+function markPaper(doc) {
+  const width = doc.body.clientWidth || 1;
+  const paper = [...doc.body.querySelectorAll("*")].some((el) => {
+    const bg = doc.defaultView.getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
+    if (!bg || (bg[3] !== undefined && Number(bg[3]) < 0.5)) return false;
+    const [r, g, b] = bg.map(Number);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 160 && el.getBoundingClientRect().width > width * 0.5;
+  });
+  doc.documentElement.classList.toggle("is-paper", paper);
+}
+
 const letterHeightCache = new Map();
 
 function LetterBody({ html, allowRemote, resource }) {
@@ -128,14 +139,7 @@ function LetterBody({ html, allowRemote, resource }) {
     const doc = frameRef.current?.contentDocument;
     if (!doc?.body) return;
     setFrameBody(doc.body);
-    const width = doc.body.clientWidth || 1;
-    const paper = [...doc.body.querySelectorAll("*")].some((el) => {
-      const bg = doc.defaultView.getComputedStyle(el).backgroundColor.match(/[\d.]+/g);
-      if (!bg || (bg[3] !== undefined && Number(bg[3]) < 0.5)) return false;
-      const [r, g, b] = bg.map(Number);
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b > 160 && el.getBoundingClientRect().width > width * 0.5;
-    });
-    doc.documentElement.classList.toggle("is-paper", paper);
+    markPaper(doc);
     const measure = () => {
       const h = doc.documentElement.scrollHeight;
       if (!h) return;
@@ -165,6 +169,7 @@ function LetterBody({ html, allowRemote, resource }) {
         onLoad={() => {
           const doc = frameRef.current?.contentDocument;
           if (!doc) return;
+          markPaper(doc);
           setFrameBody(doc.body);
           const h = doc.documentElement.scrollHeight;
           if (h) {
