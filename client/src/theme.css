@@ -6029,6 +6029,7 @@ body > div > [role="presentation"][data-side] {
 .em-app:has(.em-pane-list) .em-main {
   height: calc(100% + var(--em-6));
   margin-top: calc(-1 * var(--em-6));
+  overflow: visible;
 }
 
 .em-list-scroll {

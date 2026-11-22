@@ -217,13 +217,19 @@ function BulkBar({ store, total }) {
 function EdgeScrollbar({ scrollRef, expected, rowHeight, version }) {
   const barRef = useRef(null);
   const thumbRef = useRef(null);
-  const geo = useRef(null);
+  const api = useRef(null);
+  const [el, setEl] = useState(null);
 
   useEffect(() => {
-    const el = scrollRef.current;
+    if (scrollRef.current !== el) setEl(scrollRef.current);
+    api.current?.measure();
+  });
+
+  useEffect(() => {
     const bar = barRef.current;
     const thumb = thumbRef.current;
     if (!el || !bar || !thumb) return;
+    let geo = null;
     let hideTimer = 0;
     let near = false;
     let dragging = null;
@@ -233,31 +239,42 @@ function EdgeScrollbar({ scrollRef, expected, rowHeight, version }) {
       if (!near && !dragging) hideTimer = setTimeout(() => bar.classList.remove("is-visible"), 900);
     };
     const place = () => {
-      const g = geo.current;
-      if (!g) return;
-      const max = el.scrollHeight - el.clientHeight;
-      const ratio = g.virtual - el.clientHeight > 0 ? el.scrollTop / (g.virtual - el.clientHeight) : 0;
-      const offset = Math.min(ratio * (g.track - g.size), max > 0 ? g.track - g.size : 0);
-      thumb.style.transform = `translateY(${offset}px)`;
+      if (!geo) return;
+      const span = geo.virtual - el.clientHeight;
+      const offset = span > 0 ? (el.scrollTop / span) * (geo.track - geo.size) : 0;
+      thumb.style.transform = `translateY(${Math.min(offset, geo.track - geo.size)}px)`;
+    };
+    const edges = () => {
+      const pane = el.parentElement?.getBoundingClientRect();
+      if (!pane) return;
+      const side = document.querySelector(".em-sidebar-wrap")?.getBoundingClientRect();
+      const left = Math.max(0, pane.left - (side && side.right <= pane.left ? side.right : 0));
+      const right = Math.max(0, window.innerWidth - pane.right);
+      el.style.marginLeft = `${-left}px`;
+      el.style.paddingLeft = `${left}px`;
+      el.style.marginRight = `${-right}px`;
+      el.style.paddingRight = `${right}px`;
     };
     const measure = () => {
+      edges();
       const { scrollHeight, clientHeight } = el;
       const rect = el.getBoundingClientRect();
       const virtual = scrollHeight + Math.max(0, expected.current) * rowHeight;
       if (virtual <= clientHeight + 1) {
-        geo.current = null;
+        geo = null;
         bar.style.display = "none";
         return;
       }
       const track = rect.height - 16;
       const size = Math.max(40, (clientHeight / virtual) * track);
-      geo.current = { virtual, track, size, top: rect.top + 8 };
+      geo = { virtual, track, size, top: rect.top + 8 };
       bar.style.display = "";
-      bar.style.top = `${rect.top + 8}px`;
+      bar.style.top = `${geo.top}px`;
       bar.style.height = `${track}px`;
       thumb.style.height = `${size}px`;
       place();
     };
+    api.current = { measure };
     const onScroll = () => {
       place();
       show();
@@ -266,29 +283,23 @@ function EdgeScrollbar({ scrollRef, expected, rowHeight, version }) {
       const isNear = window.innerWidth - e.clientX < 48;
       if (isNear === near) return;
       near = isNear;
-      if (near) show();
-      else if (!dragging) show();
-    };
-    const onWheel = (e) => {
-      if (e.ctrlKey || el.contains(e.target)) return;
-      if (!e.target.closest?.(".em-app, .em-scrollbar")) return;
-      if (e.target.closest(".em-sidebar-wrap, .em-floatbar, [role=dialog], [role=menu]")) return;
-      el.scrollTop += e.deltaY;
+      show();
     };
     const onDown = (e) => {
-      const g = geo.current;
-      if (!g) return;
+      if (!geo) return;
       e.preventDefault();
-      const ratio = (g.virtual - el.clientHeight) / (g.track - g.size);
-      if (e.target !== thumb) el.scrollTop = Math.max(0, e.clientY - g.top - g.size / 2) * ratio;
-      dragging = { y: e.clientY, start: el.scrollTop, ratio };
+      if (e.target !== thumb) {
+        const span = geo.virtual - el.clientHeight;
+        el.scrollTop = Math.max(0, (e.clientY - geo.top - geo.size / 2) / (geo.track - geo.size)) * span;
+      }
+      dragging = { y: e.clientY, start: el.scrollTop, span: geo.virtual - el.clientHeight, room: geo.track - geo.size };
       bar.classList.add("is-dragging");
       bar.setPointerCapture(e.pointerId);
       show();
     };
     const onDrag = (e) => {
       if (!dragging) return;
-      el.scrollTop = dragging.start + (e.clientY - dragging.y) * dragging.ratio;
+      el.scrollTop = dragging.start + ((e.clientY - dragging.y) / dragging.room) * dragging.span;
     };
     const onUp = () => {
       dragging = null;
@@ -299,29 +310,32 @@ function EdgeScrollbar({ scrollRef, expected, rowHeight, version }) {
     el.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", measure);
     window.addEventListener("pointermove", onMove, { passive: true });
-    window.addEventListener("wheel", onWheel, { passive: true });
     bar.addEventListener("pointerdown", onDown);
     bar.addEventListener("pointermove", onDrag);
     bar.addEventListener("pointerup", onUp);
     bar.addEventListener("pointercancel", onUp);
+    bar.addEventListener("lostpointercapture", onUp);
     const ro = new ResizeObserver(measure);
     ro.observe(el);
+    if (el.parentElement) ro.observe(el.parentElement);
     return () => {
+      api.current = null;
       clearTimeout(hideTimer);
       el.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", measure);
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("wheel", onWheel);
       bar.removeEventListener("pointerdown", onDown);
       bar.removeEventListener("pointermove", onDrag);
       bar.removeEventListener("pointerup", onUp);
       bar.removeEventListener("pointercancel", onUp);
+      bar.removeEventListener("lostpointercapture", onUp);
       ro.disconnect();
+      for (const k of ["marginLeft", "paddingLeft", "marginRight", "paddingRight"]) el.style[k] = "";
     };
-  }, [scrollRef, expected, rowHeight, version]);
+  }, [el, expected, rowHeight]);
 
   return createPortal(
-    <div ref={barRef} className="em-scrollbar" aria-hidden="true" style={{ display: "none" }}>
+    <div ref={barRef} className="em-scrollbar" aria-hidden="true" data-version={version} style={{ display: "none" }}>
       <div ref={thumbRef} className="em-scrollbar-thumb" />
     </div>,
     document.body,
