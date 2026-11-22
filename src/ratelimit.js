@@ -23,6 +23,7 @@ export const LIMITS = {
     message: "too many sign-in attempts",
   },
   anon: { limit: 120, window: MINUTE, scope: "ip" },
+  pixel: { limit: 300, window: MINUTE, scope: "ip" },
   "ingest:ip": { limit: 3000, window: HOUR, scope: "ip" },
   "ingest:domain": { limit: 5000, window: HOUR, scope: "domain" },
 

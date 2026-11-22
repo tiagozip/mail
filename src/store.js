@@ -262,6 +262,10 @@ export async function deleteMessageRow(env, userId, messageId) {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM attachments WHERE message_id = ?").bind(messageId),
     env.DB.prepare("DELETE FROM messages_fts WHERE mid = ?").bind(messageId),
+    env.DB.prepare("DELETE FROM tracking WHERE message_id = ? AND user_id = ?").bind(
+      messageId,
+      userId,
+    ),
     env.DB.prepare("DELETE FROM messages WHERE id = ? AND user_id = ?").bind(messageId, userId),
   ]);
   await recordChange(env, userId, messageId, "delete");

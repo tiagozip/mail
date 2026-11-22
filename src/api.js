@@ -102,7 +102,11 @@ function listItem(row) {
     folder: row.folder,
     folderId: row.folder_id || null,
     deliveredTo: row.delivered_to || null,
-    from: { address: row.from_addr, name: row.from_name },
+    from: {
+      address: row.from_addr,
+      name: row.from_name,
+      authenticated: JSON.parse(row.auth_detail || "{}")?.dmarc === "pass",
+    },
     to: JSON.parse(row.to_json || "[]"),
     subject: row.subject,
     snippet: row.snippet,
@@ -1265,6 +1269,7 @@ async function routeApi(request, env, ctx, auth) {
   if (path === "/api/send" && method === "POST") {
     try {
       const b = await readJson(request);
+      if (auth?.viaApiKey) b.track ??= false;
       const sendAt = Number(b.sendAt) || 0;
       if (sendAt > now() + 1000) {
         const id = uuid();

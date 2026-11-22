@@ -250,7 +250,7 @@ export async function sendMessage(env, user, payload) {
   }
 
   const isE2E = payload.pgp === true && text.includes("-----BEGIN PGP MESSAGE-----");
-  const trackingId = payload.track === false ? null : newTrackingId();
+  const trackingId = (payload.track ?? !payload.pgp) === true ? newTrackingId() : null;
   const pixel = trackingId ? pixelTag(env, trackingId) : "";
   const sendPayload = {
     to,

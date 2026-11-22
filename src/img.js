@@ -134,6 +134,8 @@ const FREE_MAIL = new Set([
   "estrogen.delivery",
 ]);
 
+const SECOND_LEVEL = new Set(["co", "com", "org", "net", "ac", "gov", "edu"]);
+
 export function brandDomain(address) {
   const host = String(address || "")
     .split("@")[1]
@@ -141,17 +143,34 @@ export function brandDomain(address) {
     .trim();
   if (!host || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) return null;
   const parts = host.split(".");
-  const keep = parts.length > 2 && parts.at(-2).length <= 3 && parts.at(-1).length === 2 ? 3 : 2;
+  const keep =
+    parts.length > 2 && parts.at(-1).length === 2 && SECOND_LEVEL.has(parts.at(-2)) ? 3 : 2;
   const root = parts.slice(-keep).join(".");
   return FREE_MAIL.has(root) ? null : root;
 }
 
 export async function brandLogo(domain, ctx) {
-  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) || FREE_MAIL.has(domain)) return deny(404, "none");
-  const key = new Request(`https://logo.cache/v2/${domain}`);
+  if (brandDomain(`x@${domain}`) !== domain) return deny(404, "none");
+  const key = new Request(`https://logo.cache/v3/${domain}`);
   const cache = caches.default;
   const hit = await cache.match(key);
   if (hit) return hit;
+  const get = async (start, accept, timeout) => {
+    let current = start;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      if (!isProxyableUrl(current)) return null;
+      const r = await fetch(current, {
+        redirect: "manual",
+        headers: { accept },
+        cf: { cacheTtl: 86400 },
+        signal: AbortSignal.timeout(timeout),
+      });
+      const loc = r.status >= 300 && r.status < 400 && r.headers.get("location");
+      if (!loc) return { res: r, url: current };
+      current = new URL(loc, current).href;
+    }
+    return null;
+  };
   const candidates = [
     `https://${domain}/apple-touch-icon.png`,
     `https://www.${domain}/apple-touch-icon.png`,
@@ -160,15 +179,19 @@ export async function brandLogo(domain, ctx) {
   ];
   let res = null;
   const tryIcon = async (url) => {
-    if (!isProxyableUrl(url)) return null;
     try {
-      const r = await fetch(url, { cf: { cacheTtl: 86400 }, signal: AbortSignal.timeout(3000) });
-      const ct = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-      if (!r.ok || !ALLOWED_MIME.has(ct)) return null;
+      const r = (await get(url, "image/*", 3000))?.res;
+      const ct = (r?.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+      if (!r?.ok || !ALLOWED_MIME.has(ct)) return null;
       const buf = await r.arrayBuffer();
       if (buf.byteLength < 100 || buf.byteLength > 256 * 1024) return null;
       return new Response(buf, {
-        headers: { "content-type": ct, "cache-control": "private, max-age=604800" },
+        headers: {
+          "content-type": ct,
+          "cache-control": "public, max-age=604800",
+          "x-content-type-options": "nosniff",
+          "content-security-policy": "default-src 'none'; sandbox",
+        },
       });
     } catch {
       return null;
@@ -180,8 +203,8 @@ export async function brandLogo(domain, ctx) {
   }
   if (!res) {
     try {
-      const page = await fetch(`https://${domain}/`, { signal: AbortSignal.timeout(4000) });
-      const html = page.ok ? (await page.text()).slice(0, 300_000) : "";
+      const page = await get(`https://${domain}/`, "text/html", 4000);
+      const html = page?.res.ok ? (await page.res.text()).slice(0, 300_000) : "";
       const icons = [...html.matchAll(/<link\b[^>]*>/gi)]
         .map(([tag]) => ({
           rel: tag.match(/rel=["']?([^"'>]+)/i)?.[1]?.toLowerCase() || "",
@@ -202,7 +225,7 @@ export async function brandLogo(domain, ctx) {
   if (!res)
     res = new Response(null, {
       status: 404,
-      headers: { "cache-control": "private, max-age=86400" },
+      headers: { "cache-control": "public, max-age=86400" },
     });
   ctx?.waitUntil?.(cache.put(key, res.clone()));
   return res;

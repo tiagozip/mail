@@ -1,3 +1,4 @@
+import { clientIp, consume } from "./ratelimit.js";
 import { now } from "./util.js";
 
 const GIF = Uint8Array.from(atob("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"), (c) =>
@@ -42,6 +43,7 @@ export async function handlePixel(request, env, ctx, id) {
   if (!ID.test(id) || request.method !== "GET") return res;
   ctx.waitUntil(
     (async () => {
+      if (!(await consume(env, "pixel", clientIp(request))).ok) return;
       const t = now();
       const row = await env.DB.prepare("SELECT created_at, last_open_at FROM tracking WHERE id = ?")
         .bind(id)
