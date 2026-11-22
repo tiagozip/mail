@@ -547,6 +547,12 @@ export function MessageList({
         )}
       </div>
 
+      <div className={`em-list-fade${floatHidden ? " is-hidden" : ""}`} aria-hidden="true">
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
       <div className={`em-floatbar${floatHidden ? " is-hidden" : ""}`}>
         {selecting ? (
           <BulkBar store={store} total={messages.length} />

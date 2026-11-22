@@ -6019,3 +6019,58 @@ body > div > [role="presentation"][data-side] {
 .em-opens-tip span {
   color: var(--text-color-kumo-subtle);
 }
+
+.em-main,
+.em-column,
+.em-column:has(> .em-pane-list) {
+  max-width: 900px;
+}
+
+.em-list-scroll {
+  padding-top: 16px;
+  mask-image: linear-gradient(to bottom, transparent, #000 18px);
+}
+
+.em-list-fade {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 10;
+  height: 132px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom in oklab,
+    transparent,
+    color-mix(in oklab, var(--color-kumo-canvas) 70%, transparent) 55%,
+    var(--color-kumo-canvas)
+  );
+  transition: opacity 240ms ease;
+}
+
+.em-list-fade.is-hidden {
+  opacity: 0;
+}
+
+.em-list-fade span {
+  position: absolute;
+  inset: 0;
+}
+
+.em-list-fade span:nth-child(1) {
+  backdrop-filter: blur(1px);
+  mask-image: linear-gradient(to bottom, transparent, #000 25%, #000 50%, transparent 75%);
+}
+
+.em-list-fade span:nth-child(2) {
+  backdrop-filter: blur(2px);
+  mask-image: linear-gradient(to bottom, transparent 25%, #000 50%, #000 75%, transparent);
+}
+
+.em-list-fade span:nth-child(3) {
+  backdrop-filter: blur(4px);
+  mask-image: linear-gradient(to bottom, transparent 50%, #000 75%, #000);
+}
+
+.em-list-fade span:nth-child(4) {
+  backdrop-filter: blur(8px);
+  mask-image: linear-gradient(to bottom, transparent 75%, #000);
+}

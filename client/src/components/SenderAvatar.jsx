@@ -39,7 +39,7 @@ function brandDomain(address) {
 const failed = new Set();
 
 export function SenderAvatar({ from, className = "" }) {
-  const domain = from?.authenticated ? brandDomain(from.address) : null;
+  const domain = brandDomain(from?.address);
   const src = from?.avatar || (domain && !failed.has(domain) ? `/api/logo/${domain}` : null);
   const [broken, setBroken] = useState(false);
   if (!src || broken) return <span className={`em-avatar ${className}`}>{initials(from || {})}</span>;

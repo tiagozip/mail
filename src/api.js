@@ -102,11 +102,7 @@ function listItem(row) {
     folder: row.folder,
     folderId: row.folder_id || null,
     deliveredTo: row.delivered_to || null,
-    from: {
-      address: row.from_addr,
-      name: row.from_name,
-      authenticated: JSON.parse(row.auth_detail || "{}")?.dmarc === "pass",
-    },
+    from: { address: row.from_addr, name: row.from_name },
     to: JSON.parse(row.to_json || "[]"),
     subject: row.subject,
     snippet: row.snippet,
