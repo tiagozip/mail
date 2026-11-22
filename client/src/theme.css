@@ -6026,9 +6026,24 @@ body > div > [role="presentation"][data-side] {
   max-width: 900px;
 }
 
+.em-app:has(.em-pane-list) .em-main {
+  height: calc(100% + var(--em-6));
+  margin-top: calc(-1 * var(--em-6));
+}
+
 .em-list-scroll {
-  padding-top: 16px;
-  mask-image: linear-gradient(to bottom, transparent, #000 18px);
+  padding-top: calc(var(--em-6) + 4px);
+}
+
+@media (max-width: 820px) {
+  .em-app:has(.em-pane-list) .em-main {
+    height: 100%;
+    margin-top: 0;
+  }
+
+  .em-list-scroll {
+    padding-top: 8px;
+  }
 }
 
 .em-list-fade {
@@ -6073,4 +6088,19 @@ body > div > [role="presentation"][data-side] {
 .em-list-fade span:nth-child(4) {
   backdrop-filter: blur(8px);
   mask-image: linear-gradient(to bottom, transparent 75%, #000);
+}
+
+.em-list-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.em-list-scroll > * {
+  flex: none;
+}
+
+.em-list-scroll > .em-empty {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
 }
