@@ -38,19 +38,45 @@ function brandDomain(address) {
 
 const failed = new Set();
 
+let randomAvatars = (() => {
+  try {
+    return localStorage.getItem("em-random-avatars") === "1";
+  } catch {
+    return false;
+  }
+})();
+
+export function setRandomAvatars(on) {
+  randomAvatars = !!on;
+  try {
+    localStorage.setItem("em-random-avatars", on ? "1" : "0");
+  } catch {}
+}
+
 export function SenderAvatar({ from, className = "" }) {
   const domain = brandDomain(from?.address);
-  const src = from?.avatar || (domain && !failed.has(domain) ? `/api/logo/${domain}` : null);
-  const [broken, setBroken] = useState(false);
-  if (!src || broken) return <span className={`em-avatar ${className}`}>{initials(from || {})}</span>;
+  const sources = [
+    from?.avatar && { src: from.avatar, kind: "user" },
+    domain && { src: `/api/logo/${domain}`, kind: "logo" },
+    from?.hash && { src: `/api/gravatar/${from.hash}`, kind: "user" },
+    randomAvatars &&
+      (from?.hash || from?.address) && {
+        src: `https://avatars.tiago.zip/random.png?seed=${from.hash || encodeURIComponent(from.address)}`,
+        kind: "user",
+      },
+  ].filter((x) => x && !failed.has(x.src));
+  const [, bump] = useState(0);
+  const pick = sources[0];
+  if (!pick) return <span className={`em-avatar ${className}`}>{initials(from || {})}</span>;
   return (
     <img
-      className={`em-avatar em-avatar-img${from?.avatar ? "" : " em-avatar-logo"} ${className}`}
-      src={src}
+      key={pick.src}
+      className={`em-avatar em-avatar-img${pick.kind === "logo" ? " em-avatar-logo" : ""} ${className}`}
+      src={pick.src}
       alt=""
       onError={() => {
-        if (domain) failed.add(domain);
-        setBroken(true);
+        failed.add(pick.src);
+        bump((n) => n + 1);
       }}
     />
   );

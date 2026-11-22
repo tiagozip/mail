@@ -1,3 +1,4 @@
+import { setRandomAvatars } from "./components/SenderAvatar.jsx";
 import { Loader, Toasty, TooltipProvider } from "@cloudflare/kumo";
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
@@ -52,6 +53,7 @@ export function App() {
           } catch {}
           const p = d.user.settings?.palette;
           if (p) setPalette(p === "plum" || THEMES.includes(p) ? p : "plum");
+          setRandomAvatars(!!d.user.settings?.randomAvatars);
           if (d.user.settings?.imagesDefault !== undefined) {
             localStorage.setItem("em-images-default", d.user.settings.imagesDefault ? "1" : "0");
           }

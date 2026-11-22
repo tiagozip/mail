@@ -1,3 +1,4 @@
+import { setRandomAvatars } from "./SenderAvatar.jsx";
 import {
   Badge,
   Button,
@@ -1434,6 +1435,7 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
   const [imagesDefault, setImagesDefault] = useState(!!user.settings?.imagesDefault);
   const [catchAll, setCatchAll] = useState(!!user.settings?.catchAll);
   const [aiSpam, setAiSpam] = useState(user.settings?.aiSpam !== false);
+  const [randomAvatars, setRandomAvatarsState] = useState(!!user.settings?.randomAvatars);
   const [undoSend, setUndoSend] = useState(user.settings?.undoSend || 0);
   const [busy, setBusy] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -1516,6 +1518,23 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
       setUser(data.user);
     } catch (e) {
       setUndoSend(prev);
+      notifyError(e);
+    }
+  }
+
+  async function saveRandomAvatars(v) {
+    setRandomAvatarsState(v);
+    setRandomAvatars(v);
+    try {
+      const data = await api.saveSettings({
+        displayName,
+        signature,
+        settings: { ...user.settings, randomAvatars: v },
+      });
+      setUser(data.user);
+    } catch (e) {
+      setRandomAvatarsState(!v);
+      setRandomAvatars(!v);
       notifyError(e);
     }
   }
@@ -1732,6 +1751,19 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
                       aria-label="Load remote images by default"
                       checked={imagesDefault}
                       onCheckedChange={setImagesDefault}
+                    />
+                  </div>
+                  <div className="em-toggle-row">
+                    <div className="em-toggle-copy">
+                      <div className="em-toggle-title">Anime pictures for senders without one</div>
+                      <div className="em-toggle-sub">
+                        Each sender gets the same random picture every time instead of their initials.
+                      </div>
+                    </div>
+                    <Switch
+                      aria-label="Anime pictures for senders without one"
+                      checked={randomAvatars}
+                      onCheckedChange={saveRandomAvatars}
                     />
                   </div>
                 </div>

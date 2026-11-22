@@ -4,7 +4,7 @@ const MSGS = "messages";
 const META = "meta";
 const THREADS = "threads";
 const SNIPPETS = "snippets";
-const CAP = 500;
+const CAP = 50000;
 const CURSOR_KEY = "syncCursor";
 
 let dbp = null;
@@ -45,18 +45,45 @@ async function writeStore(store, fn) {
   } catch {}
 }
 
+let memp = null;
+
+function mem() {
+  if (memp) return memp;
+  memp = (async () => {
+    try {
+      const d = await db();
+      const rows = (await reqP(d.transaction(MSGS, "readonly").objectStore(MSGS).getAll())) || [];
+      return new Map(rows.map((r) => [r.id, r]));
+    } catch {
+      return new Map();
+    }
+  })();
+  return memp;
+}
+
 export async function allMessages() {
+  return [...(await mem()).values()];
+}
+
+export async function getMeta(key) {
   try {
     const d = await db();
-    return (await reqP(d.transaction(MSGS, "readonly").objectStore(MSGS).getAll())) || [];
+    return await reqP(d.transaction(META, "readonly").objectStore(META).get(key));
   } catch {
-    return [];
+    return undefined;
   }
+}
+
+export function setMeta(key, value) {
+  return writeStore(META, (s) => s.put(value, key));
 }
 
 export function putMessages(items) {
   const list = (items || []).filter((it) => it?.id);
   if (!list.length) return Promise.resolve();
+  mem().then((m) => {
+    for (const it of list) m.set(it.id, it);
+  });
   return writeStore(MSGS, (s) => {
     for (const it of list) s.put(it);
   });
@@ -65,6 +92,9 @@ export function putMessages(items) {
 export function removeMessages(ids) {
   const list = (ids || []).filter(Boolean);
   if (!list.length) return Promise.resolve();
+  mem().then((m) => {
+    for (const id of list) m.delete(id);
+  });
   writeStore(SNIPPETS, (s) => {
     for (const id of list) s.delete(id);
   });
@@ -152,35 +182,45 @@ export function setSkipInboxFolders(ids) {
 
 const HIDDEN_IN_FOLDER = ["trash", "spam", "drafts"];
 
-export function matchView(item, view, nowTs) {
+export function matchView(item, view, nowTs, inboxThreads) {
   const snoozed = item.snoozeUntil && item.snoozeUntil > nowTs;
   if (view.kind === "folder" && view.folder === "snoozed") return !!snoozed;
   if (snoozed) return false;
   if (view.kind === "userfolder")
     return item.folderId === view.folderId && !HIDDEN_IN_FOLDER.includes(item.folder);
-  if (view.kind === "folder" && view.folder === "inbox")
+  if (view.kind === "folder" && view.folder === "inbox") {
+    if (item.folder === "sent") return !!inboxThreads?.has(item.threadId);
     return item.folder === "inbox" && !(item.folderId && skipInboxFolderIds.has(item.folderId));
+  }
   if (view.kind === "folder") return item.folder === view.folder;
   if (view.kind === "starred") return item.isStarred && item.folder !== "trash";
   if (view.kind === "label") return (item.labels || []).some((l) => l.id === view.labelId);
   return false;
 }
 
+export function inboxThreadsOf(list) {
+  const out = new Set();
+  for (const m of list) if (m.folder === "inbox" && m.threadId) out.add(m.threadId);
+  return out;
+}
+
 export async function viewFromCache(view, limit = 50) {
   if (view.kind === "search") return [];
   const all = await allMessages();
   const nowTs = Date.now();
+  const threads = view.folder === "inbox" ? inboxThreadsOf(all) : null;
   return all
-    .filter((m) => matchView(m, view, nowTs))
+    .filter((m) => matchView(m, view, nowTs, threads))
     .sort((a, b) => b.date - a.date || (a.id < b.id ? 1 : -1))
     .slice(0, limit);
 }
 
 export async function clearAll() {
+  memp = null;
   try {
     const d = await db();
     await Promise.all(
-      [MSGS, META, THREADS].map(
+      [MSGS, META, THREADS, SNIPPETS].map(
         (store) =>
           new Promise((res, rej) => {
             const t = d.transaction(store, "readwrite");

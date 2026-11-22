@@ -214,93 +214,115 @@ function BulkBar({ store, total }) {
   );
 }
 
-function EdgeScrollbar({ scrollRef, expected, rowHeight }) {
+function EdgeScrollbar({ scrollRef, expected, rowHeight, version }) {
+  const barRef = useRef(null);
   const thumbRef = useRef(null);
-  const [state, setState] = useState(null);
-  const drag = useRef(null);
+  const geo = useRef(null);
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    let frame = 0;
+    const bar = barRef.current;
+    const thumb = thumbRef.current;
+    if (!el || !bar || !thumb) return;
+    let hideTimer = 0;
+    let near = false;
+    let dragging = null;
+    const show = () => {
+      bar.classList.add("is-visible");
+      clearTimeout(hideTimer);
+      if (!near && !dragging) hideTimer = setTimeout(() => bar.classList.remove("is-visible"), 900);
+    };
+    const place = () => {
+      const g = geo.current;
+      if (!g) return;
+      const max = el.scrollHeight - el.clientHeight;
+      const ratio = g.virtual - el.clientHeight > 0 ? el.scrollTop / (g.virtual - el.clientHeight) : 0;
+      const offset = Math.min(ratio * (g.track - g.size), max > 0 ? g.track - g.size : 0);
+      thumb.style.transform = `translateY(${offset}px)`;
+    };
     const measure = () => {
-      frame = 0;
-      const { scrollTop, scrollHeight, clientHeight } = el;
+      const { scrollHeight, clientHeight } = el;
       const rect = el.getBoundingClientRect();
-      const virtual = Math.max(scrollHeight, scrollHeight + Math.max(0, expected.current) * rowHeight);
-      if (virtual <= clientHeight + 1) return setState(null);
+      const virtual = scrollHeight + Math.max(0, expected.current) * rowHeight;
+      if (virtual <= clientHeight + 1) {
+        geo.current = null;
+        bar.style.display = "none";
+        return;
+      }
       const track = rect.height - 16;
       const size = Math.max(40, (clientHeight / virtual) * track);
-      const offset = (scrollTop / (virtual - clientHeight)) * (track - size);
-      setState({ top: rect.top + 8, size, offset: Math.min(offset, track - size), virtual, track });
+      geo.current = { virtual, track, size, top: rect.top + 8 };
+      bar.style.display = "";
+      bar.style.top = `${rect.top + 8}px`;
+      bar.style.height = `${track}px`;
+      thumb.style.height = `${size}px`;
+      place();
     };
-    const queue = () => {
-      if (!frame) frame = requestAnimationFrame(measure);
+    const onScroll = () => {
+      place();
+      show();
     };
-    measure();
-    el.addEventListener("scroll", queue, { passive: true });
-    window.addEventListener("resize", queue);
-    const ro = new ResizeObserver(queue);
-    ro.observe(el);
-    if (el.firstElementChild) for (const c of el.children) ro.observe(c);
+    const onMove = (e) => {
+      const isNear = window.innerWidth - e.clientX < 48;
+      if (isNear === near) return;
+      near = isNear;
+      if (near) show();
+      else if (!dragging) show();
+    };
     const onWheel = (e) => {
       if (e.ctrlKey || el.contains(e.target)) return;
       if (!e.target.closest?.(".em-app, .em-scrollbar")) return;
       if (e.target.closest(".em-sidebar-wrap, .em-floatbar, [role=dialog], [role=menu]")) return;
       el.scrollTop += e.deltaY;
     };
+    const onDown = (e) => {
+      const g = geo.current;
+      if (!g) return;
+      e.preventDefault();
+      const ratio = (g.virtual - el.clientHeight) / (g.track - g.size);
+      if (e.target !== thumb) el.scrollTop = Math.max(0, e.clientY - g.top - g.size / 2) * ratio;
+      dragging = { y: e.clientY, start: el.scrollTop, ratio };
+      bar.classList.add("is-dragging");
+      bar.setPointerCapture(e.pointerId);
+      show();
+    };
+    const onDrag = (e) => {
+      if (!dragging) return;
+      el.scrollTop = dragging.start + (e.clientY - dragging.y) * dragging.ratio;
+    };
+    const onUp = () => {
+      dragging = null;
+      bar.classList.remove("is-dragging");
+      show();
+    };
+    measure();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", measure);
+    window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("wheel", onWheel, { passive: true });
+    bar.addEventListener("pointerdown", onDown);
+    bar.addEventListener("pointermove", onDrag);
+    bar.addEventListener("pointerup", onUp);
+    bar.addEventListener("pointercancel", onUp);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
     return () => {
-      cancelAnimationFrame(frame);
-      el.removeEventListener("scroll", queue);
-      window.removeEventListener("resize", queue);
+      clearTimeout(hideTimer);
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("pointermove", onMove);
       window.removeEventListener("wheel", onWheel);
+      bar.removeEventListener("pointerdown", onDown);
+      bar.removeEventListener("pointermove", onDrag);
+      bar.removeEventListener("pointerup", onUp);
+      bar.removeEventListener("pointercancel", onUp);
       ro.disconnect();
     };
-  }, [scrollRef, expected, rowHeight]);
-
-  if (!state) return null;
-
-  function onPointerDown(e) {
-    const el = scrollRef.current;
-    if (!el) return;
-    e.preventDefault();
-    const onThumb = e.target === thumbRef.current;
-    const ratio = (state.virtual - el.clientHeight) / (state.track - state.size);
-    if (!onThumb) {
-      const y = e.clientY - state.top - state.size / 2;
-      el.scrollTop = Math.max(0, y) * ratio;
-    }
-    drag.current = { y: e.clientY, start: el.scrollTop, ratio };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function onPointerMove(e) {
-    const d = drag.current;
-    const el = scrollRef.current;
-    if (!d || !el) return;
-    el.scrollTop = d.start + (e.clientY - d.y) * d.ratio;
-  }
+  }, [scrollRef, expected, rowHeight, version]);
 
   return createPortal(
-    <div
-      className={`em-scrollbar${drag.current ? " is-dragging" : ""}`}
-      style={{ top: state.top, height: state.track }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={() => {
-        drag.current = null;
-      }}
-      onPointerCancel={() => {
-        drag.current = null;
-      }}
-      aria-hidden="true"
-    >
-      <div
-        ref={thumbRef}
-        className="em-scrollbar-thumb"
-        style={{ height: state.size, transform: `translateY(${state.offset}px)` }}
-      />
+    <div ref={barRef} className="em-scrollbar" aria-hidden="true" style={{ display: "none" }}>
+      <div ref={thumbRef} className="em-scrollbar-thumb" />
     </div>,
     document.body,
   );
@@ -647,7 +669,12 @@ export function MessageList({
         )}
       </div>
 
-      <EdgeScrollbar scrollRef={scrollRef} expected={expected} rowHeight={52} />
+      <EdgeScrollbar
+        scrollRef={scrollRef}
+        expected={expected}
+        rowHeight={52}
+        version={`${messages.length}:${expected.current}:${listLoading}:${view.kind}${view.folder || ""}`}
+      />
       <div className={`em-list-fade${floatHidden ? " is-hidden" : ""}`} aria-hidden="true">
         <span />
         <span />

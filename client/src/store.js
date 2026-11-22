@@ -8,6 +8,9 @@ const POLL_ACTIVE_MAX = 30000;
 const POLL_HIDDEN = 60000;
 const POLL_DECAY = 1.6;
 const ACTIVITY_THROTTLE = 5000;
+const LOCAL = "local";
+const LOCAL_PAGE = 100;
+const BODY_PREFETCH = 100;
 
 function sortMessages(list) {
   return list.sort((a, b) => b.date - a.date || (a.id < b.id ? 1 : -1));
@@ -38,6 +41,9 @@ export function useMailStore(initialUser) {
   const viewRef = useRef(view);
   const syncing = useRef(false);
   const countsTimer = useRef(null);
+  const localReady = useRef(false);
+  const threadSeqOpen = useRef(null);
+  const refetchOpen = useRef(null);
 
   useEffect(() => {
     viewRef.current = view;
@@ -100,10 +106,19 @@ export function useMailStore(initialUser) {
       const seq = ++reqSeq.current;
       const key = JSON.stringify(v);
       const mem = listCache.current.get(key);
+      setSelectedIds(new Set());
+      if (localReady.current && v.kind !== "search") {
+        cache.viewFromCache(v, LOCAL_PAGE + 1).then((list) => {
+          if (seq !== reqSeq.current) return;
+          setMessages(list.slice(0, LOCAL_PAGE));
+          setNextCursor(list.length > LOCAL_PAGE ? LOCAL : null);
+          setListLoading(false);
+        });
+        return;
+      }
       setListLoading(!mem);
       setMessages(mem?.messages || []);
       setNextCursor(mem?.nextCursor || null);
-      setSelectedIds(new Set());
       cache.viewFromCache(v).then((cached) => {
         if (seq !== reqSeq.current || !cached.length || listCache.current.has(key)) return;
         setMessages(cached);
@@ -117,36 +132,7 @@ export function useMailStore(initialUser) {
           setMessages(list);
           setNextCursor(d.nextCursor || null);
           listCache.current.set(key, { messages: list, nextCursor: d.nextCursor || null });
-          cache.putMessages(list).then(() => cache.pruneToCap());
-          const ids = [
-            ...new Set(list.slice(0, 8).map((mm) => mm.threadId).filter(Boolean)),
-          ].filter((id) => !threadCache.current.has(id) && !inflight.current.has(id));
-          if (ids.length) {
-            for (const id of ids) inflight.current.add(id);
-            (async () => {
-              const gaps = [];
-              await Promise.all(
-                ids.map(async (id) => {
-                  const persisted = await cache.getThread(id);
-                  if (persisted) threadCache.current.set(id, persisted);
-                  else gaps.push(id);
-                }),
-              );
-              if (gaps.length) {
-                try {
-                  const r = await api.threadsBulk(gaps);
-                  for (const id of gaps) {
-                    const msgs = r.threads?.[id];
-                    if (msgs) {
-                      threadCache.current.set(id, msgs);
-                      cache.putThread(id, msgs);
-                    }
-                  }
-                } catch {}
-              }
-              for (const id of ids) inflight.current.delete(id);
-            })();
-          }
+          cache.putMessages(list);
         })
         .catch((e) => {
           if (seq === reqSeq.current) notifyError(e);
@@ -160,8 +146,17 @@ export function useMailStore(initialUser) {
 
   const loadMore = useCallback(() => {
     if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
     const seq = reqSeq.current;
+    if (nextCursor === LOCAL) {
+      const want = messages.length + LOCAL_PAGE;
+      cache.viewFromCache(view, want + 1).then((list) => {
+        if (seq !== reqSeq.current) return;
+        setMessages(list.slice(0, want));
+        setNextCursor(list.length > want ? LOCAL : null);
+      });
+      return;
+    }
+    setLoadingMore(true);
     api
       .messages(queryFor(view, nextCursor))
       .then((d) => {
@@ -171,13 +166,12 @@ export function useMailStore(initialUser) {
       })
       .catch(notifyError)
       .finally(() => setLoadingMore(false));
-  }, [nextCursor, loadingMore, queryFor, view]);
+  }, [nextCursor, loadingMore, queryFor, view, messages.length]);
 
   const applyDelta = useCallback((upserts, deletes) => {
     if (!upserts.length && !deletes.length) return;
     cache.putMessages(upserts);
     cache.removeMessages(deletes);
-    cache.pruneToCap();
     for (const id of deletes) {
       for (const [tid, msgs] of threadCache.current) {
         if (msgs.some((mm) => mm.id === id)) {
@@ -186,12 +180,35 @@ export function useMailStore(initialUser) {
         }
       }
     }
+    const FLAGS = ["isRead", "isStarred", "labels", "folder", "folderId", "snoozeUntil"];
+    for (const it of upserts) {
+      const tid = it.threadId;
+      const msgs = threadCache.current.get(tid);
+      if (!msgs) {
+        cache.getThread(tid).then((p) => {
+          if (p && !p.some((x) => x.id === it.id)) cache.deleteThread(tid);
+        });
+        continue;
+      }
+      const idx = msgs.findIndex((x) => x.id === it.id);
+      if (idx === -1) {
+        threadCache.current.delete(tid);
+        cache.deleteThread(tid);
+        if (threadSeqOpen.current === tid) refetchOpen.current?.(tid);
+        continue;
+      }
+      const patch = Object.fromEntries(FLAGS.filter((k) => k in it).map((k) => [k, it[k]]));
+      const next = msgs.map((x, i) => (i === idx ? { ...x, ...patch } : x));
+      threadCache.current.set(tid, next);
+      cache.putThread(tid, next);
+    }
     const delSet = new Set(deletes);
     const nowTs = Date.now();
     setMessages((prev) => {
       const byId = new Map(prev.filter((m) => !delSet.has(m.id)).map((m) => [m.id, m]));
+      const threads = cache.inboxThreadsOf([...byId.values(), ...upserts]);
       for (const it of upserts) {
-        if (cache.matchView(it, viewRef.current, nowTs)) byId.set(it.id, it);
+        if (cache.matchView(it, viewRef.current, nowTs, threads)) byId.set(it.id, it);
         else byId.delete(it.id);
       }
       return sortMessages([...byId.values()]);
@@ -226,6 +243,67 @@ export function useMailStore(initialUser) {
   useEffect(() => {
     loadList(view);
   }, [view, loadList]);
+
+  useEffect(() => {
+    let stopped = false;
+    const idle = () =>
+      new Promise((res) =>
+        window.requestIdleCallback ? requestIdleCallback(res, { timeout: 2000 }) : setTimeout(res, 200),
+      );
+    (async () => {
+      if (!user?.id) return;
+      if ((await cache.getMeta("userId")) !== user.id) {
+        await cache.clearAll();
+        await cache.setMeta("userId", user.id);
+      }
+      if (await cache.getMeta("backfillDone")) {
+        localReady.current = true;
+        loadList(viewRef.current);
+      } else {
+        let before = (await cache.getMeta("backfillBefore")) || 0;
+        while (!stopped) {
+          const d = await api.backfill(before).catch(() => null);
+          if (!d) return;
+          if (d.seq != null && !(await cache.getCursor())) await cache.setCursor(d.seq);
+          await cache.putMessages(d.messages || []);
+          if (!d.before) break;
+          before = d.before;
+          await cache.setMeta("backfillBefore", before);
+        }
+        if (stopped) return;
+        await cache.setMeta("backfillDone", true);
+        localReady.current = true;
+        await syncNow();
+        loadList(viewRef.current);
+      }
+      const all = await cache.allMessages();
+      const inbox = await cache.viewFromCache({ kind: "folder", folder: "inbox" }, BODY_PREFETCH);
+      const want = [
+        ...new Set([
+          ...all.filter((m) => !m.isRead && m.folder !== "trash" && m.folder !== "spam").map((m) => m.threadId),
+          ...inbox.map((m) => m.threadId),
+        ]),
+      ].filter(Boolean);
+      const gaps = [];
+      for (const id of want) if (!threadCache.current.has(id) && !(await cache.getThread(id))) gaps.push(id);
+      for (let i = 0; i < gaps.length && !stopped; i += 10) {
+        await idle();
+        const batch = gaps.slice(i, i + 10).filter((id) => !threadCache.current.has(id));
+        if (!batch.length) continue;
+        const r = await api.threadsBulk(batch).catch(() => null);
+        if (!r) break;
+        for (const id of batch) {
+          const msgs = r.threads?.[id];
+          if (!msgs) continue;
+          threadCache.current.set(id, msgs);
+          cache.putThread(id, msgs);
+        }
+      }
+    })();
+    return () => {
+      stopped = true;
+    };
+  }, [user?.id, loadList, syncNow]);
 
   useEffect(() => {
     refreshCounts();
@@ -274,7 +352,7 @@ export function useMailStore(initialUser) {
 
   const goView = useCallback((v) => {
     threadSeq.current++;
-    if (threadCache.current.size > 200) threadCache.current.clear();
+    if (threadCache.current.size > 1000) threadCache.current.clear();
     setOpenId(null);
     setThread(null);
     setView(v);
@@ -292,8 +370,8 @@ export function useMailStore(initialUser) {
         setThreadLoading(true);
         setThread(null);
         cache.getThread(item.threadId).then((persisted) => {
-          if (seq !== threadSeq.current) return;
-          if (!persisted || threadCache.current.has(item.threadId)) return;
+          if (seq !== threadSeq.current || !persisted) return;
+          threadCache.current.set(item.threadId, persisted);
           setThread((cur) => (cur ? cur : { threadId: item.threadId, messages: persisted }));
           setThreadLoading(false);
         });
@@ -311,30 +389,48 @@ export function useMailStore(initialUser) {
           return next;
         });
       }
-      api
-        .thread(item.threadId, true)
-        .then((d) => {
+      if (unread.length) {
+        const ids = unread.map((m) => m.id);
+        cache.putMessages(unread.map((m) => ({ ...m, isRead: true, _members: undefined })));
+        (ids.length > 1 ? api.bulk(ids, "read", true) : api.setRead(ids[0], true))
+          .then(() => refreshCounts())
+          .catch(() => refreshCounts());
+      }
+      if (cached) return;
+      (async () => {
+        const persisted = await cache.getThread(item.threadId);
+        if (persisted) return;
+        try {
+          const d = await api.thread(item.threadId);
           const msgs = d.messages || [];
           threadCache.current.set(item.threadId, msgs);
           cache.putThread(item.threadId, msgs);
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.threadId === item.threadId && m.folder !== "sent" ? { ...m, isRead: true } : m,
-            ),
-          );
-          refreshCounts();
-          if (seq !== threadSeq.current) return;
-          setThread({ threadId: item.threadId, messages: msgs });
-        })
-        .catch((e) => {
-          if (!cached && seq === threadSeq.current) notifyError(e);
-        })
-        .finally(() => {
+          if (seq === threadSeq.current) setThread({ threadId: item.threadId, messages: msgs });
+        } catch (e) {
+          if (seq === threadSeq.current) notifyError(e);
+        } finally {
           if (seq === threadSeq.current) setThreadLoading(false);
-        });
+        }
+      })();
     },
     [refreshCounts],
   );
+
+  useEffect(() => {
+    threadSeqOpen.current = thread?.threadId || null;
+  }, [thread?.threadId]);
+
+  refetchOpen.current = (tid) => {
+    api
+      .thread(tid)
+      .then((d) => {
+        const msgs = d.messages || [];
+        threadCache.current.set(tid, msgs);
+        cache.putThread(tid, msgs);
+        setThread((cur) => (cur?.threadId === tid ? { threadId: tid, messages: msgs } : cur));
+      })
+      .catch(() => {});
+  };
 
   const closeMessage = useCallback(() => {
     threadSeq.current++;
@@ -367,7 +463,7 @@ export function useMailStore(initialUser) {
     const cached = threadCache.current.get(msg.threadId);
     if (cached) threadCache.current.set(msg.threadId, [...cached.filter((m) => m.id !== msg.id), msg]);
     setMessages((prev) =>
-      cache.matchView(msg, viewRef.current, Date.now())
+      cache.matchView(msg, viewRef.current, Date.now(), cache.inboxThreadsOf(prev))
         ? sortMessages([msg, ...prev.filter((m) => m.id !== msg.id)])
         : prev,
     );
@@ -541,7 +637,11 @@ export function useMailStore(initialUser) {
 
   const bulkAction = useCallback(
     (action, value, only) => {
-      const ids = only ?? [...selectedIds];
+      const sentIds =
+        viewRef.current.folder === "inbox"
+          ? new Set(messages.filter((m) => m.folder === "sent").map((m) => m.id))
+          : null;
+      const ids = (only ?? [...selectedIds]).filter((id) => !sentIds?.has(id));
       if (!ids.length) return;
       const idSet = new Set(ids);
       if (action === "read" || action === "star") {

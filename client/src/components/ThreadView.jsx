@@ -1355,9 +1355,15 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
                 <div className="em-msg-from">{listItem?.from?.name || listItem?.from?.address}</div>
               </div>
               <div className="em-msg-body">
-                <div className="em-ghost-line" />
-                <div className="em-ghost-line" />
-                <div className="em-ghost-line em-ghost-short" />
+                {listItem?.snippet && !listItem.pgp ? (
+                  <p className="em-msg-shell">{listItem.snippet}</p>
+                ) : (
+                  <>
+                    <div className="em-ghost-line" />
+                    <div className="em-ghost-line" />
+                    <div className="em-ghost-line em-ghost-short" />
+                  </>
+                )}
               </div>
             </div>
           </div>

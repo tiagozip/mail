@@ -230,3 +230,33 @@ export async function brandLogo(domain, ctx) {
   ctx?.waitUntil?.(cache.put(key, res.clone()));
   return res;
 }
+
+export async function gravatarFace(hash, ctx) {
+  const key = new Request(`https://gravatar.cache/v1/${hash}`);
+  const cache = caches.default;
+  const hit = await cache.match(key);
+  if (hit) return hit;
+  let out;
+  try {
+    const r = await fetch(`https://gravatar.com/avatar/${hash}?s=128&d=404`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    const ct = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (r.ok && ALLOWED_MIME.has(ct)) {
+      out = new Response(await r.arrayBuffer(), {
+        headers: {
+          "content-type": ct,
+          "cache-control": "public, max-age=604800",
+          "x-content-type-options": "nosniff",
+          "content-security-policy": "default-src 'none'; sandbox",
+        },
+      });
+    }
+  } catch {}
+  out ||= new Response("none", {
+    status: 404,
+    headers: { "cache-control": "public, max-age=86400" },
+  });
+  ctx.waitUntil(cache.put(key, out.clone()));
+  return out;
+}

@@ -6120,6 +6120,13 @@ body > div > [role="presentation"][data-side] {
   z-index: 40;
   touch-action: none;
   user-select: none;
+  opacity: 0;
+  transition: opacity 400ms ease-out;
+}
+
+.em-scrollbar.is-visible {
+  opacity: 1;
+  transition-duration: 120ms;
 }
 
 .em-scrollbar-thumb {
@@ -6150,4 +6157,11 @@ body > div > [role="presentation"][data-side] {
   .em-list-scroll {
     scrollbar-width: thin;
   }
+}
+
+.em-msg-shell {
+  margin: 0;
+  color: var(--text-color-kumo-subtle);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }

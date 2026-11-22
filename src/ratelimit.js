@@ -36,6 +36,7 @@ export const LIMITS = {
   read: { limit: 600, window: MINUTE, scope: "user" },
   write: { limit: 180, window: MINUTE, scope: "user" },
   sync: { limit: 300, window: MINUTE, scope: "user" },
+  backfill: { limit: 60, window: MINUTE, scope: "user" },
   search: { limit: 60, window: MINUTE, scope: "user" },
   bulk: { limit: 60, window: MINUTE, scope: "user" },
 
@@ -215,6 +216,7 @@ const ROUTES = [
   ["WRITE", /^\/api\/(hidden-)?aliases(\/|$)/, ["alias:write"]],
 
   ["GET", /^\/api\/sync$/, ["sync"]],
+  ["GET", /^\/api\/sync\/backfill$/, ["backfill"]],
   ["GET", /^\/api\/contacts$/, ["search"]],
   ["POST", /^\/api\/(messages|threads)\/bulk$/, ["bulk"]],
 

@@ -107,7 +107,7 @@ export function recipientLine(list) {
 
 export function senderLabel(item, selfAddresses) {
   const selves = new Set((selfAddresses || []).map((a) => a.toLowerCase()));
-  const outgoing = item.folder === "sent" || item.folder === "drafts";
+  const outgoing = (item._members || [item]).every((m) => m.folder === "sent" || m.folder === "drafts");
   if (outgoing) {
     const names = (item.to || []).map((t) => t.name || t.address);
     return `To ${names.join(", ") || "(no recipient)"}`;
@@ -116,7 +116,7 @@ export function senderLabel(item, selfAddresses) {
   for (const m of item._members || [item]) {
     const out = m.folder === "sent" || m.folder === "drafts";
     const isSelf = out || (m.from?.address && selves.has(m.from.address.toLowerCase()));
-    const label = isSelf ? "you" : displayName(m.from) || m.from?.address || "(unknown)";
+    const label = isSelf ? "me" : displayName(m.from) || m.from?.address || "(unknown)";
     if (!names.includes(label)) names.push(label);
   }
   if (!names.length) return displayName(item.from) || item.from?.address || "(unknown)";

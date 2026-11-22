@@ -21,7 +21,7 @@ import {
 } from "./byod.js";
 import { encryptBytes, encryptText, tryDecryptBytes, tryDecryptText } from "./crypto.js";
 import { checkOwnership, checkSendingDns, lookupMx } from "./domains.js";
-import { brandLogo, proxyImage, proxyUrl } from "./img.js";
+import { brandLogo, gravatarFace, proxyImage, proxyUrl } from "./img.js";
 import {
   authorizeUrl,
   challengeFor,
@@ -153,8 +153,17 @@ async function attachSenderAvatars(env, items) {
       .all();
     for (const r of res.results || []) map[r.address] = r.avatar_url;
   }
+  const hashes = {};
+  await Promise.all(
+    addrs.map(async (a) => {
+      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(a.trim().toLowerCase()));
+      hashes[a] = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    }),
+  );
   for (const i of list) {
-    if (i.from?.address && map[i.from.address]) i.from.avatar = map[i.from.address];
+    if (!i.from?.address) continue;
+    if (map[i.from.address]) i.from.avatar = map[i.from.address];
+    i.from.hash = hashes[i.from.address];
   }
   return items;
 }
@@ -294,7 +303,8 @@ async function upsertOidcUser(env, claims) {
   const existing = await env.DB.prepare("SELECT * FROM users WHERE oidc_sub = ?").bind(sub).first();
   if (existing) {
     const isAdmin = adminFromGroup ? 1 : 0;
-    const avatar = existing.avatar_url || picture || null;
+    const uploaded = existing.avatar_url?.startsWith("/api/avatar");
+    const avatar = (uploaded ? existing.avatar_url : picture || existing.avatar_url) || null;
     await env.DB.prepare(
       "UPDATE users SET display_name = ?, email = ?, is_admin = ?, avatar_url = ?, last_login = ? WHERE id = ?",
     )
@@ -636,13 +646,14 @@ async function listMessages(request, env, user) {
       where.push("m.id IN (SELECT message_id FROM message_labels WHERE label_id = ?)");
       binds.push(labelId);
     } else {
-      where.push("m.folder = ?");
-      binds.push(folder);
       if (folder === "inbox") {
         where.push(
-          "(m.folder_id IS NULL OR m.folder_id NOT IN (SELECT id FROM folders WHERE user_id = ? AND skip_inbox = 1))",
+          "((m.folder = 'inbox' AND (m.folder_id IS NULL OR m.folder_id NOT IN (SELECT id FROM folders WHERE user_id = ? AND skip_inbox = 1))) OR (m.folder = 'sent' AND m.thread_id IN (SELECT thread_id FROM messages WHERE user_id = ? AND folder = 'inbox')))",
         );
-        binds.push(user.id);
+        binds.push(user.id, user.id);
+      } else {
+        where.push("m.folder = ?");
+        binds.push(folder);
       }
     }
     where.push("(m.snooze_until IS NULL OR m.snooze_until <= ?)");
@@ -793,6 +804,30 @@ async function syncChanges(env, user, since, limit) {
     for (const id of upsertIds) if (!foundIds.has(id)) deletes.push(id);
   }
   return json({ upserts, deletes, cursor, more });
+}
+
+async function backfill(env, user, before, limit) {
+  const lim = clampInt(limit, 1, 500, 500);
+  const res = await env.DB.prepare(
+    "SELECT rowid AS rid, * FROM messages WHERE user_id = ? AND rowid < ? ORDER BY rowid DESC LIMIT ?",
+  )
+    .bind(user.id, before || Number.MAX_SAFE_INTEGER, lim)
+    .all();
+  const rows = res.results || [];
+  const items = await withLabels(env, user.id, rows.map(listItem));
+  await attachSenderAvatars(env, items);
+  const seq = before
+    ? null
+    : ((
+        await env.DB.prepare("SELECT MAX(seq) AS s FROM mailbox_changes WHERE user_id = ?")
+          .bind(user.id)
+          .first()
+      )?.s ?? 0);
+  return json({
+    messages: items,
+    before: rows.length === lim ? rows[rows.length - 1].rid : null,
+    seq,
+  });
 }
 
 async function markRead(env, user, ids, read) {
@@ -1095,6 +1130,14 @@ async function routeApi(request, env, ctx, auth) {
     return syncChanges(env, user, since, url.searchParams.get("limit"));
   }
   if (path === "/api/messages" && method === "GET") return listMessages(request, env, user);
+  if (path === "/api/sync/backfill" && method === "GET") {
+    return backfill(
+      env,
+      user,
+      clampInt(url.searchParams.get("before"), 0, Number.MAX_SAFE_INTEGER, 0),
+      url.searchParams.get("limit"),
+    );
+  }
 
   let m;
   if ((m = path.match(/^\/api\/threads\/([\w-]+)$/)) && method === "GET") {
@@ -1333,6 +1376,8 @@ async function routeApi(request, env, ctx, auth) {
   if (path === "/api/img" && method === "GET") return proxyImage(request);
   if ((m = path.match(/^\/api\/logo\/([a-z0-9.-]+)$/)) && method === "GET")
     return brandLogo(m[1], ctx);
+  if ((m = path.match(/^\/api\/gravatar\/([a-f0-9]{64})$/)) && method === "GET")
+    return gravatarFace(m[1], ctx);
 
   if (path === "/api/attachments" && method === "POST") return uploadAttachment(request, env, user);
   if ((m = path.match(/^\/api\/attachments\/([\w-]+)\/inline$/)) && method === "GET")

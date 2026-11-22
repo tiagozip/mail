@@ -54,6 +54,7 @@ export const api = {
   },
   message: (id, images) => req("GET", `/api/messages/${id}${images ? "?images=1" : ""}`),
   thread: (threadId, read) => req("GET", `/api/threads/${threadId}${read ? "?read=1" : ""}`),
+  backfill: (before) => req("GET", `/api/sync/backfill${before ? `?before=${before}` : ""}`),
   threadsBulk: (ids) => req("POST", "/api/threads/bulk", { ids }),
 
   setRead: (id, read) => req("POST", `/api/messages/${id}/read`, { read }),
