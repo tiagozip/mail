@@ -351,8 +351,10 @@ export function MessageList({
     return m;
   }, [entries]);
 
+  const titleRef = useRef(null);
   const rowVirtualizer = useVirtualizer({
     count: entries.length,
+    scrollMargin: titleRef.current?.offsetHeight ?? 64,
     getScrollElement: () => scrollRef.current,
     estimateSize: (i) => (entries[i]?.group ? 54 : 52),
     overscan: 12,
@@ -415,9 +417,6 @@ export function MessageList({
           icon={List}
           onClick={onMenu}
         />
-        <h1 className="em-list-title">
-          {listTitle}
-        </h1>
       </div>
 
       {inTrash && trashTotal > 0 && (
@@ -438,6 +437,9 @@ export function MessageList({
       )}
 
       <div className="em-list-scroll" ref={scrollRef} onScroll={onScroll}>
+        <h1 ref={titleRef} className="em-list-title">
+          {listTitle}
+        </h1>
         {listLoading ? (
           <div className={`em-skel${showSkel ? "" : " is-waiting"}`}>
             {Array.from({ length: 8 }).map((_, i) => (
@@ -496,7 +498,7 @@ export function MessageList({
                       data-index={v.index}
                       ref={rowVirtualizer.measureElement}
                       className={`em-lgroup${entry.first ? " is-first" : ""}`}
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start}px)` }}
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start - rowVirtualizer.options.scrollMargin}px)` }}
                     >
                       {entry.group}
                     </div>
@@ -512,7 +514,8 @@ export function MessageList({
                       top: 0,
                       left: 0,
                       width: "100%",
-                      transform: `translateY(${v.start}px)`,
+                      transform: `translateY(${v.start - rowVirtualizer.options.scrollMargin}px)`,
+                      paddingBottom: 2,
                     }}
                   >
                     <Row

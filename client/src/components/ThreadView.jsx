@@ -34,7 +34,8 @@ import {
   Tray,
   Warning,
   X,
-  Eye,
+  Check,
+  Checks,
 } from "@phosphor-icons/react";
 import { sanitize } from "lettersanitizer";
 import { createPortal } from "react-dom";
@@ -623,22 +624,40 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
           {message.opens && (
             <Tooltip
               content={
-                message.opens.opens
-                  ? `First opened ${fullDate(message.opens.firstOpenAt)}, last ${fullDate(message.opens.lastOpenAt)}${message.opens.autoOpens ? `. ${message.opens.autoOpens} more loads came from privacy proxies or scanners.` : ""}`
-                  : message.opens.autoOpens
-                    ? "A privacy proxy or security scanner loaded it, which doesn't mean a person read it."
-                    : "The tracking pixel hasn't loaded yet."
+                <div className="em-opens-tip">
+                  <strong>
+                    {message.opens.opens
+                      ? `Opened ${message.opens.opens} ${message.opens.opens === 1 ? "time" : "times"}`
+                      : message.opens.autoOpens
+                        ? "Maybe opened"
+                        : "Sent, not opened yet"}
+                  </strong>
+                  {message.opens.opens > 1 && <span>First {fullDate(message.opens.firstOpenAt)}</span>}
+                  {message.opens.lastOpenAt && (
+                    <span>
+                      {message.opens.opens > 1 ? "Last" : "At"} {fullDate(message.opens.lastOpenAt)}
+                    </span>
+                  )}
+                  {message.opens.autoOpens > 0 && (
+                    <span>
+                      {message.opens.autoOpens} automatic{" "}
+                      {message.opens.autoOpens === 1 ? "load" : "loads"} by a privacy proxy or scanner
+                    </span>
+                  )}
+                </div>
               }
             >
-              <span className={`em-msg-opens${message.opens.opens ? " is-open" : ""}`}>
-                <Eye size={14} weight={message.opens.opens ? "fill" : "regular"} />
-                {message.opens.opens
-                  ? message.opens.opens === 1
-                    ? `Opened ${relativeTime(message.opens.lastOpenAt) === "now" ? "just now" : `${relativeTime(message.opens.lastOpenAt)} ago`}`
-                    : `Opened ${message.opens.opens} times`
-                  : message.opens.autoOpens
-                    ? "Maybe opened"
-                    : "Not opened"}
+              <span
+                className={`em-msg-opens${message.opens.opens ? " is-open" : ""}`}
+                aria-label={
+                  message.opens.opens ? "Opened" : message.opens.autoOpens ? "Maybe opened" : "Sent"
+                }
+              >
+                {message.opens.opens || message.opens.autoOpens ? (
+                  <Checks size={16} weight="bold" />
+                ) : (
+                  <Check size={16} weight="bold" />
+                )}
               </span>
             </Tooltip>
           )}

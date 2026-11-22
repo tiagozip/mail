@@ -5962,3 +5962,60 @@ body > div > [role="presentation"][data-side] {
 .em-track-on {
   color: var(--text-color-kumo-brand) !important;
 }
+
+.em-main,
+.em-column:has(> .em-pane-list) {
+  max-width: 900px;
+}
+
+@media (min-width: 721px) {
+  .em-lrow {
+    height: 50px;
+  }
+}
+
+.em-list-title {
+  margin: 0;
+  padding: 4px 14px 0;
+  line-height: 1.3;
+}
+
+@media (max-width: 720px) {
+  .em-lrow {
+    grid-template-rows: auto auto;
+    align-content: center;
+    align-items: center;
+    row-gap: 3px;
+  }
+
+  .em-lrow-lead {
+    align-self: start;
+    margin-top: 2px;
+  }
+
+  .em-lrow-from,
+  .em-lrow-main,
+  .em-lrow-end {
+    line-height: 1.35;
+  }
+}
+
+.em-msg-opens {
+  padding-top: 1px;
+  color: var(--text-color-kumo-inactive);
+}
+
+.em-msg-opens.is-open {
+  color: var(--text-color-kumo-brand);
+}
+
+.em-opens-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8125rem;
+}
+
+.em-opens-tip span {
+  color: var(--text-color-kumo-subtle);
+}
