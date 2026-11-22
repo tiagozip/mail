@@ -53,7 +53,7 @@ export const api = {
     return req("GET", `/api/messages?${qs.toString()}`);
   },
   message: (id, images) => req("GET", `/api/messages/${id}${images ? "?images=1" : ""}`),
-  thread: (threadId) => req("GET", `/api/threads/${threadId}`),
+  thread: (threadId, read) => req("GET", `/api/threads/${threadId}${read ? "?read=1" : ""}`),
   threadsBulk: (ids) => req("POST", "/api/threads/bulk", { ids }),
 
   setRead: (id, read) => req("POST", `/api/messages/${id}/read`, { read }),

@@ -20,6 +20,7 @@ import {
 } from "@phosphor-icons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api.js";
 import * as cache from "../cache.js";
 import * as pgp from "../pgp.js";
@@ -213,6 +214,98 @@ function BulkBar({ store, total }) {
   );
 }
 
+function EdgeScrollbar({ scrollRef, expected, rowHeight }) {
+  const thumbRef = useRef(null);
+  const [state, setState] = useState(null);
+  const drag = useRef(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const rect = el.getBoundingClientRect();
+      const virtual = Math.max(scrollHeight, scrollHeight + Math.max(0, expected.current) * rowHeight);
+      if (virtual <= clientHeight + 1) return setState(null);
+      const track = rect.height - 16;
+      const size = Math.max(40, (clientHeight / virtual) * track);
+      const offset = (scrollTop / (virtual - clientHeight)) * (track - size);
+      setState({ top: rect.top + 8, size, offset: Math.min(offset, track - size), virtual, track });
+    };
+    const queue = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    measure();
+    el.addEventListener("scroll", queue, { passive: true });
+    window.addEventListener("resize", queue);
+    const ro = new ResizeObserver(queue);
+    ro.observe(el);
+    if (el.firstElementChild) for (const c of el.children) ro.observe(c);
+    const onWheel = (e) => {
+      if (e.ctrlKey || el.contains(e.target)) return;
+      if (!e.target.closest?.(".em-app, .em-scrollbar")) return;
+      if (e.target.closest(".em-sidebar-wrap, .em-floatbar, [role=dialog], [role=menu]")) return;
+      el.scrollTop += e.deltaY;
+    };
+    window.addEventListener("wheel", onWheel, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      el.removeEventListener("scroll", queue);
+      window.removeEventListener("resize", queue);
+      window.removeEventListener("wheel", onWheel);
+      ro.disconnect();
+    };
+  }, [scrollRef, expected, rowHeight]);
+
+  if (!state) return null;
+
+  function onPointerDown(e) {
+    const el = scrollRef.current;
+    if (!el) return;
+    e.preventDefault();
+    const onThumb = e.target === thumbRef.current;
+    const ratio = (state.virtual - el.clientHeight) / (state.track - state.size);
+    if (!onThumb) {
+      const y = e.clientY - state.top - state.size / 2;
+      el.scrollTop = Math.max(0, y) * ratio;
+    }
+    drag.current = { y: e.clientY, start: el.scrollTop, ratio };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e) {
+    const d = drag.current;
+    const el = scrollRef.current;
+    if (!d || !el) return;
+    el.scrollTop = d.start + (e.clientY - d.y) * d.ratio;
+  }
+
+  return createPortal(
+    <div
+      className={`em-scrollbar${drag.current ? " is-dragging" : ""}`}
+      style={{ top: state.top, height: state.track }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={() => {
+        drag.current = null;
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+      }}
+      aria-hidden="true"
+    >
+      <div
+        ref={thumbRef}
+        className="em-scrollbar-thumb"
+        style={{ height: state.size, transform: `translateY(${state.offset}px)` }}
+      />
+    </div>,
+    document.body,
+  );
+}
+
 export function MessageList({
   store,
   threads,
@@ -248,6 +341,7 @@ export function MessageList({
   const [decSnippets, setDecSnippets] = useState({});
   const [emptying, setEmptying] = useState(false);
   const scrollRef = useRef(null);
+  const expected = useRef(0);
 
   const inTrash = view.kind === "folder" && view.folder === "trash";
   const trashTotal = counts?.trash?.total ?? messages.length;
@@ -396,6 +490,12 @@ export function MessageList({
     if (!el || !nextCursor || loadingMore) return;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) loadMore();
   }
+
+  const folderTotal = view.kind === "folder" ? counts?.[view.folder]?.total : null;
+  const loadedRatio = messages.length ? threads.length / messages.length : 1;
+  expected.current = nextCursor
+    ? Math.min(2000, Math.round(((folderTotal ?? messages.length * 2) - messages.length) * loadedRatio))
+    : 0;
 
   const selecting = selectedIds.size > 0;
   const [showSkel, setShowSkel] = useState(false);
@@ -547,6 +647,7 @@ export function MessageList({
         )}
       </div>
 
+      <EdgeScrollbar scrollRef={scrollRef} expected={expected} rowHeight={52} />
       <div className={`em-list-fade${floatHidden ? " is-hidden" : ""}`} aria-hidden="true">
         <span />
         <span />

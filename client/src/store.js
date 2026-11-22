@@ -298,20 +298,21 @@ export function useMailStore(initialUser) {
           setThreadLoading(false);
         });
       }
-      if (!item.isRead) {
-        setMessages((prev) => prev.map((m) => (m.id === item.id ? { ...m, isRead: true } : m)));
+      const unread = (item._members || [item]).filter((m) => !m.isRead && m.folder !== "sent");
+      if (unread.length) {
+        const ids = new Set(unread.map((m) => m.id));
+        setMessages((prev) => prev.map((m) => (ids.has(m.id) ? { ...m, isRead: true } : m)));
         setCounts((c) => {
           if (!c) return c;
-          const folder = item.folder;
-          if (!c[folder]) return c;
-          return {
-            ...c,
-            [folder]: { ...c[folder], unread: Math.max(0, (c[folder].unread || 0) - 1) },
-          };
+          const next = { ...c };
+          for (const m of unread) {
+            if (next[m.folder]) next[m.folder] = { ...next[m.folder], unread: Math.max(0, (next[m.folder].unread || 0) - 1) };
+          }
+          return next;
         });
       }
       api
-        .thread(item.threadId)
+        .thread(item.threadId, true)
         .then((d) => {
           const msgs = d.messages || [];
           threadCache.current.set(item.threadId, msgs);
@@ -416,12 +417,24 @@ export function useMailStore(initialUser) {
 
   const setReadState = useCallback(
     (item, read) => {
-      patchMessage(item.id, { isRead: read });
-      api
-        .setRead(item.id, read)
+      const members = (item._members || [item]).filter((m) => m.isRead !== read && m.folder !== "sent");
+      if (!members.length) return;
+      const ids = members.map((m) => m.id);
+      for (const id of ids) patchMessage(id, { isRead: read });
+      setCounts((c) => {
+        if (!c) return c;
+        const next = { ...c };
+        for (const m of members) {
+          if (next[m.folder]) next[m.folder] = { ...next[m.folder], unread: Math.max(0, (next[m.folder].unread || 0) + (read ? -1 : 1)) };
+        }
+        return next;
+      });
+      const req = ids.length > 1 ? api.bulk(ids, "read", read) : api.setRead(ids[0], read);
+      req
         .then(() => refreshCounts())
         .catch((e) => {
-          patchMessage(item.id, { isRead: item.isRead });
+          for (const m of members) patchMessage(m.id, { isRead: m.isRead });
+          refreshCounts();
           notifyError(e);
         });
     },

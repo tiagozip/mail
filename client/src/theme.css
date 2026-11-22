@@ -6032,7 +6032,7 @@ body > div > [role="presentation"][data-side] {
 }
 
 .em-list-scroll {
-  padding-top: calc(var(--em-6) + 4px);
+  padding-top: calc(var(--em-6) - 4px);
 }
 
 @media (max-width: 820px) {
@@ -6103,4 +6103,51 @@ body > div > [role="presentation"][data-side] {
   flex: 1 1 auto;
   height: auto;
   min-height: 0;
+}
+
+.em-list-scroll {
+  scrollbar-width: none;
+}
+
+.em-list-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.em-scrollbar {
+  position: fixed;
+  right: 0;
+  width: 14px;
+  z-index: 40;
+  touch-action: none;
+  user-select: none;
+}
+
+.em-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  width: 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--text-color-kumo-default) 20%, transparent);
+  will-change: transform;
+}
+
+@media (hover: hover) {
+  .em-scrollbar:hover .em-scrollbar-thumb {
+    background: color-mix(in oklab, var(--text-color-kumo-default) 25%, transparent);
+  }
+}
+
+.em-scrollbar.is-dragging .em-scrollbar-thumb {
+  background: color-mix(in oklab, var(--text-color-kumo-default) 30%, transparent);
+}
+
+@media (max-width: 820px) {
+  .em-scrollbar {
+    display: none;
+  }
+
+  .em-list-scroll {
+    scrollbar-width: thin;
+  }
 }

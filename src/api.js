@@ -805,7 +805,7 @@ async function markRead(env, user, ids, read) {
   await recordChanges(env, user.id, ids, "upsert");
 }
 
-async function buildThread(env, user, threadId) {
+async function buildThread(env, user, threadId, read = false) {
   const rows = await env.DB.prepare(
     "SELECT * FROM messages WHERE user_id = ? AND thread_id = ? ORDER BY date ASC",
   )
@@ -815,10 +815,13 @@ async function buildThread(env, user, threadId) {
   for (const r of rows.results || []) out.push(await getMessage(env, user, r.id, false));
   const msgs = out.filter(Boolean);
   await attachSenderAvatars(env, msgs);
+  if (!read) return msgs;
   const unreadIds = (rows.results || [])
     .filter((r) => !r.is_read && r.folder !== "sent")
     .map((r) => r.id);
-  if (unreadIds.length) await markRead(env, user, unreadIds, true);
+  if (!unreadIds.length) return msgs;
+  await markRead(env, user, unreadIds, true);
+  for (const msg of msgs) if (unreadIds.includes(msg.id)) msg.isRead = true;
   return msgs;
 }
 
@@ -1095,7 +1098,9 @@ async function routeApi(request, env, ctx, auth) {
 
   let m;
   if ((m = path.match(/^\/api\/threads\/([\w-]+)$/)) && method === "GET") {
-    return json({ messages: await buildThread(env, user, m[1]) });
+    return json({
+      messages: await buildThread(env, user, m[1], url.searchParams.get("read") === "1"),
+    });
   }
 
   if (path === "/api/threads/bulk" && method === "POST") {
