@@ -4,6 +4,7 @@ import { encryptText, tryDecryptBytes } from "./crypto.js";
 import { consume } from "./ratelimit.js";
 import { expandHtmlBlocks, sanitizeEmailHtml, textToHtml } from "./sanitize.js";
 import { bumpContact, htmlKey, insertMessage, resolveThread, updateStorage } from "./store.js";
+import { newTrackingId, pixelTag } from "./track.js";
 import { escapeHtml, isValidEmail, normalizeAddr, now, snippetFrom, uuid } from "./util.js";
 
 const noCrlf = (s) => String(s ?? "").replace(/[\r\n]+/g, " ");
@@ -249,6 +250,8 @@ export async function sendMessage(env, user, payload) {
   }
 
   const isE2E = payload.pgp === true && text.includes("-----BEGIN PGP MESSAGE-----");
+  const trackingId = payload.track === false ? null : newTrackingId();
+  const pixel = trackingId ? pixelTag(env, trackingId) : "";
   const sendPayload = {
     to,
     from: { email: fromAddr, name: fromName },
@@ -256,9 +259,11 @@ export async function sendMessage(env, user, payload) {
   };
   if (isE2E) {
     sendPayload.text = text;
+    if (pixel)
+      sendPayload.html = `<pre style="white-space:pre-wrap;font-family:ui-monospace,monospace">${escapeHtml(text)}</pre>${pixel}`;
   } else {
     sendPayload.text = text + signature;
-    sendPayload.html = outboundHtml + sigHtml;
+    sendPayload.html = outboundHtml + sigHtml + pixel;
   }
   if (cc.length) sendPayload.cc = cc;
   if (bcc.length) sendPayload.bcc = bcc;
@@ -323,6 +328,13 @@ export async function sendMessage(env, user, payload) {
     html_key: hKey,
     pgp: storedPgp ? 1 : 0,
   });
+
+  if (trackingId)
+    await env.DB.prepare(
+      "INSERT INTO tracking (id, user_id, message_id, created_at) VALUES (?,?,?,?)",
+    )
+      .bind(trackingId, user.id, messageId, now())
+      .run();
 
   let attBytes = 0;
   for (const row of attRows) {

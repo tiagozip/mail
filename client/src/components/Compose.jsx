@@ -1,4 +1,4 @@
-import { Button, DropdownMenu, Input, Loader, Select } from "@cloudflare/kumo";
+import { Button, DropdownMenu, Input, Loader, Select, Tooltip } from "@cloudflare/kumo";
 import {
   CalendarBlank,
   CaretDown,
@@ -13,6 +13,8 @@ import {
   PaperPlaneTilt,
   Trash,
   X,
+  Eye,
+  EyeSlash,
 } from "@phosphor-icons/react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
@@ -235,6 +237,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
   const [atts, setAtts] = useState([]);
+  const [track, setTrack] = useState(true);
   const [busy, setBusy] = useState(false);
   const [pickSendAt, setPickSendAt] = useState(false);
   const [draftId, setDraftId] = useState(null);
@@ -558,6 +561,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
           cc: parseRecipients(cc),
           subject,
           pgp: true,
+          track,
           text: armored,
           inReplyTo: meta.inReplyTo,
           references: meta.references || [],
@@ -570,6 +574,7 @@ export function Compose({ open, initial, user, onClose, onSent }) {
           cc: parseRecipients(cc),
           bcc: parseRecipients(bcc),
           subject,
+          track,
           text: liveText,
           html: filled ? liveHtml : "",
           inReplyTo: meta.inReplyTo,
@@ -836,6 +841,17 @@ export function Compose({ open, initial, user, onClose, onSent }) {
             </DropdownMenu>
           </div>
           <Button variant="ghost" shape="square" aria-label="Attach files" icon={Paperclip} onClick={() => fileRef.current?.click()} />
+          <Tooltip content={track ? "Tracking opens. Click to turn off" : "Not tracking opens. Click to turn on"}>
+            <Button
+              variant="ghost"
+              shape="square"
+              aria-label="Track opens"
+              aria-pressed={track}
+              className={track ? "em-track-on" : undefined}
+              icon={track ? Eye : EyeSlash}
+              onClick={() => setTrack((t) => !t)}
+            />
+          </Tooltip>
           <Button variant="ghost" onClick={onSaveDraftClick}>
             Save draft
           </Button>

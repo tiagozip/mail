@@ -9,6 +9,7 @@ import {
   purgeStaleUploads,
   wakeSnoozed,
 } from "./scheduler.js";
+import { handlePixel } from "./track.js";
 import { error } from "./util.js";
 
 const CSP = [
@@ -84,6 +85,8 @@ export default {
         }),
       );
     }
+    const pixel = url.pathname.match(/^\/api\/t\/([A-Za-z0-9_-]+)\.gif$/);
+    if (pixel) return handlePixel(request, env, ctx, pixel[1]);
     if (url.pathname.startsWith("/api/")) {
       let res;
       try {

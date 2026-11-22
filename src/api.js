@@ -49,6 +49,7 @@ import {
   userStorageQuota,
   validateLabelRule,
 } from "./store.js";
+import { opensFor } from "./track.js";
 import {
   chunk,
   clampInt,
@@ -680,6 +681,8 @@ async function getMessage(env, user, id, allowRemote) {
   )
     .bind(id, user.id)
     .all();
+  const opens =
+    row.folder === "sent" ? (await opensFor(env, user.id, [row.id])).get(row.id) || null : null;
   if (row.pgp) {
     let armored = "";
     if (row.html_key) {
@@ -698,6 +701,7 @@ async function getMessage(env, user, id, allowRemote) {
       bodyText: armored,
       bodyHtml: null,
       hasHtml: !!row.has_html,
+      opens,
       pgp: true,
       attachments: (atts.results || [])
         .filter((a) => !a.is_inline && a.status === "stored")
@@ -707,6 +711,7 @@ async function getMessage(env, user, id, allowRemote) {
 
   let bodyHtml = null;
   let trackersBlocked = 0;
+  let trackerNames = [];
   if (row.html_key) {
     const obj = await env.R2.get(row.html_key);
     if (obj) {
@@ -716,6 +721,7 @@ async function getMessage(env, user, id, allowRemote) {
       } else {
         const tr = stripTrackers(html);
         trackersBlocked = tr.count;
+        trackerNames = tr.names;
         bodyHtml = sanitizeEmailHtml(tr.html, { allowRemote, toProxy: proxyUrl });
       }
     }
@@ -732,6 +738,8 @@ async function getMessage(env, user, id, allowRemote) {
     bodyText: row.body_text,
     bodyHtml,
     trackersBlocked,
+    trackerNames,
+    opens,
     hasHtml: !!row.has_html,
     attachments: (atts.results || [])
       .filter((a) => !a.is_inline && a.status === "stored")
@@ -1317,7 +1325,8 @@ async function routeApi(request, env, ctx, auth) {
     return saveDraft(request, env, user, m[1]);
 
   if (path === "/api/img" && method === "GET") return proxyImage(request);
-  if ((m = path.match(/^\/api\/logo\/([a-z0-9.-]+)$/)) && method === "GET") return brandLogo(m[1], ctx);
+  if ((m = path.match(/^\/api\/logo\/([a-z0-9.-]+)$/)) && method === "GET")
+    return brandLogo(m[1], ctx);
 
   if (path === "/api/attachments" && method === "POST") return uploadAttachment(request, env, user);
   if ((m = path.match(/^\/api\/attachments\/([\w-]+)\/inline$/)) && method === "GET")

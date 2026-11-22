@@ -59,9 +59,16 @@ function Row({
   const handle = addr.includes("@") ? `@${addr.split("@")[1]}` : addr;
   const snip = item.pgp ? decSnippet || item.snippet : item.snippet;
   const hoverTimer = useRef(null);
+  const end = (
+    <span className="em-lrow-end">
+      {item.hasAttachments && <Paperclip size={15} className="em-lrow-icon" />}
+      {item.isStarred && <Star size={15} weight="fill" className="em-lrow-icon em-lrow-star" />}
+      <span className="em-lrow-date">{shortDate(item.date)}</span>
+    </span>
+  );
   return (
     <div
-      className={`em-row${active ? " is-active" : ""}${selected ? " is-selected" : ""}${item.isRead ? "" : " is-unread"}`}
+      className={`em-lrow${active ? " is-active" : ""}${selected ? " is-selected" : ""}${item.isRead ? "" : " is-unread"}`}
       onClick={() => onOpen(item)}
       onMouseEnter={() => {
         hoverTimer.current = setTimeout(() => onPrefetch(item.threadId), 200);
@@ -71,7 +78,7 @@ function Row({
       }}
       onPointerDown={() => onPrefetch(item.threadId)}
     >
-      <div className="em-row-avatar">
+      <span className="em-lrow-lead">
         <SenderAvatar from={{ ...item.from, name: sender, address: addr }} />
         <button
           type="button"
@@ -86,50 +93,71 @@ function Row({
         >
           <Check size={12} weight="bold" />
         </button>
-      </div>
-      <div className="em-row-body">
-        <div className="em-row-line">
-          <span className="em-row-sender">{sender}</span>
-          {handle && <span className="em-row-handle">{handle}</span>}
-          {item.authStatus === "fail" && (
-            <span className="em-spoof-tag">
-              <ShieldWarning size={12} weight="fill" /> spoofed
-            </span>
-          )}
-          <span className="em-row-sep">·</span>
-          <span className="em-row-date">{relativeTime(item.date)}</span>
-          {item._count > 1 && <span className="em-row-count">{item._count}</span>}
-          {item.hasAttachments && <Paperclip className="em-row-clip" size={14} weight="bold" />}
-        </div>
-        <div className="em-row-subject">{item.subject || "(no subject)"}</div>
-        {snip && <div className="em-row-snippet">{snip}</div>}
-        {item.labels?.length > 0 && (
-          <div className="em-row-labels">
-            {item.labels.map((l) => (
-              <span key={l.id} className="em-chip" style={{ "--em-chip-color": l.color }}>
-                <span className="em-chip-dot" />
-                {l.name}
-              </span>
-            ))}
-          </div>
+      </span>
+      <span className="em-lrow-from" title={addr}>
+        <span className="em-lrow-sender">{sender}</span>
+        {item._count > 1 && <span className="em-lrow-count">{item._count}</span>}
+      </span>
+      <span className="em-lrow-main">
+        {item.authStatus === "fail" && (
+          <span className="em-spoof-tag">
+            <ShieldWarning size={12} weight="fill" /> spoofed
+          </span>
         )}
-      </div>
-      <div className="em-row-actions" onClick={(e) => e.stopPropagation()}>
-        <div className="em-row-quick">
-          <button type="button" className="em-quick-btn" aria-label={item.isRead ? "Mark unread" : "Mark read"} title={item.isRead ? "Mark unread" : "Mark read"} onClick={() => onQuick(item, "read", !item.isRead)}>
-            {item.isRead ? <Envelope size={15} /> : <EnvelopeOpen size={15} />}
-          </button>
-          <button type="button" className="em-quick-btn" aria-label="Archive" title="Archive" onClick={() => onQuick(item, "move", "archive")}>
-            <Archive size={15} />
-          </button>
-          <button type="button" className="em-quick-btn" aria-label="Delete" title="Delete" onClick={() => onQuick(item, "move", "trash")}>
-            <Trash size={15} />
-          </button>
-        </div>
-        <StarToggle on={item.isStarred} onClick={() => onToggleStar(item)} />
-      </div>
+        {item.labels?.map((l) => (
+          <span key={l.id} className="em-lrow-label" style={{ "--em-chip-color": l.color }}>
+            {l.name}
+          </span>
+        ))}
+        <span className="em-lrow-subject">{item.subject || "(no subject)"}</span>
+        {snip && <span className="em-lrow-snippet">{snip}</span>}
+      </span>
+      {end}
+      <span className="em-lrow-quick" onClick={(e) => e.stopPropagation()}>
+        <button type="button" aria-label="Archive" title="Archive" onClick={() => onQuick(item, "move", "archive")}>
+          <Archive size={16} />
+        </button>
+        <button type="button" aria-label={item.isRead ? "Mark unread" : "Mark read"} title={item.isRead ? "Mark unread" : "Mark read"} onClick={() => onQuick(item, "read", !item.isRead)}>
+          {item.isRead ? <Envelope size={16} /> : <EnvelopeOpen size={16} />}
+        </button>
+        <button type="button" aria-label={item.isStarred ? "Unstar" : "Star"} title={item.isStarred ? "Unstar" : "Star"} onClick={() => onToggleStar(item)}>
+          <Star size={16} weight={item.isStarred ? "fill" : "regular"} />
+        </button>
+        <button type="button" aria-label="Delete" title="Delete" onClick={() => onQuick(item, "move", "trash")}>
+          <Trash size={16} />
+        </button>
+      </span>
     </div>
   );
+}
+
+const DAY = 86400000;
+
+function shortDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString())
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+function dateGroup(ts) {
+  const d = new Date(ts);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const t = start.getTime();
+  if (ts >= t) return "Today";
+  if (ts >= t - DAY) return "Yesterday";
+  if (ts >= t - 7 * DAY) return "Last 7 days";
+  if (d.getMonth() === start.getMonth() && d.getFullYear() === start.getFullYear()) return "Earlier this month";
+  return d.toLocaleDateString([], {
+    month: "long",
+    ...(d.getFullYear() === start.getFullYear() ? {} : { year: "numeric" }),
+  });
 }
 
 function BulkBar({ store, total }) {
@@ -303,16 +331,47 @@ export function MessageList({
     };
   }, [messages]);
 
+  const entries = useMemo(() => {
+    const out = [];
+    let last = null;
+    threads.forEach((item, index) => {
+      const g = dateGroup(item.date);
+      if (g !== last) {
+        out.push({ group: g, first: out.length === 0 });
+        last = g;
+      }
+      out.push({ item, index });
+    });
+    return out;
+  }, [threads]);
+
+  const entryOf = useMemo(() => {
+    const m = new Map();
+    entries.forEach((e, i) => e.item && m.set(e.index, i));
+    return m;
+  }, [entries]);
+
   const rowVirtualizer = useVirtualizer({
-    count: threads.length,
+    count: entries.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 76,
-    overscan: 8,
+    estimateSize: (i) => (entries[i]?.group ? 54 : 52),
+    overscan: 12,
   });
 
   useEffect(() => {
-    if (cursor >= 0) rowVirtualizer.scrollToIndex(cursor, { align: "auto" });
-  }, [cursor, rowVirtualizer]);
+    if (cursor >= 0 && entryOf.has(cursor))
+      rowVirtualizer.scrollToIndex(entryOf.get(cursor), { align: "auto" });
+  }, [cursor, entryOf, rowVirtualizer]);
+
+  const listTitle =
+    view.kind === "search"
+      ? "Search"
+      : view.kind === "starred"
+        ? "Starred"
+        : view.kind === "folder"
+          ? FOLDER_LABELS[view.folder]
+          : view.name;
+
 
   const selfAddresses = useMemo(
     () => (store.user?.addresses?.map((a) => a.address) || [store.user?.address]).filter(Boolean),
@@ -356,6 +415,9 @@ export function MessageList({
           icon={List}
           onClick={onMenu}
         />
+        <h1 className="em-list-title">
+          {listTitle}
+        </h1>
       </div>
 
       {inTrash && trashTotal > 0 && (
@@ -426,7 +488,20 @@ export function MessageList({
               style={{ height: rowVirtualizer.getTotalSize(), position: "relative" }}
             >
               {rowVirtualizer.getVirtualItems().map((v) => {
-                const item = threads[v.index];
+                const entry = entries[v.index];
+                if (entry.group)
+                  return (
+                    <div
+                      key={`g:${entry.group}`}
+                      data-index={v.index}
+                      ref={rowVirtualizer.measureElement}
+                      className={`em-lgroup${entry.first ? " is-first" : ""}`}
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start}px)` }}
+                    >
+                      {entry.group}
+                    </div>
+                  );
+                const { item } = entry;
                 return (
                   <div
                     key={item.id}
@@ -447,7 +522,7 @@ export function MessageList({
                       selfAddresses={selfAddresses}
                       decSnippet={decSnippets[item.id]}
                       onOpen={(...args) => {
-                        onCursorChange?.(v.index);
+                        onCursorChange?.(entry.index);
                         const target = item.isDraft && onOpenDraft ? onOpenDraft : openMessage;
                         target(...args);
                       }}

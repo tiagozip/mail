@@ -34,6 +34,7 @@ import {
   Tray,
   Warning,
   X,
+  Eye,
 } from "@phosphor-icons/react";
 import { sanitize } from "lettersanitizer";
 import { createPortal } from "react-dom";
@@ -315,7 +316,7 @@ function PgpBody({ message, onUnlocked, allowRemote, onScan }) {
         if (ref.cancelled) return;
         const scanned = message.hasHtml ? stripTrackers(raw) : { html: raw, count: 0 };
         const data = scanned.html;
-        onScan(scanned.count, message.hasHtml && hasRemoteRefs(data));
+        onScan(scanned.count, message.hasHtml && hasRemoteRefs(data), scanned.names || []);
         setDecrypted(data);
         if (!message.hasHtml) return;
         const { map, urls } = await decryptInlineImages(data, ref);
@@ -550,7 +551,7 @@ function AttViewer({ list, index, onIndex, onClose }) {
 }
 
 function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) {
-  const [pgpScan, setPgpScan] = useState({ trackers: 0, hasRemote: false });
+  const [pgpScan, setPgpScan] = useState({ trackers: 0, hasRemote: false, names: [] });
   const [pgpShown, setPgpShown] = useState(false);
   const [viewing, setViewing] = useState(-1);
   const remoteShown = message.pgp ? pgpShown : message._imagesShown;
@@ -558,6 +559,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
     ? pgpScan.hasRemote && !pgpShown
     : !remoteShown && htmlHasBlockedImages(message.bodyHtml);
   const trackers = Math.max(message.trackersBlocked || 0, pgpScan.trackers);
+  const trackerNames = message.trackerNames?.length ? message.trackerNames : pgpScan.names;
   const shownAttachments = (message.attachments || []).filter(
     (a) => !message.bodyHtml?.includes(`/api/attachments/${a.id}/inline`),
   );
@@ -615,6 +617,28 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
             <Tooltip content="End-to-end encrypted, decrypted on this device">
               <span className="em-msg-enc" aria-label="End-to-end encrypted">
                 <Lock size={13} weight="fill" />
+              </span>
+            </Tooltip>
+          )}
+          {message.opens && (
+            <Tooltip
+              content={
+                message.opens.opens
+                  ? `First opened ${fullDate(message.opens.firstOpenAt)}, last ${fullDate(message.opens.lastOpenAt)}${message.opens.autoOpens ? `. ${message.opens.autoOpens} more loads came from privacy proxies or scanners.` : ""}`
+                  : message.opens.autoOpens
+                    ? "A privacy proxy or security scanner loaded it, which doesn't mean a person read it."
+                    : "The tracking pixel hasn't loaded yet."
+              }
+            >
+              <span className={`em-msg-opens${message.opens.opens ? " is-open" : ""}`}>
+                <Eye size={14} weight={message.opens.opens ? "fill" : "regular"} />
+                {message.opens.opens
+                  ? message.opens.opens === 1
+                    ? `Opened ${relativeTime(message.opens.lastOpenAt) === "now" ? "just now" : `${relativeTime(message.opens.lastOpenAt)} ago`}`
+                    : `Opened ${message.opens.opens} times`
+                  : message.opens.autoOpens
+                    ? "Maybe opened"
+                    : "Not opened"}
               </span>
             </Tooltip>
           )}
@@ -678,6 +702,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
                 <ShieldCheck size={15} weight="fill" />
                 <span>
                   Blocked {trackers} tracking {trackers === 1 ? "pixel" : "pixels"}
+                  {trackerNames.length > 0 && ` from ${trackerNames.join(", ")}`}
                 </span>
               </div>
             </Tooltip>
@@ -687,7 +712,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
               message={message}
               onUnlocked={onUnlocked}
               allowRemote={pgpShown}
-              onScan={(t, r) => setPgpScan({ trackers: t, hasRemote: r })}
+              onScan={(t, r, n) => setPgpScan({ trackers: t, hasRemote: r, names: n })}
             />
           ) : message.bodyHtml ? (
             <LetterBody html={message.bodyHtml} allowRemote={!!remoteShown} />

@@ -272,7 +272,7 @@ function escapeAttr(s) {
 }
 
 const TRACKER_URL =
-  /(?:\/(?:open|wf\/open|track|tracking|beacon|pixel|piwik|matomo)(?:[/.?]|$))|(?:[?&](?:utm_medium=email|mc_eid|email_open|trk_msg|trk_contact|oseid))|(?:\b(?:1x1|spacer|clear|blank|pixel|trans|transparent)\.(?:gif|png|jpg))|list-manage\.com\/track|sendgrid\.net\/wf\/open|awstrack\.me|mailtrack\.io|sparkpostmail|hubspotemail|hs-analytics|getsidekick|bananatag|streak-track/i;
+  /(?:\/(?:open|wf\/open|track|tracking|beacon|pixel|piwik|matomo)(?:[/.?]|$))|(?:[?&](?:utm_medium=email|mc_eid|email_open|trk_msg|trk_contact|oseid))|(?:\b(?:1x1|spacer|clear|blank|pixel|trans|transparent)\.(?:gif|png|jpg))|list-manage\.com\/track|sendgrid\.net\/wf\/open|awstrack\.me|mailtrack\.io|sparkpostmail|hubspotemail|hs-analytics|getsidekick|bananatag|streak-track|\/api\/t\/[A-Za-z0-9_-]{22}\.gif/i;
 
 function imgDimension(tag, name) {
   const attr = tag.match(new RegExp(`\\b${name}\\s*=\\s*["']?\\s*(\\d+(?:\\.\\d+)?)`, "i"));
@@ -301,14 +301,59 @@ function isTrackerImg(tag) {
   return !!src && TRACKER_URL.test(src);
 }
 
+const TRACKER_COMPANIES = [
+  [/list-manage\.com|mailchimp|mcusercontent|mc_eid/i, "Mailchimp"],
+  [/sendgrid\.net|sendgrid/i, "SendGrid"],
+  [/hubspot|hs-analytics|hubspotemail|hs-sites/i, "HubSpot"],
+  [/awstrack\.me|amazonses/i, "Amazon SES"],
+  [/sparkpost/i, "SparkPost"],
+  [/mailgun|mgsend/i, "Mailgun"],
+  [/postmarkapp|pstmrk/i, "Postmark"],
+  [/mandrillapp/i, "Mandrill"],
+  [/klaviyo/i, "Klaviyo"],
+  [/customer\.io|customeriomail/i, "Customer.io"],
+  [/intercom/i, "Intercom"],
+  [/braze|appboy/i, "Braze"],
+  [/iterable/i, "Iterable"],
+  [/salesforce|exacttarget|exct\.net|pardot/i, "Salesforce"],
+  [/marketo|mktotracking|mktdns/i, "Marketo"],
+  [/substack/i, "Substack"],
+  [/beehiiv/i, "beehiiv"],
+  [/convertkit|ck\.page|kit-mail/i, "Kit"],
+  [/mailtrack\.io/i, "Mailtrack"],
+  [/getsidekick/i, "HubSpot Sidekick"],
+  [/bananatag/i, "Bananatag"],
+  [/streak/i, "Streak"],
+  [/superhuman/i, "Superhuman"],
+  [/linkedin/i, "LinkedIn"],
+  [/facebookmail|facebook\.com/i, "Meta"],
+  [/google|gstatic|doubleclick/i, "Google"],
+  [/estrogen\.delivery\/api\/t\//i, "Estrogen Mail"],
+];
+
+function trackerCompany(tag) {
+  const src = tag.match(/\bsrc\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  const url = src ? (src[2] ?? src[3] ?? src[4] ?? "") : "";
+  for (const [re, name] of TRACKER_COMPANIES) if (re.test(url)) return name;
+  try {
+    const host = new URL(url).hostname.split(".").slice(-2).join(".");
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
 export function stripTrackers(html) {
   let count = 0;
+  const names = new Set();
   const out = String(html || "").replace(/<img\b[^>]*>/gi, (tag) => {
     if (!isTrackerImg(tag)) return tag;
     count += 1;
+    const name = trackerCompany(tag);
+    if (name) names.add(name);
     return "";
   });
-  return { html: out, count };
+  return { html: out, count, names: [...names] };
 }
 
 function isDarkColor(value) {
