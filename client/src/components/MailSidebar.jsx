@@ -1,3 +1,4 @@
+import { AppSwitcher } from "./AppSwitcher.jsx";
 import { DropdownMenu } from "@cloudflare/kumo";
 import {
   Archive,
@@ -216,6 +217,7 @@ export function MailSidebar({
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu>
+        <AppSwitcher src={user.switcherUrl} placement="up" />
       </div>
 
       <LabelModal

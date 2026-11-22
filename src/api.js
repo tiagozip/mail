@@ -156,7 +156,10 @@ async function attachSenderAvatars(env, items) {
   const hashes = {};
   await Promise.all(
     addrs.map(async (a) => {
-      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(a.trim().toLowerCase()));
+      const buf = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(a.trim().toLowerCase()),
+      );
       hashes[a] = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
     }),
   );
@@ -1081,6 +1084,7 @@ async function routeApi(request, env, ctx, auth) {
     const me = publicUser(auth.user);
     me.addresses = await listAddresses(env, auth.user.id);
     me.sendAliases = await listSendableHidden(env, auth.user.id);
+    me.switcherUrl = env.OIDC_ISSUER ? `${env.OIDC_ISSUER.replace(/\/$/, "")}/switcher` : null;
     return json({ user: me, syncCursor: await currentCursor(env, auth.user.id) });
   }
   if (!auth) return error(401, "not authenticated");
