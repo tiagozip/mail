@@ -32,3 +32,7 @@ Source: https://blog.kagi.com/kagi-mail-public-beta (2026-11-23).
 - RSVP replies go out as an `.ics` attachment, because the Workers email binding has no way to add a `text/calendar` alternative part. Most clients still read it, but Outlook may not update the organizer's view.
 - Recurrence covers FREQ with INTERVAL, COUNT, UNTIL and weekly BYDAY. EXDATE and per-occurrence overrides from invites are ignored, and editing one occurrence edits the series.
 - Invite details are stored in plaintext in D1 even when PGP is on, since they are parsed at ingest.
+
+## One-click unsubscribe
+
+Done. Mail with a List-Unsubscribe header shows a bar in the thread. The server tries an RFC 8058 POST, then a mailto message, then gives the client the link to open. Needs migration 006 on remote D1.
