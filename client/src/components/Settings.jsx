@@ -1435,6 +1435,7 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
   const [imagesDefault, setImagesDefault] = useState(!!user.settings?.imagesDefault);
   const [catchAll, setCatchAll] = useState(!!user.settings?.catchAll);
   const [aiSpam, setAiSpam] = useState(user.settings?.aiSpam !== false);
+  const [screenSenders, setScreenSenders] = useState(user.settings?.screenSenders === true);
   const [randomAvatars, setRandomAvatarsState] = useState(!!user.settings?.randomAvatars);
   const [undoSend, setUndoSend] = useState(user.settings?.undoSend || 0);
   const [busy, setBusy] = useState(false);
@@ -1535,6 +1536,21 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
     } catch (e) {
       setRandomAvatarsState(!v);
       setRandomAvatars(!v);
+      notifyError(e);
+    }
+  }
+
+  async function saveScreenSenders(v) {
+    setScreenSenders(v);
+    try {
+      const data = await api.saveSettings({
+        displayName,
+        signature,
+        settings: { ...user.settings, palette, imagesDefault, catchAll, aiSpam, screenSenders: v },
+      });
+      setUser(data.user);
+    } catch (e) {
+      setScreenSenders(!v);
       notifyError(e);
     }
   }
@@ -1822,6 +1838,20 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
                       aria-label="Smart spam detection"
                       checked={aiSpam}
                       onCheckedChange={saveAiSpam}
+                    />
+                  </div>
+                  <div className="em-toggle-row">
+                    <div className="em-toggle-copy">
+                      <div className="em-toggle-title">Screen new senders</div>
+                      <div className="em-toggle-sub">
+                        Hold mail from people you have never emailed or heard from in Screener
+                        until you let them in. Replies to your threads always reach your inbox.
+                      </div>
+                    </div>
+                    <Switch
+                      aria-label="Screen new senders"
+                      checked={screenSenders}
+                      onCheckedChange={saveScreenSenders}
                     />
                   </div>
                 </div>

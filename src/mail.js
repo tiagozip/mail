@@ -198,8 +198,11 @@ export async function storeInbound(
   }
   let used = user?.storage_used || 0;
   let aiSpamEnabled = true;
+  let screenSenders = false;
   try {
-    aiSpamEnabled = JSON.parse(user?.settings_json || "{}").aiSpam !== false;
+    const prefs = JSON.parse(user?.settings_json || "{}");
+    aiSpamEnabled = prefs.aiSpam !== false;
+    screenSenders = prefs.screenSenders === true;
   } catch {}
 
   const rawText = new TextDecoder().decode(raw);
@@ -408,6 +411,15 @@ export async function storeInbound(
     }
   }
 
+  if (folder === "inbox" && screenSenders && threadId === messageId) {
+    const known = await env.DB.prepare(
+      "SELECT 1 FROM contacts WHERE user_id = ? AND address = ? LIMIT 1",
+    )
+      .bind(userId, fromAddr)
+      .first();
+    if (!known) folder = "screener";
+  }
+
   let folderId = null;
   if (matchedAddress) {
     const fdr = await env.DB.prepare(
@@ -500,7 +512,7 @@ export async function storeInbound(
   }
 
   await updateStorage(env, userId, used - (user?.storage_used || 0));
-  if (folder !== "spam") ctx.waitUntil(bumpContact(env, userId, fromAddr, fromName));
+  if (folder !== "spam" && folder !== "screener") ctx.waitUntil(bumpContact(env, userId, fromAddr, fromName));
   if (matchedAddress) {
     ctx.waitUntil(
       env.DB.prepare(
@@ -511,7 +523,7 @@ export async function storeInbound(
     );
   }
 
-  if (folder !== "spam") {
+  if (folder !== "spam" && folder !== "screener") {
     ctx.waitUntil(
       sendPush(env, userId, {
         title: fromName || fromAddr,

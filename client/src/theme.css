@@ -6897,3 +6897,34 @@ body > div > [role="presentation"][data-side] {
     grid-template-columns: 40px repeat(7, minmax(0, 1fr));
   }
 }
+
+.em-screen-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--em-2);
+  margin-bottom: var(--em-4);
+  padding: var(--em-3) var(--em-4);
+  border-radius: var(--em-radius);
+  border: 1px solid var(--em-brand-soft-border);
+  background: var(--em-brand-soft);
+}
+
+.em-screen-copy {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.em-screen-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-color-kumo-strong);
+  overflow-wrap: break-word;
+}
+
+.em-screen-text {
+  margin-top: 2px;
+  font-size: 0.82rem;
+  color: var(--text-color-kumo-subtle);
+  text-wrap: pretty;
+}

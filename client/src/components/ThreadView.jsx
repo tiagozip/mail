@@ -582,7 +582,7 @@ function InviteCard({ messageId }) {
   ));
 }
 
-function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) {
+function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked, onScreen }) {
   const [pgpScan, setPgpScan] = useState({ trackers: 0, hasRemote: false, names: [] });
   const [pgpShown, setPgpShown] = useState(false);
   const [viewing, setViewing] = useState(-1);
@@ -700,6 +700,22 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
 
       {expanded && (
         <div className="em-msg-body">
+          {message.folder === "screener" && (
+            <div className="em-screen-banner">
+              <div className="em-screen-copy">
+                <div className="em-screen-title">First message from {message.from?.address}</div>
+                <div className="em-screen-text">
+                  Let them in and their mail goes to your inbox from now on. Block them and it goes to spam.
+                </div>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => onScreen(false)}>
+                Block
+              </Button>
+              <Button size="sm" variant="primary" onClick={() => onScreen(true)}>
+                Let in
+              </Button>
+            </div>
+          )}
           {(message.authStatus === "fail" || message.folder === "spam") && (
             <div className="em-spoof-banner">
               <img src={spamton} className="em-spoof-image" alt="Spamton" />
@@ -1687,6 +1703,13 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
                 onToggle={() => toggle(m.id)}
                 onShowImages={() => showImages(m)}
                 onUnlocked={() => setPgpTick((t) => t + 1)}
+                onScreen={(allow) => {
+                  moveMessage(m, allow ? "inbox" : "spam");
+                  api
+                    .screenSender(allow, m.from?.address, m.from?.name)
+                    .then(() => notify(allow ? "Sender let in" : "Sender blocked", "", "success"))
+                    .catch(notifyError);
+                }}
               />
             );
           })}

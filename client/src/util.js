@@ -249,6 +249,7 @@ export const FOLDER_LABELS = {
   drafts: "Drafts",
   archive: "Archive",
   spam: "Spam",
+  screener: "Screener",
   trash: "Trash",
   snoozed: "Snoozed",
 };

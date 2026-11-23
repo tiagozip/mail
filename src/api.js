@@ -39,6 +39,7 @@ import { sanitizeEmailHtml, stripTrackers } from "./sanitize.js";
 import { sendMessage } from "./send.js";
 import {
   attKey,
+  bumpContact,
   deleteMessageRow,
   FILTER_ACTIONS,
   FILTER_FIELDS,
@@ -578,7 +579,16 @@ async function listMessages(request, env, user) {
     }
     const text = q.replace(opRe, " ").replace(/\s+/g, " ").trim();
     const like = (s) => `%${String(s).replace(/[%_\\]/g, "\\$&")}%`;
-    const FOLDERS_OK = new Set(["inbox", "sent", "drafts", "archive", "spam", "trash", "snoozed"]);
+    const FOLDERS_OK = new Set([
+      "inbox",
+      "sent",
+      "drafts",
+      "archive",
+      "spam",
+      "trash",
+      "snoozed",
+      "screener",
+    ]);
 
     if (ops.from) {
       where.push("(m.from_addr LIKE ? ESCAPE '\\' OR m.from_name LIKE ? ESCAPE '\\')");
@@ -1108,6 +1118,36 @@ async function routeApi(request, env, ctx, auth) {
       { ok: true, logoutUrl },
       { headers: { "set-cookie": clearCookie(isSecure(request)) } },
     );
+  }
+
+  if ((path === "/api/screener/allow" || path === "/api/screener/block") && method === "POST") {
+    const b = await readJson(request);
+    const address = normalizeAddr(b.address || "");
+    if (!isValidEmail(address)) return error(400, "invalid address");
+    const allow = path.endsWith("allow");
+    const target = allow ? "inbox" : "spam";
+    const moved = await env.DB.prepare(
+      "UPDATE messages SET folder = ? WHERE user_id = ? AND folder = 'screener' AND from_addr = ? RETURNING id",
+    )
+      .bind(target, user.id, address)
+      .all();
+    const ids = (moved.results || []).map((r) => r.id);
+    if (ids.length) await recordChanges(env, user.id, ids, "upsert");
+    if (allow) await bumpContact(env, user.id, address, String(b.name || ""));
+    else {
+      const exists = await env.DB.prepare(
+        "SELECT 1 FROM filters WHERE user_id = ? AND field = 'from' AND match_value = ? AND action = 'spam'",
+      )
+        .bind(user.id, address)
+        .first();
+      if (!exists)
+        await env.DB.prepare(
+          "INSERT INTO filters (id, user_id, field, match_value, action, position, created_at) VALUES (?, ?, 'from', ?, 'spam', 0, ?)",
+        )
+          .bind(uuid(), user.id, address, now())
+          .run();
+    }
+    return json({ ok: true, moved: ids.length, folder: target });
   }
 
   if (path.startsWith("/api/calendar/")) {
@@ -2162,6 +2202,8 @@ async function routeApi(request, env, ctx, auth) {
     const b = await readJson(request);
     const incoming = b.settings || {};
     if (!user.is_admin) incoming.catchAll = false;
+    const previous = JSON.parse(user.settings_json || "{}");
+    if (previous.calFeedToken) incoming.calFeedToken = previous.calFeedToken;
     const settings = JSON.stringify(incoming);
     await env.DB.prepare(
       "UPDATE users SET display_name = ?, signature = ?, settings_json = ? WHERE id = ?",

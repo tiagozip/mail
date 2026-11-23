@@ -79,6 +79,7 @@ export const LIMITS = {
   admin: { limit: 300, window: HOUR, scope: "user" },
   calendar: { limit: 300, window: HOUR, scope: "user", message: "too many calendar changes" },
   rsvp: { limit: 60, window: HOUR, scope: "user", message: "too many invitation replies" },
+  screener: { limit: 300, window: HOUR, scope: "user" },
   "cal:feed": { limit: 60, window: MINUTE, scope: "ip" },
 };
 
@@ -216,6 +217,7 @@ const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const ROUTES = [
   ["POST", /^\/api\/calendar\/events\/[\w-]+\/rsvp$/, ["rsvp", "send", "send:hour"]],
   ["WRITE", /^\/api\/calendar\//, ["calendar"]],
+  ["POST", /^\/api\/screener\//, ["screener"]],
   ["POST", /^\/api\/aliases$/, ["alias:create", "alias:create:day"]],
   ["POST", /^\/api\/hidden-aliases$/, ["alias:create", "alias:create:day"]],
   ["POST", /^\/api\/aliases\/[^/]+\/avatar$/, ["avatar"]],

@@ -1,6 +1,6 @@
 import { normalizeAddr, now, snippetFrom, uuid } from "./util.js";
 
-export const FOLDERS = ["inbox", "sent", "drafts", "archive", "trash", "spam"];
+export const FOLDERS = ["inbox", "sent", "drafts", "archive", "trash", "spam", "screener"];
 export const FILTER_FIELDS = ["from", "to", "delivered_to", "subject"];
 export const FILTER_ACTIONS = ["read", "archive", "star", "spam", "forward"];
 export const MAX_FORWARD_TARGETS = 5;
