@@ -588,6 +588,7 @@ async function listMessages(request, env, user) {
       "trash",
       "snoozed",
       "screener",
+      "newsletters",
     ]);
 
     if (ops.from) {

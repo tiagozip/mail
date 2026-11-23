@@ -20,6 +20,7 @@ import {
   Warning,
   UserCircleIcon,
   UserPlus,
+  Newspaper,
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import { FOLDER_LABELS, initials, monoColor } from "../util.js";
@@ -29,6 +30,7 @@ import { LabelModal } from "./LabelModal.jsx";
 const FOLDERS = [
   { key: "inbox", icon: Tray },
   { key: "screener", icon: UserPlus },
+  { key: "newsletters", icon: Newspaper },
   { key: "starred", icon: Star },
   { key: "sent", icon: PaperPlaneTilt },
   { key: "drafts", icon: FileText },
@@ -89,8 +91,16 @@ export function MailSidebar({
         {FOLDERS.map(({ key, icon: Icon }) => {
           if (key === "screener" && !user.settings?.screenSenders && !counts?.screener?.total)
             return null;
+          if (
+            key === "newsletters" &&
+            !user.settings?.newsletterFolder &&
+            !counts?.newsletters?.total
+          )
+            return null;
           const unread =
-            key === "inbox" ? counts?.[key]?.unread : key === "screener" ? counts?.[key]?.total : 0;
+            key === "inbox" || key === "newsletters"
+              ? counts?.[key]?.unread
+              : key === "screener" ? counts?.[key]?.total : 0;
           const on = active === key;
           return (
             <button

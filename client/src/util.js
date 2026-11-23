@@ -250,6 +250,7 @@ export const FOLDER_LABELS = {
   archive: "Archive",
   spam: "Spam",
   screener: "Screener",
+  newsletters: "Newsletters",
   trash: "Trash",
   snoozed: "Snoozed",
 };

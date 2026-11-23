@@ -25,7 +25,7 @@ setTimeout(() => {
   import("./CalendarView.jsx");
 }, 800);
 
-const PATH_FOLDERS = ["inbox", "screener", "sent", "drafts", "archive", "spam", "trash"];
+const PATH_FOLDERS = ["inbox", "screener", "newsletters", "sent", "drafts", "archive", "spam", "trash"];
 
 function pathFor(view, openId) {
   if (openId) return `/message/${openId}`;

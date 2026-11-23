@@ -1436,6 +1436,9 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
   const [catchAll, setCatchAll] = useState(!!user.settings?.catchAll);
   const [aiSpam, setAiSpam] = useState(user.settings?.aiSpam !== false);
   const [screenSenders, setScreenSenders] = useState(user.settings?.screenSenders === true);
+  const [newsletterFolder, setNewsletterFolder] = useState(
+    user.settings?.newsletterFolder === true,
+  );
   const [randomAvatars, setRandomAvatarsState] = useState(!!user.settings?.randomAvatars);
   const [undoSend, setUndoSend] = useState(user.settings?.undoSend || 0);
   const [busy, setBusy] = useState(false);
@@ -1536,6 +1539,21 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
     } catch (e) {
       setRandomAvatarsState(!v);
       setRandomAvatars(!v);
+      notifyError(e);
+    }
+  }
+
+  async function saveNewsletterFolder(v) {
+    setNewsletterFolder(v);
+    try {
+      const data = await api.saveSettings({
+        displayName,
+        signature,
+        settings: { ...user.settings, palette, imagesDefault, catchAll, aiSpam, newsletterFolder: v },
+      });
+      setUser(data.user);
+    } catch (e) {
+      setNewsletterFolder(!v);
       notifyError(e);
     }
   }
@@ -1852,6 +1870,20 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
                       aria-label="Screen new senders"
                       checked={screenSenders}
                       onCheckedChange={saveScreenSenders}
+                    />
+                  </div>
+                  <div className="em-toggle-row">
+                    <div className="em-toggle-copy">
+                      <div className="em-toggle-title">Keep newsletters out of the inbox</div>
+                      <div className="em-toggle-sub">
+                        Mailing list and newsletter mail goes to Newsletters, unless it comes from
+                        someone you have written to.
+                      </div>
+                    </div>
+                    <Switch
+                      aria-label="Keep newsletters out of the inbox"
+                      checked={newsletterFolder}
+                      onCheckedChange={saveNewsletterFolder}
                     />
                   </div>
                 </div>

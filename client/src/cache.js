@@ -180,7 +180,7 @@ export function setSkipInboxFolders(ids) {
   skipInboxFolderIds = new Set(ids || []);
 }
 
-const HIDDEN_IN_FOLDER = ["trash", "spam", "drafts", "screener"];
+const HIDDEN_IN_FOLDER = ["trash", "spam", "drafts", "screener", "newsletters"];
 
 export function matchView(item, view, nowTs, inboxThreads) {
   const snoozed = item.snoozeUntil && item.snoozeUntil > nowTs;
