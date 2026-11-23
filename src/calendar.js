@@ -1,11 +1,57 @@
+import { consume } from "./ratelimit.js";
 import { sendMessage } from "./send.js";
-import { clampInt, error, json, normalizeAddr, now, randomToken, uuid } from "./util.js";
+import {
+  clampInt,
+  error,
+  escapeHtml,
+  isValidEmail,
+  json,
+  normalizeAddr,
+  now,
+  randomToken,
+  uuid,
+} from "./util.js";
 
 const DAY_MS = 86400000;
 const MAX_RANGE = 120 * DAY_MS;
 const MAX_OCCURRENCES = 500;
+const MAX_GUESTS = 50;
 const RSVP = new Set(["accepted", "declined", "tentative"]);
 const COLORS = new Set(["rose", "violet", "blue", "teal", "green", "amber", "gray"]);
+const WEEKDAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+
+const WINDOWS_ZONES = {
+  "W. Europe Standard Time": "Europe/Berlin",
+  "Central Europe Standard Time": "Europe/Budapest",
+  "Romance Standard Time": "Europe/Paris",
+  "Central European Standard Time": "Europe/Warsaw",
+  "GMT Standard Time": "Europe/London",
+  "Greenwich Standard Time": "Atlantic/Reykjavik",
+  "E. Europe Standard Time": "Europe/Chisinau",
+  "FLE Standard Time": "Europe/Kiev",
+  "GTB Standard Time": "Europe/Bucharest",
+  "Russian Standard Time": "Europe/Moscow",
+  "Eastern Standard Time": "America/New_York",
+  "Central Standard Time": "America/Chicago",
+  "Mountain Standard Time": "America/Denver",
+  "US Mountain Standard Time": "America/Phoenix",
+  "Pacific Standard Time": "America/Los_Angeles",
+  "Alaskan Standard Time": "America/Anchorage",
+  "Hawaiian Standard Time": "Pacific/Honolulu",
+  "Atlantic Standard Time": "America/Halifax",
+  "E. South America Standard Time": "America/Sao_Paulo",
+  "India Standard Time": "Asia/Kolkata",
+  "China Standard Time": "Asia/Shanghai",
+  "Tokyo Standard Time": "Asia/Tokyo",
+  "Korea Standard Time": "Asia/Seoul",
+  "Singapore Standard Time": "Asia/Singapore",
+  "AUS Eastern Standard Time": "Australia/Sydney",
+  "New Zealand Standard Time": "Pacific/Auckland",
+  "Israel Standard Time": "Asia/Jerusalem",
+  "Arabian Standard Time": "Asia/Dubai",
+  "South Africa Standard Time": "Africa/Johannesburg",
+  UTC: "UTC",
+};
 
 function unfold(text) {
   return String(text || "")
@@ -44,7 +90,19 @@ function parseLine(line) {
   return { name: parts[0].toUpperCase(), params, value };
 }
 
+export function validZone(tz) {
+  if (!tz) return null;
+  const name = WINDOWS_ZONES[tz] || String(tz).replace(/^\/+/, "");
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: name });
+    return name;
+  } catch {
+    return null;
+  }
+}
+
 function zoneOffset(tz, ts) {
+  if (!tz || tz === "UTC") return 0;
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     hourCycle: "h23",
@@ -62,25 +120,33 @@ function zoneOffset(tz, ts) {
   );
 }
 
-function parseDate(prop) {
-  if (!prop) return null;
-  const m = prop.value.trim().match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/);
+function wallToUtc(tz, wall) {
+  if (!tz || tz === "UTC") return wall;
+  const first = wall - zoneOffset(tz, wall);
+  return wall - zoneOffset(tz, first);
+}
+
+function utcToWall(tz, ts) {
+  return ts + zoneOffset(tz, ts);
+}
+
+function parseDateValue(value, params) {
+  const m = String(value || "")
+    .trim()
+    .match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/);
   if (!m) return null;
   const [, y, mo, d, h, mi, s, z] = m;
-  if (h === undefined || prop.params.VALUE === "DATE") {
-    return { ts: Date.UTC(+y, +mo - 1, +d), allDay: true };
+  if (h === undefined || params.VALUE === "DATE") {
+    return { ts: Date.UTC(+y, +mo - 1, +d), allDay: true, tz: null };
   }
-  const local = Date.UTC(+y, +mo - 1, +d, +h, +mi, +(s || 0));
-  if (z) return { ts: local, allDay: false };
-  const tz = prop.params.TZID;
-  if (!tz) return { ts: local, allDay: false, floating: true };
-  try {
-    let ts = local - zoneOffset(tz, local);
-    ts = local - zoneOffset(tz, ts);
-    return { ts, allDay: false };
-  } catch {
-    return { ts: local, allDay: false, floating: true };
-  }
+  const wall = Date.UTC(+y, +mo - 1, +d, +h, +mi, +(s || 0));
+  if (z) return { ts: wall, allDay: false, tz: null };
+  const tz = validZone(params.TZID);
+  return { ts: wallToUtc(tz, wall), allDay: false, tz };
+}
+
+function parseDate(prop) {
+  return prop ? parseDateValue(prop.value, prop.params) : null;
 }
 
 function parseDuration(v) {
@@ -110,7 +176,7 @@ export function parseIcs(text) {
     const p = parseLine(raw);
     if (p.name === "METHOD" && !cur) method = p.value.trim().toUpperCase();
     if (p.name === "BEGIN" && p.value.toUpperCase() === "VEVENT") {
-      cur = { props: {}, attendees: [] };
+      cur = { props: {}, attendees: [], exdates: [] };
       depth = 0;
       continue;
     }
@@ -130,7 +196,12 @@ export function parseIcs(text) {
     }
     if (depth > 0) continue;
     if (p.name === "ATTENDEE") cur.attendees.push(p);
-    else if (!cur.props[p.name]) cur.props[p.name] = p;
+    else if (p.name === "EXDATE") {
+      for (const v of p.value.split(",")) {
+        const d = parseDateValue(v, p.params);
+        if (d) cur.exdates.push(d.ts);
+      }
+    } else if (!cur.props[p.name]) cur.props[p.name] = p;
   }
   return {
     method,
@@ -144,13 +215,16 @@ export function parseIcs(text) {
         const org = e.props.ORGANIZER;
         return {
           uid: e.props.UID.value.trim().slice(0, 500),
+          recurrenceId: parseDate(e.props["RECURRENCE-ID"])?.ts || 0,
           title: unescapeText(e.props.SUMMARY?.value).slice(0, 500),
           description: unescapeText(e.props.DESCRIPTION?.value).slice(0, 8000),
           location: unescapeText(e.props.LOCATION?.value).slice(0, 1000),
           start: start.ts,
           end,
           allDay: start.allDay,
+          tz: start.tz,
           rrule: e.props.RRULE?.value?.trim().slice(0, 500) || null,
+          exdates: e.exdates.slice(0, 500),
           status: (e.props.STATUS?.value || "CONFIRMED").trim().toLowerCase(),
           sequence: Number.parseInt(e.props.SEQUENCE?.value || "0", 10) || 0,
           organizer: org ? mailtoOf(org.value) : null,
@@ -185,21 +259,54 @@ function fold(line) {
   return out.join("\r\n");
 }
 
-function veventLines(ev, extra = []) {
+function attendeesOf(row) {
+  try {
+    return JSON.parse(row.attendees_json || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function exdatesOf(row) {
+  try {
+    return JSON.parse(row.exdates || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function veventLines(ev, { extra = [], withAttendees = false, recurrenceId = 0 } = {}) {
+  const date = (ts) => (ev.all_day ? `;VALUE=DATE:${fmtDate(ts)}` : `:${fmtUtc(ts)}`);
+  const rid = recurrenceId || ev.recurrence_id || 0;
   const lines = [
     "BEGIN:VEVENT",
     `UID:${ev.uid}`,
     `DTSTAMP:${fmtUtc(now())}`,
-    ev.all_day ? `DTSTART;VALUE=DATE:${fmtDate(ev.start_at)}` : `DTSTART:${fmtUtc(ev.start_at)}`,
-    ev.all_day ? `DTEND;VALUE=DATE:${fmtDate(ev.end_at)}` : `DTEND:${fmtUtc(ev.end_at)}`,
+    `DTSTART${date(ev.start_at)}`,
+    `DTEND${date(ev.end_at)}`,
     `SUMMARY:${escapeText(ev.title)}`,
     `SEQUENCE:${ev.sequence || 0}`,
   ];
+  if (rid) lines.push(`RECURRENCE-ID${date(rid)}`);
   if (ev.location) lines.push(`LOCATION:${escapeText(ev.location)}`);
   if (ev.description) lines.push(`DESCRIPTION:${escapeText(ev.description)}`);
-  if (ev.rrule) lines.push(`RRULE:${ev.rrule}`);
+  if (ev.rrule && !rid) {
+    lines.push(`RRULE:${ev.rrule}`);
+    for (const x of exdatesOf(ev)) lines.push(`EXDATE${date(x)}`);
+  }
   if (ev.status === "cancelled") lines.push("STATUS:CANCELLED");
-  if (ev.organizer) lines.push(`ORGANIZER:mailto:${ev.organizer}`);
+  if (ev.organizer) {
+    const cn = ev.organizer_name ? `;CN=${escapeText(ev.organizer_name)}` : "";
+    lines.push(`ORGANIZER${cn}:mailto:${ev.organizer}`);
+  }
+  if (withAttendees) {
+    for (const a of attendeesOf(ev)) {
+      const cn = a.name ? `;CN=${escapeText(a.name)}` : "";
+      lines.push(
+        `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=${String(a.status || "needs-action").toUpperCase()};RSVP=TRUE${cn}:mailto:${a.address}`,
+      );
+    }
+  }
   lines.push(...extra, "END:VEVENT");
   return lines;
 }
@@ -215,7 +322,12 @@ function wrapCalendar(lines, method) {
   return `${[...head, ...lines, "END:VCALENDAR"].map(fold).join("\r\n")}\r\n`;
 }
 
+function isOwned(r) {
+  return !r.organizer || r.organizer === r.my_address;
+}
+
 function shape(r) {
+  const attendees = attendeesOf(r);
   return {
     id: r.id,
     uid: r.uid,
@@ -225,12 +337,16 @@ function shape(r) {
     start: r.start_at,
     end: r.end_at,
     allDay: !!r.all_day,
+    tz: r.tz,
     rrule: r.rrule,
+    exdates: exdatesOf(r),
+    recurrenceId: r.recurrence_id || 0,
     color: r.color,
     status: r.status,
     organizer: r.organizer,
     organizerName: r.organizer_name,
-    attendees: JSON.parse(r.attendees_json || "[]"),
+    attendees,
+    owned: isOwned(r),
     myStatus: r.my_status,
     myAddress: r.my_address,
     sourceMessageId: r.source_message_id,
@@ -238,9 +354,7 @@ function shape(r) {
   };
 }
 
-const WEEKDAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
-
-function expand(ev, from, to) {
+function expand(ev, from, to, overridden) {
   if (!ev.rrule) return ev.end > from && ev.start < to ? [ev] : [];
   const rule = Object.fromEntries(
     ev.rrule.split(";").map((kv) => {
@@ -249,31 +363,44 @@ function expand(ev, from, to) {
     }),
   );
   const freq = rule.FREQ;
+  if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) {
+    return ev.end > from && ev.start < to ? [ev] : [];
+  }
+  const tz = ev.allDay ? "UTC" : ev.tz || "UTC";
   const interval = Math.max(1, Number.parseInt(rule.INTERVAL || "1", 10) || 1);
   const count = Number.parseInt(rule.COUNT || "0", 10) || 0;
-  const until = rule.UNTIL ? parseDate({ value: rule.UNTIL, params: {} })?.ts || 0 : 0;
+  const until = rule.UNTIL ? parseDateValue(rule.UNTIL, {})?.ts || 0 : 0;
   const dur = ev.end - ev.start;
-  const byDay = (rule.BYDAY || "")
-    .split(",")
-    .map((d) => WEEKDAYS.indexOf(d.slice(-2)))
-    .filter((d) => d >= 0);
+  const skip = new Set([...(ev.exdates || []), ...(overridden || [])]);
+  const byDay = [
+    ...new Set(
+      (rule.BYDAY || "")
+        .split(",")
+        .map((d) => WEEKDAYS.indexOf(d.slice(-2)))
+        .filter((d) => d >= 0),
+    ),
+  ].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+  const baseWall = utcToWall(tz, ev.start);
+  const base = new Date(baseWall);
   const out = [];
-  const base = new Date(ev.start);
   let n = 0;
+  const done = (ts) =>
+    (count && n >= count) || (until && ts > until) || ts >= to || out.length >= MAX_OCCURRENCES;
   const push = (ts) => {
     n++;
+    if (skip.has(ts)) return;
     if (ts + dur > from && ts < to)
       out.push({ ...ev, start: ts, end: ts + dur, occurrence: ts, seriesStart: ev.start });
   };
-  const done = (ts) =>
-    (count && n >= count) || (until && ts > until) || ts >= to || out.length >= MAX_OCCURRENCES;
   for (let i = 0; i < 5000; i++) {
     if (freq === "WEEKLY" && byDay.length) {
-      const weekStart = ev.start - base.getUTCDay() * DAY_MS + i * interval * 7 * DAY_MS;
+      const mondayWall = baseWall - ((base.getUTCDay() + 6) % 7) * DAY_MS;
+      const weekWall = mondayWall + i * interval * 7 * DAY_MS;
       let stop = false;
-      for (const d of [...byDay].sort()) {
-        const ts = weekStart + d * DAY_MS;
-        if (ts < ev.start) continue;
+      for (const d of byDay) {
+        const wall = weekWall + ((d + 6) % 7) * DAY_MS;
+        if (wall < baseWall) continue;
+        const ts = wallToUtc(tz, wall);
         if (done(ts)) {
           stop = true;
           break;
@@ -286,10 +413,14 @@ function expand(ev, from, to) {
     const d = new Date(base);
     if (freq === "DAILY") d.setUTCDate(d.getUTCDate() + i * interval);
     else if (freq === "WEEKLY") d.setUTCDate(d.getUTCDate() + i * interval * 7);
-    else if (freq === "MONTHLY") d.setUTCMonth(d.getUTCMonth() + i * interval);
-    else if (freq === "YEARLY") d.setUTCFullYear(d.getUTCFullYear() + i * interval);
-    else return ev.end > from && ev.start < to ? [ev] : [];
-    const ts = d.getTime();
+    else if (freq === "MONTHLY") {
+      d.setUTCDate(1);
+      d.setUTCMonth(d.getUTCMonth() + i * interval);
+      const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+      if (base.getUTCDate() > last) continue;
+      d.setUTCDate(base.getUTCDate());
+    } else d.setUTCFullYear(d.getUTCFullYear() + i * interval);
+    const ts = wallToUtc(tz, d.getTime());
     if (done(ts)) break;
     push(ts);
   }
@@ -303,34 +434,61 @@ async function userAddresses(env, userId, primary) {
   return new Set([primary, ...(results || []).map((r) => r.address)].map(normalizeAddr));
 }
 
+async function eventById(env, id) {
+  return env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(id).first();
+}
+
 export async function ingestCalendar(env, user, icsText, messageId) {
   const { method, events } = parseIcs(icsText);
   if (!events.length) return;
   const mine = await userAddresses(env, user.id, user.address);
   const t = now();
   for (const e of events.slice(0, 20)) {
-    const existing = await env.DB.prepare("SELECT * FROM events WHERE user_id = ? AND uid = ?")
-      .bind(user.id, e.uid)
+    const existing = await env.DB.prepare(
+      "SELECT * FROM events WHERE user_id = ? AND uid = ? AND recurrence_id = ?",
+    )
+      .bind(user.id, e.uid, e.recurrenceId)
       .first();
     if (method === "REPLY") {
-      if (!existing) continue;
-      const atts = JSON.parse(existing.attendees_json || "[]");
+      const target =
+        existing ||
+        (await env.DB.prepare(
+          "SELECT * FROM events WHERE user_id = ? AND uid = ? AND recurrence_id = 0",
+        )
+          .bind(user.id, e.uid)
+          .first());
+      if (!target || !isOwned(target)) continue;
+      const atts = attendeesOf(target);
       for (const a of e.attendees) {
         const hit = atts.find((x) => x.address === a.address);
         if (hit) hit.status = a.status;
-        else atts.push(a);
       }
       await env.DB.prepare("UPDATE events SET attendees_json = ?, updated_at = ? WHERE id = ?")
-        .bind(JSON.stringify(atts), t, existing.id)
+        .bind(JSON.stringify(atts), t, target.id)
         .run();
       continue;
     }
+    if (e.organizer && mine.has(e.organizer)) continue;
     if (existing && existing.sequence > e.sequence) continue;
+    if (method === "CANCEL" && e.recurrenceId && !existing) {
+      const master = await env.DB.prepare(
+        "SELECT * FROM events WHERE user_id = ? AND uid = ? AND recurrence_id = 0",
+      )
+        .bind(user.id, e.uid)
+        .first();
+      if (master) {
+        const ex = [...new Set([...exdatesOf(master), e.recurrenceId])];
+        await env.DB.prepare("UPDATE events SET exdates = ?, updated_at = ? WHERE id = ?")
+          .bind(JSON.stringify(ex), t, master.id)
+          .run();
+      }
+      continue;
+    }
     const me = e.attendees.find((a) => mine.has(a.address));
     const status = method === "CANCEL" ? "cancelled" : e.status;
     if (existing) {
       await env.DB.prepare(
-        "UPDATE events SET title = ?, description = ?, location = ?, start_at = ?, end_at = ?, all_day = ?, rrule = ?, status = ?, organizer = ?, organizer_name = ?, attendees_json = ?, sequence = ?, source_message_id = ?, updated_at = ? WHERE id = ?",
+        "UPDATE events SET title = ?, description = ?, location = ?, start_at = ?, end_at = ?, all_day = ?, tz = ?, rrule = ?, exdates = ?, status = ?, organizer = ?, organizer_name = ?, attendees_json = ?, sequence = ?, source_message_id = ?, updated_at = ? WHERE id = ?",
       )
         .bind(
           e.title,
@@ -339,7 +497,9 @@ export async function ingestCalendar(env, user, icsText, messageId) {
           e.start,
           e.end,
           e.allDay ? 1 : 0,
+          e.tz,
           e.rrule,
+          JSON.stringify(e.exdates),
           status,
           e.organizer,
           e.organizerName,
@@ -353,26 +513,36 @@ export async function ingestCalendar(env, user, icsText, messageId) {
       continue;
     }
     if (method === "CANCEL") continue;
+    const master = e.recurrenceId
+      ? await env.DB.prepare(
+          "SELECT my_status FROM events WHERE user_id = ? AND uid = ? AND recurrence_id = 0",
+        )
+          .bind(user.id, e.uid)
+          .first()
+      : null;
     await env.DB.prepare(
-      "INSERT INTO events (id, user_id, uid, title, description, location, start_at, end_at, all_day, rrule, status, organizer, organizer_name, attendees_json, my_address, my_status, sequence, source_message_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO events (id, user_id, uid, recurrence_id, title, description, location, start_at, end_at, all_day, tz, rrule, exdates, status, organizer, organizer_name, attendees_json, my_address, my_status, sequence, source_message_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
       .bind(
         uuid(),
         user.id,
         e.uid,
+        e.recurrenceId,
         e.title,
         e.description,
         e.location,
         e.start,
         e.end,
         e.allDay ? 1 : 0,
+        e.tz,
         e.rrule,
+        JSON.stringify(e.exdates),
         status,
         e.organizer,
         e.organizerName,
         JSON.stringify(e.attendees),
         me?.address || null,
-        method === "REQUEST" ? "needs-action" : null,
+        master?.my_status || (method === "REQUEST" ? "needs-action" : null),
         e.sequence,
         messageId,
         t,
@@ -393,6 +563,14 @@ function readEventBody(b) {
   const rrule = b.rrule ? String(b.rrule).toUpperCase().slice(0, 200) : null;
   if (rrule && !/^FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;[A-Z]+=[A-Z0-9,]+)*$/.test(rrule))
     return null;
+  const guests = [
+    ...new Set(
+      (Array.isArray(b.guests) ? b.guests : [])
+        .map((g) => normalizeAddr(typeof g === "string" ? g : g?.address))
+        .filter(isValidEmail),
+    ),
+  ];
+  if (guests.length > MAX_GUESTS) return null;
   return {
     title: title || "Untitled",
     description: String(b.description || "").slice(0, 8000),
@@ -400,9 +578,83 @@ function readEventBody(b) {
     start,
     end,
     allDay: b.allDay ? 1 : 0,
+    tz: validZone(b.tz) || "UTC",
     rrule,
     color: COLORS.has(b.color) ? b.color : null,
+    guests,
   };
+}
+
+function whenText(row) {
+  const tz = row.all_day ? "UTC" : row.tz || "UTC";
+  const day = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  if (row.all_day) return `${day.format(new Date(row.start_at))}, all day`;
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+  return `${day.format(new Date(row.start_at))}, ${time.format(new Date(row.start_at))} to ${time.format(new Date(row.end_at))}`;
+}
+
+async function sendInvite(env, user, row, method, recipients, recurrenceId = 0) {
+  const to = recipients.filter((a) => a !== row.organizer);
+  if (!to.length) return null;
+  const rl = await consume(env, "send", user.id);
+  if (!rl.ok) return rl.message;
+  const dur = row.end_at - row.start_at;
+  const base = recurrenceId ? { ...row, start_at: recurrenceId, end_at: recurrenceId + dur } : row;
+  const ics = wrapCalendar(
+    veventLines(method === "CANCEL" ? { ...base, status: "cancelled" } : base, {
+      withAttendees: true,
+      recurrenceId,
+    }),
+    method,
+  );
+  const verb =
+    method === "CANCEL" ? "Cancelled" : row.sequence > 0 ? "Updated invitation" : "Invitation";
+  const when = whenText(base);
+  const who = user.display_name || user.username;
+  const lead =
+    method === "CANCEL"
+      ? `${who} cancelled this event.`
+      : `${who} invited you to ${row.title || "an event"}.`;
+  const text = [lead, "", when, row.location, row.description].filter(Boolean).join("\n");
+  const html = `<p>${escapeHtml(lead)}</p><p><strong>${escapeHtml(row.title)}</strong><br>${escapeHtml(when)}${row.location ? `<br>${escapeHtml(row.location)}` : ""}</p>${row.description ? `<p style="white-space:pre-wrap">${escapeHtml(row.description)}</p>` : ""}`;
+  try {
+    await sendMessage(env, user, {
+      to,
+      from: row.organizer,
+      subject: `${verb}: ${row.title}`,
+      text,
+      html,
+      track: false,
+      extraAttachments: [
+        {
+          content: new TextEncoder().encode(ics),
+          filename: method === "CANCEL" ? "cancel.ics" : "invite.ics",
+          type: `text/calendar; method=${method}; charset=utf-8`,
+          disposition: "attachment",
+        },
+      ],
+    });
+    return null;
+  } catch (e) {
+    return e?.message || "could not send invitations";
+  }
+}
+
+async function pickOrganizer(env, user, wanted) {
+  const mine = await userAddresses(env, user.id, user.address);
+  const addr = normalizeAddr(wanted || "");
+  return mine.has(addr) ? addr : normalizeAddr(user.address);
 }
 
 async function feedToken(env, user, rotate) {
@@ -416,6 +668,15 @@ async function feedToken(env, user, rotate) {
   return settings.calFeedToken;
 }
 
+async function allIcs(env, userId) {
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM events WHERE user_id = ? AND (my_status IS NULL OR my_status != 'declined') ORDER BY start_at LIMIT 5000",
+  )
+    .bind(userId)
+    .all();
+  return wrapCalendar((results || []).flatMap((r) => veventLines(r, { withAttendees: true })));
+}
+
 export async function calendarFeed(env, userId, token) {
   const user = await env.DB.prepare("SELECT id, settings_json FROM users WHERE id = ?")
     .bind(userId)
@@ -425,13 +686,7 @@ export async function calendarFeed(env, userId, token) {
   let diff = 0;
   for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ token.charCodeAt(i);
   if (diff) return error(404, "not found");
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM events WHERE user_id = ? AND (my_status IS NULL OR my_status != 'declined') ORDER BY start_at LIMIT 5000",
-  )
-    .bind(userId)
-    .all();
-  const body = wrapCalendar((results || []).flatMap((r) => veventLines(r)));
-  return new Response(body, {
+  return new Response(await allIcs(env, userId), {
     headers: {
       "content-type": "text/calendar; charset=utf-8",
       "cache-control": "private, max-age=300",
@@ -439,30 +694,51 @@ export async function calendarFeed(env, userId, token) {
   });
 }
 
+async function listRange(env, userId, from, to) {
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM events WHERE user_id = ? AND start_at < ? AND (end_at > ? OR rrule IS NOT NULL) ORDER BY start_at LIMIT 2000",
+  )
+    .bind(userId, to, from)
+    .all();
+  const rows = results || [];
+  const overrides = {};
+  if (rows.some((r) => r.rrule)) {
+    const o = await env.DB.prepare(
+      "SELECT uid, recurrence_id FROM events WHERE user_id = ? AND recurrence_id != 0",
+    )
+      .bind(userId)
+      .all();
+    for (const r of o.results || []) {
+      overrides[r.uid] = overrides[r.uid] || [];
+      overrides[r.uid].push(r.recurrence_id);
+    }
+  }
+  return rows.map(shape).flatMap((e) => expand(e, from, to, overrides[e.uid]));
+}
+
+function mergeGuests(previous, guests) {
+  return guests.map(
+    (address) =>
+      previous.find((a) => a.address === address) || { address, name: "", status: "needs-action" },
+  );
+}
+
 export async function routeCalendar(request, env, user, path, method) {
-  let m;
+  const url = new URL(request.url);
   if (path === "/api/calendar/events" && method === "GET") {
-    const url = new URL(request.url);
     const from = Number(url.searchParams.get("from")) || now() - 31 * DAY_MS;
     const to = Math.min(Number(url.searchParams.get("to")) || from + 62 * DAY_MS, from + MAX_RANGE);
-    const { results } = await env.DB.prepare(
-      "SELECT * FROM events WHERE user_id = ? AND start_at < ? AND (end_at > ? OR rrule IS NOT NULL) ORDER BY start_at LIMIT 2000",
-    )
-      .bind(user.id, to, from)
-      .all();
-    return json({
-      from,
-      to,
-      events: (results || []).map(shape).flatMap((e) => expand(e, from, to)),
-    });
+    return json({ from, to, events: await listRange(env, user.id, from, to) });
   }
   if (path === "/api/calendar/events" && method === "POST") {
-    const b = readEventBody(await request.json().catch(() => ({})));
+    const raw = await request.json().catch(() => ({}));
+    const b = readEventBody(raw);
     if (!b) return error(400, "invalid event");
     const id = uuid();
     const t = now();
+    const organizer = b.guests.length ? await pickOrganizer(env, user, raw.from) : null;
     await env.DB.prepare(
-      "INSERT INTO events (id, user_id, uid, title, description, location, start_at, end_at, all_day, rrule, color, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO events (id, user_id, uid, title, description, location, start_at, end_at, all_day, tz, rrule, color, organizer, organizer_name, attendees_json, my_address, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
       .bind(
         id,
@@ -474,30 +750,84 @@ export async function routeCalendar(request, env, user, path, method) {
         b.start,
         b.end,
         b.allDay,
+        b.tz,
         b.rrule,
         b.color,
+        organizer,
+        organizer ? user.display_name || user.username : null,
+        JSON.stringify(mergeGuests([], b.guests)),
+        organizer,
         t,
         t,
       )
       .run();
-    const row = await env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(id).first();
-    return json({ event: shape(row) });
+    const row = await eventById(env, id);
+    const sendError = b.guests.length
+      ? await sendInvite(env, user, row, "REQUEST", b.guests)
+      : null;
+    return json({ event: shape(row), sendError, notified: b.guests.length, invited: true });
   }
-  m = path.match(/^\/api\/calendar\/events\/([\w-]+)$/);
+  let m = path.match(/^\/api\/calendar\/events\/([\w-]+)$/);
   if (m) {
     const row = await env.DB.prepare("SELECT * FROM events WHERE id = ? AND user_id = ?")
       .bind(m[1], user.id)
       .first();
     if (!row) return error(404, "event not found");
+    const owned = isOwned(row);
+    const notify = url.searchParams.get("notify") !== "0";
+    const guests = attendeesOf(row).map((a) => a.address);
     if (method === "DELETE") {
-      await env.DB.prepare("DELETE FROM events WHERE id = ?").bind(row.id).run();
-      return json({ ok: true });
+      const occurrence = Number(url.searchParams.get("occurrence")) || 0;
+      if (occurrence && row.rrule) {
+        const ex = [...new Set([...exdatesOf(row), occurrence])];
+        await env.DB.prepare(
+          "UPDATE events SET exdates = ?, sequence = sequence + 1, updated_at = ? WHERE id = ?",
+        )
+          .bind(JSON.stringify(ex), now(), row.id)
+          .run();
+        const next = await eventById(env, row.id);
+        const sendError =
+          owned && notify && guests.length
+            ? await sendInvite(env, user, next, "CANCEL", guests, occurrence)
+            : null;
+        return json({ ok: true, event: shape(next), sendError });
+      }
+      await env.DB.prepare("DELETE FROM events WHERE user_id = ? AND uid = ? AND (id = ? OR ? = 0)")
+        .bind(user.id, row.uid, row.id, row.recurrence_id ? 1 : 0)
+        .run();
+      const sendError =
+        owned && notify && guests.length
+          ? await sendInvite(env, user, { ...row, sequence: row.sequence + 1 }, "CANCEL", guests)
+          : null;
+      return json({ ok: true, sendError });
     }
     if (method === "PATCH" || method === "PUT") {
-      const b = readEventBody({ ...shape(row), ...(await request.json().catch(() => ({}))) });
+      const raw = await request.json().catch(() => ({}));
+      if (!owned) {
+        const color = COLORS.has(raw.color) ? raw.color : null;
+        await env.DB.prepare("UPDATE events SET color = ?, updated_at = ? WHERE id = ?")
+          .bind(color, now(), row.id)
+          .run();
+        return json({ event: shape(await eventById(env, row.id)) });
+      }
+      const b = readEventBody({ ...shape(row), guests, ...raw });
       if (!b) return error(400, "invalid event");
+      const previous = attendeesOf(row);
+      const attendees = mergeGuests(previous, b.guests);
+      const removed = guests.filter((g) => !b.guests.includes(g));
+      const organizer = b.guests.length
+        ? row.organizer || (await pickOrganizer(env, user, raw.from))
+        : null;
+      const changed =
+        b.start !== row.start_at ||
+        b.end !== row.end_at ||
+        b.title !== row.title ||
+        b.location !== row.location ||
+        b.description !== row.description ||
+        (b.rrule || null) !== (row.rrule || null) ||
+        b.allDay !== row.all_day;
       await env.DB.prepare(
-        "UPDATE events SET title = ?, description = ?, location = ?, start_at = ?, end_at = ?, all_day = ?, rrule = ?, color = ?, sequence = sequence + 1, updated_at = ? WHERE id = ?",
+        "UPDATE events SET title = ?, description = ?, location = ?, start_at = ?, end_at = ?, all_day = ?, tz = ?, rrule = ?, exdates = ?, color = ?, organizer = ?, organizer_name = ?, attendees_json = ?, my_address = ?, sequence = sequence + ?, updated_at = ? WHERE id = ?",
       )
         .bind(
           b.title,
@@ -506,14 +836,33 @@ export async function routeCalendar(request, env, user, path, method) {
           b.start,
           b.end,
           b.allDay,
+          b.tz,
           b.rrule,
+          JSON.stringify(b.rrule ? exdatesOf(row).map((x) => x + (b.start - row.start_at)) : []),
           b.color,
+          organizer,
+          organizer ? row.organizer_name || user.display_name || user.username : null,
+          JSON.stringify(attendees),
+          organizer,
+          changed ? 1 : 0,
           now(),
           row.id,
         )
         .run();
-      const next = await env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(row.id).first();
-      return json({ event: shape(next) });
+      const next = await eventById(env, row.id);
+      const errors = [];
+      if (notify && removed.length)
+        errors.push(
+          await sendInvite(env, user, { ...row, sequence: row.sequence + 1 }, "CANCEL", removed),
+        );
+      const added = b.guests.filter((g) => !guests.includes(g));
+      const to = changed ? b.guests : added;
+      if (notify && to.length) errors.push(await sendInvite(env, user, next, "REQUEST", to));
+      return json({
+        event: shape(next),
+        sendError: errors.find(Boolean) || null,
+        notified: notify ? to.length + removed.length : 0,
+      });
     }
   }
   m = path.match(/^\/api\/calendar\/events\/([\w-]+)\/rsvp$/);
@@ -524,12 +873,17 @@ export async function routeCalendar(request, env, user, path, method) {
     if (!row) return error(404, "event not found");
     const { status } = await request.json().catch(() => ({}));
     if (!RSVP.has(status)) return error(400, "invalid status");
-    if (!row.organizer) return error(400, "event has no organizer");
+    if (!row.organizer || isOwned(row)) return error(400, "event has no organizer");
     const me = row.my_address || user.address;
     const ics = wrapCalendar(
-      veventLines({ ...row, description: "", location: "" }, [
-        `ATTENDEE;PARTSTAT=${status.toUpperCase()};CN=${escapeText(user.display_name || user.username)}:mailto:${me}`,
-      ]),
+      veventLines(
+        { ...row, description: "", location: "", rrule: row.recurrence_id ? null : row.rrule },
+        {
+          extra: [
+            `ATTENDEE;PARTSTAT=${status.toUpperCase()};CN=${escapeText(user.display_name || user.username)}:mailto:${me}`,
+          ],
+        },
+      ),
       "REPLY",
     );
     const verb = { accepted: "Accepted", declined: "Declined", tentative: "Tentative" }[status];
@@ -541,7 +895,7 @@ export async function routeCalendar(request, env, user, path, method) {
         from: me,
         subject: `${verb}: ${row.title}`,
         text,
-        html: `<p>${text.replace(/[<>&]/g, "")}</p>`,
+        html: `<p>${escapeHtml(text)}</p>`,
         track: false,
         extraAttachments: [
           {
@@ -555,11 +909,12 @@ export async function routeCalendar(request, env, user, path, method) {
     } catch (e) {
       return error(502, e?.message || "could not send reply");
     }
-    await env.DB.prepare("UPDATE events SET my_status = ?, updated_at = ? WHERE id = ?")
-      .bind(status, now(), row.id)
+    await env.DB.prepare(
+      "UPDATE events SET my_status = ?, updated_at = ? WHERE user_id = ? AND uid = ? AND (id = ? OR ? = 0)",
+    )
+      .bind(status, now(), user.id, row.uid, row.id, row.recurrence_id ? 1 : 0)
       .run();
-    const next = await env.DB.prepare("SELECT * FROM events WHERE id = ?").bind(row.id).first();
-    return json({ event: shape(next) });
+    return json({ event: shape(await eventById(env, row.id)) });
   }
   m = path.match(/^\/api\/calendar\/message\/([\w-]+)$/);
   if (m && method === "GET") {
@@ -572,20 +927,53 @@ export async function routeCalendar(request, env, user, path, method) {
   }
   if (path === "/api/calendar/feed" && (method === "GET" || method === "POST")) {
     const token = await feedToken(env, user, method === "POST");
-    const origin = new URL(request.url).origin;
-    return json({ url: `${origin}/api/cal/${user.id}/${token}.ics` });
+    return json({ url: `${url.origin}/api/cal/${user.id}/${token}.ics` });
+  }
+  if (path === "/api/calendar/export" && method === "GET") {
+    return new Response(await allIcs(env, user.id), {
+      headers: {
+        "content-type": "text/calendar; charset=utf-8",
+        "content-disposition": 'attachment; filename="calendar.ics"',
+      },
+    });
+  }
+  if (path === "/api/calendar/import" && method === "POST") {
+    const text = await request.text();
+    if (text.length > 2_000_000) return error(413, "file too large");
+    const { events } = parseIcs(text);
+    let added = 0;
+    const t = now();
+    for (const e of events.slice(0, 2000)) {
+      const res = await env.DB.prepare(
+        "INSERT OR IGNORE INTO events (id, user_id, uid, recurrence_id, title, description, location, start_at, end_at, all_day, tz, rrule, exdates, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      )
+        .bind(
+          uuid(),
+          user.id,
+          e.uid,
+          e.recurrenceId,
+          e.title,
+          e.description,
+          e.location,
+          e.start,
+          e.end,
+          e.allDay ? 1 : 0,
+          e.tz,
+          e.rrule,
+          JSON.stringify(e.exdates),
+          e.status === "cancelled" ? "cancelled" : "confirmed",
+          t,
+          t,
+        )
+        .run();
+      added += res.meta?.changes || 0;
+    }
+    return json({ added, total: events.length });
   }
   if (path === "/api/calendar/agenda" && method === "GET") {
-    const url = new URL(request.url);
     const days = clampInt(url.searchParams.get("days"), 1, 60, 14);
     const from = now();
-    const to = from + days * DAY_MS;
-    const { results } = await env.DB.prepare(
-      "SELECT * FROM events WHERE user_id = ? AND start_at < ? AND (end_at > ? OR rrule IS NOT NULL) ORDER BY start_at LIMIT 500",
-    )
-      .bind(user.id, to, from)
-      .all();
-    return json({ events: (results || []).map(shape).flatMap((e) => expand(e, from, to)) });
+    return json({ events: await listRange(env, user.id, from, from + days * DAY_MS) });
   }
   return null;
 }

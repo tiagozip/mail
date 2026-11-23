@@ -39,7 +39,12 @@ export const api = {
   calendarEvents: (from, to) => req("GET", `/api/calendar/events?from=${from}&to=${to}`),
   createEvent: (body) => req("POST", "/api/calendar/events", body),
   updateEvent: (id, body) => req("PATCH", `/api/calendar/events/${id}`, body),
-  deleteEvent: (id) => req("DELETE", `/api/calendar/events/${id}`),
+  deleteEvent: (id, occurrence) =>
+    req("DELETE", `/api/calendar/events/${id}${occurrence ? `?occurrence=${occurrence}` : ""}`),
+  importCalendar: (text) =>
+    fetch("/api/calendar/import", { method: "POST", credentials: "same-origin", body: text }).then((r) =>
+      r.json(),
+    ),
   rsvpEvent: (id, status) => req("POST", `/api/calendar/events/${id}/rsvp`, { status }),
   messageEvents: (id) => req("GET", `/api/calendar/message/${id}`),
   screenSender: (allow, address, name) =>

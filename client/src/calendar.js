@@ -66,16 +66,16 @@ function patchAll(fn) {
 }
 
 export async function createEvent(body) {
-  const temp = { ...body, id: `tmp-${Date.now()}`, pending: true };
+  const temp = { ...body, id: `tmp-${Date.now()}`, pending: true, owned: true };
   patchAll((list, key) => {
     const [from, to] = key.split("-").map(Number);
     return !body.rrule && body.end > from && body.start < to ? [...list, temp] : list;
   });
   try {
-    const { event } = await api.createEvent(body);
-    patchAll((list) => list.map((e) => (e.id === temp.id ? event : e)));
+    const res = await api.createEvent(body);
+    patchAll((list) => list.map((e) => (e.id === temp.id ? res.event : e)));
     if (body.rrule) refreshAll();
-    return event;
+    return res;
   } catch (e) {
     patchAll((list) => list.filter((x) => x.id !== temp.id));
     throw e;
@@ -88,13 +88,28 @@ export async function updateEvent(id, body) {
     list.map((e) => {
       if (e.id !== id) return e;
       const shift = e.occurrence ? e.start - e.seriesStart : 0;
-      return { ...e, ...body, start: body.start + shift, end: body.end + shift, seriesStart: body.start };
+      return {
+        ...e,
+        ...body,
+        start: body.start + shift,
+        end: body.end + shift,
+        seriesStart: body.start,
+        attendees: body.guests
+          ? body.guests.map(
+              (address) =>
+                e.attendees?.find((a) => a.address === address) || {
+                  address,
+                  status: "needs-action",
+                },
+            )
+          : e.attendees,
+      };
     }),
   );
   try {
-    const { event } = await api.updateEvent(id, body);
+    const res = await api.updateEvent(id, body);
     refreshAll();
-    return event;
+    return res;
   } catch (e) {
     ranges = JSON.parse(before);
     emit();
@@ -102,16 +117,22 @@ export async function updateEvent(id, body) {
   }
 }
 
-export async function deleteEvent(id) {
+export async function deleteEvent(id, occurrence) {
   const before = JSON.stringify(ranges);
-  patchAll((list) => list.filter((e) => e.id !== id));
+  patchAll((list) =>
+    list.filter((e) => e.id !== id || (occurrence && e.occurrence !== occurrence)),
+  );
   try {
-    await api.deleteEvent(id);
+    return await api.deleteEvent(id, occurrence);
   } catch (e) {
     ranges = JSON.parse(before);
     emit();
     throw e;
   }
+}
+
+export function refreshCalendar() {
+  refreshAll();
 }
 
 export async function rsvpEvent(id, status) {
