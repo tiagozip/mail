@@ -3,7 +3,29 @@ import { api } from "../api.js";
 import * as pgp from "../pgp.js";
 import { useMailStore } from "../store.js";
 import { notify, notifyError } from "../toast.js";
-import { groupThreads, pickFromAddress, recipientLine, sendIdentities } from "../util.js";
+import {
+  FOLDER_LABELS,
+  groupThreads,
+  pickFromAddress,
+  recipientLine,
+  sendIdentities,
+} from "../util.js";
+import {
+  Archive,
+  ArrowBendUpLeft,
+  CalendarBlank,
+  CalendarPlus,
+  ClockCountdown,
+  EnvelopeSimple,
+  Folder,
+  Gear,
+  Keyboard,
+  PencilSimple,
+  Star,
+  Tag,
+  Trash,
+} from "@phosphor-icons/react";
+import { CommandPalette } from "./CommandPalette.jsx";
 import { Compose } from "./Compose.jsx";
 import { E2EPrompt, shouldPromptE2E } from "./E2EPrompt.jsx";
 import { MailSidebar } from "./MailSidebar.jsx";
@@ -95,6 +117,8 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   const [e2ePrompt, setE2ePrompt] = useState(() => shouldPromptE2E(initialUser));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [newEventTick, setNewEventTick] = useState(0);
   const [cursor, setCursor] = useState(-1);
   const threads = useMemo(() => groupThreads(store.messages), [store.messages]);
   const [undoBar, setUndoBar] = useState(null);
@@ -249,7 +273,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (composeOpen || settingsOpen) return;
+      if (composeOpen || settingsOpen || paletteOpen) return;
 
       if (e.key === "?") {
         setShowHelp((s) => !s);
@@ -261,7 +285,10 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
       }
       if (gPressed.current) {
         gPressed.current = false;
-        if (e.key === "i") store.goView({ kind: "folder", folder: "inbox" });
+        if (e.key === "i") {
+          setScreen("mail");
+          store.goView({ kind: "folder", folder: "inbox" });
+        } else if (e.key === "c") setScreen("calendar");
         return;
       }
       if (e.key === "g") {
@@ -271,6 +298,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         }, 800);
         return;
       }
+      if (screen === "calendar") return;
       if (e.key === "c") {
         e.preventDefault();
         openCompose();
@@ -318,6 +346,69 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const openMessage = store.messages.find((m) => m.id === store.openId);
+  const commands = useMemo(() => {
+    const go = (view) => () => {
+      setScreen("mail");
+      store.goView(view);
+    };
+    const list = [
+      { id: "compose", label: "Write a message", icon: PencilSimple, keys: "c", run: () => openCompose() },
+      {
+        id: "new-event",
+        label: "New event",
+        keywords: ["calendar", "meeting", "schedule"],
+        icon: CalendarPlus,
+        run: () => {
+          setScreen("calendar");
+          setNewEventTick((t) => t + 1);
+        },
+      },
+      { id: "calendar", label: "Go to calendar", icon: CalendarBlank, keys: "g c", run: () => setScreen("calendar") },
+    ];
+    for (const key of ["inbox", "screener", "newsletters", "starred", "sent", "drafts", "snoozed", "archive", "spam", "trash"]) {
+      if (key === "screener" && !user.settings?.screenSenders) continue;
+      if (key === "newsletters" && !user.settings?.newsletterFolder) continue;
+      list.push({
+        id: `go:${key}`,
+        label: `Go to ${FOLDER_LABELS[key]}`,
+        icon: key === "starred" ? Star : EnvelopeSimple,
+        keys: key === "inbox" ? "g i" : undefined,
+        run: go(key === "starred" ? { kind: "starred" } : { kind: "folder", folder: key }),
+      });
+    }
+    for (const l of store.labels || [])
+      list.push({ id: `label:${l.id}`, label: `Go to label ${l.name}`, icon: Tag, run: go({ kind: "label", labelId: l.id }) });
+    for (const f of store.userFolders || [])
+      list.push({ id: `folder:${f.id}`, label: `Go to folder ${f.name}`, icon: Folder, run: go({ kind: "userfolder", folderId: f.id }) });
+    if (openMessage && screen === "mail") {
+      list.unshift(
+        { id: "reply", label: "Reply", icon: ArrowBendUpLeft, keys: "r", run: () => startReply(openMessage) },
+        { id: "reply-all", label: "Reply all", icon: ArrowBendUpLeft, run: () => startReply(openMessage, "replyAll") },
+        { id: "archive", label: "Archive this conversation", icon: Archive, keys: "e", run: () => store.moveMessage(openMessage, "archive") },
+        { id: "trash", label: "Move this conversation to trash", icon: Trash, keys: "#", run: () => store.moveMessage(openMessage, "trash") },
+        { id: "star", label: openMessage.isStarred ? "Remove star" : "Star this message", icon: Star, keys: "s", run: () => store.toggleStar(openMessage) },
+      );
+    }
+    list.push(
+      { id: "scheduled", label: "Show scheduled messages", icon: ClockCountdown, run: () => setScheduledOpen(true) },
+      { id: "settings", label: "Open settings", keywords: ["preferences"], icon: Gear, run: () => setSettingsOpen(true) },
+      { id: "shortcuts", label: "Show keyboard shortcuts", icon: Keyboard, keys: "?", run: () => setShowHelp(true) },
+    );
+    return list;
+  }, [store, user, openMessage, screen, openCompose]);
 
   async function signOut() {
     pgp.clearUnlocked();
@@ -474,7 +565,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
 
       {screen === "calendar" ? (
         <Suspense fallback={readerFallback}>
-          <CalendarView onMenu={() => setSidebarOpen(true)} />
+          <CalendarView onMenu={() => setSidebarOpen(true)} newEventTick={newEventTick} />
         </Suspense>
       ) : screen === "admin" ? (
         <Suspense fallback={readerFallback}>
@@ -522,6 +613,17 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
       />
 
       <ScheduledModal open={scheduledOpen} onClose={goBack} />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+        onSearch={(q) => {
+          setScreen("mail");
+          store.goView({ kind: "search", q });
+        }}
+        onWrite={(address) => openCompose({ to: `${address}, ` })}
+      />
 
       <Compose
         open={composeOpen}

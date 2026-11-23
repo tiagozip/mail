@@ -168,7 +168,7 @@ async function moveEvent(e, start, end) {
   }
 }
 
-export function CalendarView({ onMenu }) {
+export function CalendarView({ onMenu, newEventTick }) {
   const [mode, setMode] = useState(() => {
     try {
       return localStorage.getItem("em-cal-mode") || "month";
@@ -247,6 +247,10 @@ export function CalendarView({ onMenu }) {
       attendees: [],
     });
   }
+
+  useEffect(() => {
+    if (newEventTick) newAt();
+  }, [newEventTick]);
 
   useEffect(() => {
     function onKey(e) {

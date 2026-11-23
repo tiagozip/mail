@@ -7273,3 +7273,112 @@ body > div > [role="presentation"][data-side] {
 .em-cal-form > [role="combobox"] {
   width: 100%;
 }
+
+.em-palette-scrim {
+  align-items: flex-start;
+  padding-top: 14vh;
+}
+
+.em-palette {
+  width: 560px;
+  max-width: 94vw;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--em-radius-lg);
+  background: var(--color-kumo-elevated);
+  box-shadow:
+    0 0 0 1px var(--color-kumo-line),
+    0 2px 4px rgba(0, 0, 0, 0.16),
+    0 16px 40px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: em-panel-in 160ms var(--em-ease);
+}
+
+.em-palette-field {
+  display: flex;
+  align-items: center;
+  gap: var(--em-3);
+  padding: 0 var(--em-4);
+  border-bottom: 1px solid var(--color-kumo-line);
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-palette-field input {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  border: 0;
+  outline: none;
+  background: none;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text-color-kumo-strong);
+}
+
+.em-palette-field input::placeholder {
+  color: var(--text-color-kumo-placeholder);
+}
+
+.em-palette-list {
+  max-height: min(420px, 56vh);
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.em-palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--em-3);
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--em-radius-lg) - 6px);
+  background: none;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  color: var(--text-color-kumo-default);
+  cursor: pointer;
+}
+
+.em-palette-item svg {
+  flex: none;
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-palette-item.is-active {
+  background: var(--color-kumo-tint);
+  color: var(--text-color-kumo-strong);
+}
+
+.em-palette-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.em-palette-hint {
+  font-size: 0.8rem;
+  color: var(--text-color-kumo-subtle);
+  white-space: nowrap;
+}
+
+.em-palette-kbd {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--text-color-kumo-subtle);
+  padding: 1px 6px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px var(--color-kumo-line);
+  white-space: nowrap;
+}
+
+.em-palette-empty {
+  padding: var(--em-4);
+  font-size: 0.875rem;
+  color: var(--text-color-kumo-subtle);
+}
