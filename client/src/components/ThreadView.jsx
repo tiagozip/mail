@@ -553,6 +553,40 @@ function AttViewer({ list, index, onIndex, onClose }) {
   );
 }
 
+function UnsubscribeBar({ message }) {
+  const [state, setState] = useState(message.unsubscribe.done ? "done" : "idle");
+  async function run() {
+    setState("busy");
+    try {
+      const res = await api.unsubscribe(message.id);
+      if (res.url) window.open(res.url, "_blank", "noopener,noreferrer");
+      setState("done");
+      notify(
+        res.method === "link" ? "Finish unsubscribing on the sender's page" : "Unsubscribed",
+        "",
+        "success",
+      );
+    } catch (e) {
+      notifyError(e);
+      setState("idle");
+    }
+  }
+  return (
+    <div className="em-unsub-bar">
+      <span>
+        {state === "done"
+          ? `You unsubscribed from ${message.from?.name || message.from?.address}.`
+          : `Mailing list from ${message.from?.name || message.from?.address}.`}
+      </span>
+      {state !== "done" && (
+        <Button size="sm" variant="secondary" loading={state === "busy"} onClick={run}>
+          Unsubscribe
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function InviteCard({ messageId }) {
   const [events, setEvents] = useState([]);
   const [busy, setBusy] = useState("");
@@ -776,6 +810,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked, on
           {(message.attachments || []).some(
             (a) => /^text\/calendar/i.test(a.mime || "") || /\.ics$/i.test(a.filename || ""),
           ) && <InviteCard messageId={message.id} />}
+          {message.unsubscribe && <UnsubscribeBar message={message} />}
           {message.pgp ? (
             <PgpBody
               message={message}

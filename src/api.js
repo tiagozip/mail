@@ -710,6 +710,12 @@ async function getMessage(env, user, id, allowRemote) {
     .all();
   const opens =
     row.folder === "sent" ? (await opensFor(env, user.id, [row.id])).get(row.id) || null : null;
+  const unsub = await env.DB.prepare(
+    "SELECT http_url, mailto, one_click, done_at FROM list_unsubscribe WHERE message_id = ?",
+  )
+    .bind(id)
+    .first();
+  const unsubscribe = unsub ? { oneClick: !!unsub.one_click, done: !!unsub.done_at } : null;
   if (row.pgp) {
     let armored = "";
     if (row.html_key) {
@@ -729,6 +735,7 @@ async function getMessage(env, user, id, allowRemote) {
       bodyHtml: null,
       hasHtml: !!row.has_html,
       opens,
+      unsubscribe,
       pgp: true,
       attachments: (atts.results || [])
         .filter((a) => !a.is_inline && a.status === "stored")
@@ -767,6 +774,7 @@ async function getMessage(env, user, id, allowRemote) {
     trackersBlocked,
     trackerNames,
     opens,
+    unsubscribe,
     hasHtml: !!row.has_html,
     attachments: (atts.results || [])
       .filter((a) => !a.is_inline && a.status === "stored")
@@ -1047,6 +1055,21 @@ async function saveDraft(request, env, user, draftId) {
 
 const EXPORT_PART = 400;
 
+function safeUnsubscribeUrl(raw) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" || u.username || u.password) return false;
+  const host = u.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal"))
+    return false;
+  if (/^[\d.]+$/.test(host) || host.includes(":") || host.startsWith("[")) return false;
+  return true;
+}
+
 export async function handleApi(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -1296,6 +1319,64 @@ async function routeApi(request, env, ctx, auth) {
     headers.set("content-disposition", `attachment; filename="${safeName}.eml"`);
     headers.set("cache-control", "private, no-store");
     return new Response(bytes, { headers });
+  }
+
+  m = path.match(/^\/api\/messages\/([\w-]+)\/unsubscribe$/);
+  if (m && method === "POST") {
+    const row = await env.DB.prepare(
+      "SELECT * FROM list_unsubscribe WHERE message_id = ? AND user_id = ?",
+    )
+      .bind(m[1], user.id)
+      .first();
+    if (!row) return error(404, "this message has no unsubscribe link");
+    const done = () =>
+      env.DB.prepare("UPDATE list_unsubscribe SET done_at = ? WHERE message_id = ?")
+        .bind(now(), row.message_id)
+        .run();
+    if (row.http_url && row.one_click && safeUnsubscribeUrl(row.http_url)) {
+      try {
+        const res = await fetch(row.http_url, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: "List-Unsubscribe=One-Click",
+          redirect: "manual",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (res.status < 400) {
+          await done();
+          return json({ ok: true, method: "one-click" });
+        }
+      } catch {}
+    }
+    if (row.mailto) {
+      const target = new URL(row.mailto);
+      const to = decodeURIComponent(target.pathname);
+      if (isValidEmail(to)) {
+        const msg = await env.DB.prepare(
+          "SELECT delivered_to FROM messages WHERE id = ? AND user_id = ?",
+        )
+          .bind(row.message_id, user.id)
+          .first();
+        try {
+          await sendMessage(env, user, {
+            to: [to],
+            from: msg?.delivered_to || user.address,
+            subject: target.searchParams.get("subject") || "unsubscribe",
+            text: target.searchParams.get("body") || "unsubscribe",
+            track: false,
+          });
+          await done();
+          return json({ ok: true, method: "email" });
+        } catch (e) {
+          return error(502, e?.message || "could not send the unsubscribe email");
+        }
+      }
+    }
+    if (row.http_url && safeUnsubscribeUrl(row.http_url)) {
+      await done();
+      return json({ ok: true, method: "link", url: row.http_url });
+    }
+    return error(422, "this sender's unsubscribe link could not be used");
   }
 
   if ((m = path.match(/^\/api\/messages\/([\w-]+)\/read$/)) && method === "POST") {

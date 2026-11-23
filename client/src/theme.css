@@ -7408,3 +7408,22 @@ body > div > [role="presentation"][data-side] {
     background: var(--color-kumo-tint);
   }
 }
+
+.em-unsub-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--em-3);
+  margin-bottom: var(--em-3);
+  padding: 6px 6px 6px var(--em-3);
+  border-radius: var(--em-radius);
+  background: var(--color-kumo-recessed);
+  border: 1px solid var(--color-kumo-hairline);
+  font-size: 0.82rem;
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-unsub-bar > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+}

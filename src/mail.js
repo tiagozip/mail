@@ -519,6 +519,26 @@ export async function storeInbound(
     }
   }
 
+  const unsubHeader = firstHeader(headerBlock, "list-unsubscribe");
+  if (unsubHeader && folder !== "spam") {
+    const links = [...unsubHeader.matchAll(/<([^>]+)>/g)].map((x) => x[1].trim());
+    const http = links.find((l) => /^https:\/\//i.test(l)) || null;
+    const mailto = links.find((l) => /^mailto:/i.test(l)) || null;
+    const oneClick = /one-click/i.test(firstHeader(headerBlock, "list-unsubscribe-post") || "");
+    if (http || mailto)
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO list_unsubscribe (message_id, user_id, http_url, mailto, one_click) VALUES (?, ?, ?, ?, ?)",
+      )
+        .bind(
+          messageId,
+          userId,
+          http?.slice(0, 2000) || null,
+          mailto?.slice(0, 2000) || null,
+          oneClick ? 1 : 0,
+        )
+        .run();
+  }
+
   for (const label of autoLabels) {
     await env.DB.prepare(
       "INSERT OR IGNORE INTO message_labels (message_id, label_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM labels WHERE id = ? AND user_id = ?)",
