@@ -269,6 +269,8 @@ export async function sendMessage(env, user, payload) {
   if (bcc.length) sendPayload.bcc = bcc;
   if (Object.keys(headers).length) sendPayload.headers = headers;
   if (attachments.length && !isE2E) sendPayload.attachments = attachments;
+  if (payload.extraAttachments?.length)
+    sendPayload.attachments = [...(sendPayload.attachments || []), ...payload.extraAttachments];
 
   const result = relayDomain
     ? await sendViaRelay(env, relayDomain, sendPayload)

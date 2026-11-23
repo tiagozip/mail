@@ -12,6 +12,9 @@ import { ScheduledModal } from "./ScheduledView.jsx";
 import { Settings } from "./Settings.jsx";
 
 const Admin = lazy(() => import("./Admin.jsx").then((m) => ({ default: m.Admin })));
+const CalendarView = lazy(() =>
+  import("./CalendarView.jsx").then((m) => ({ default: m.CalendarView })),
+);
 const Shortcuts = lazy(() => import("./Shortcuts.jsx").then((m) => ({ default: m.Shortcuts })));
 const ThreadView = lazy(() => import("./ThreadView.jsx").then((m) => ({ default: m.ThreadView })));
 
@@ -19,6 +22,7 @@ const readerFallback = <div className="em-reader-loading" />;
 setTimeout(() => {
   import("./ThreadView.jsx");
   import("./RichEditor.jsx");
+  import("./CalendarView.jsx");
 }, 800);
 
 const PATH_FOLDERS = ["inbox", "sent", "drafts", "archive", "spam", "trash"];
@@ -83,7 +87,9 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   }, [user]);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeInitial, setComposeInitial] = useState(null);
-  const [screen, setScreen] = useState("mail");
+  const [screen, setScreen] = useState(() =>
+    window.location.pathname.startsWith("/calendar") ? "calendar" : "mail",
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scheduledOpen, setScheduledOpen] = useState(false);
   const [e2ePrompt, setE2ePrompt] = useState(() => shouldPromptE2E(initialUser));
@@ -169,11 +175,11 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
   }, [store]);
 
   useEffect(() => {
-    const p = pathFor(store.view, store.openId);
+    const p = screen === "calendar" ? "/calendar" : pathFor(store.view, store.openId);
     if (window.location.pathname !== p) {
       window.history.replaceState(window.history.state, "", p);
     }
-  }, [store.view, store.openId]);
+  }, [store.view, store.openId, screen]);
 
   async function hydrate(msg) {
     if (msg.bodyText !== undefined && msg.rfcMessageId) return msg;
@@ -454,11 +460,23 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
             setScheduledOpen(true);
           }}
           onSignOut={signOut}
-          onNavigate={() => setSidebarOpen(false)}
+          calendarActive={screen === "calendar"}
+          onOpenCalendar={() => {
+            setSidebarOpen(false);
+            setScreen("calendar");
+          }}
+          onNavigate={() => {
+            setSidebarOpen(false);
+            setScreen("mail");
+          }}
         />
       </div>
 
-      {screen === "admin" ? (
+      {screen === "calendar" ? (
+        <Suspense fallback={readerFallback}>
+          <CalendarView onMenu={() => setSidebarOpen(true)} />
+        </Suspense>
+      ) : screen === "admin" ? (
         <Suspense fallback={readerFallback}>
           <Admin onBack={goBack} />
         </Suspense>

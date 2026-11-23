@@ -36,6 +36,13 @@ async function req(method, path, body, isForm) {
 
 export const api = {
   me: () => req("GET", "/api/me"),
+  calendarEvents: (from, to) => req("GET", `/api/calendar/events?from=${from}&to=${to}`),
+  createEvent: (body) => req("POST", "/api/calendar/events", body),
+  updateEvent: (id, body) => req("PATCH", `/api/calendar/events/${id}`, body),
+  deleteEvent: (id) => req("DELETE", `/api/calendar/events/${id}`),
+  rsvpEvent: (id, status) => req("POST", `/api/calendar/events/${id}/rsvp`, { status }),
+  messageEvents: (id) => req("GET", `/api/calendar/message/${id}`),
+  calendarFeed: (rotate) => req(rotate ? "POST" : "GET", "/api/calendar/feed"),
   loginUrl: "/api/auth/login",
   logout: () => req("POST", "/api/auth/logout"),
 

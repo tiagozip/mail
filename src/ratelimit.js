@@ -77,6 +77,9 @@ export const LIMITS = {
   push: { limit: 60, window: HOUR, scope: "user" },
   settings: { limit: 120, window: HOUR, scope: "user" },
   admin: { limit: 300, window: HOUR, scope: "user" },
+  calendar: { limit: 300, window: HOUR, scope: "user", message: "too many calendar changes" },
+  rsvp: { limit: 60, window: HOUR, scope: "user", message: "too many invitation replies" },
+  "cal:feed": { limit: 60, window: MINUTE, scope: "ip" },
 };
 
 // Buckets whose ceiling is operator-configurable.
@@ -211,6 +214,8 @@ const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 // method. Anything not listed falls back to read/write by method, so a new
 // endpoint is limited by default rather than by omission.
 const ROUTES = [
+  ["POST", /^\/api\/calendar\/events\/[\w-]+\/rsvp$/, ["rsvp", "send", "send:hour"]],
+  ["WRITE", /^\/api\/calendar\//, ["calendar"]],
   ["POST", /^\/api\/aliases$/, ["alias:create", "alias:create:day"]],
   ["POST", /^\/api\/hidden-aliases$/, ["alias:create", "alias:create:day"]],
   ["POST", /^\/api\/aliases\/[^/]+\/avatar$/, ["avatar"]],

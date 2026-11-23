@@ -1,5 +1,6 @@
 import * as openpgp from "openpgp";
 import PostalMime from "postal-mime";
+import { ingestCalendar } from "./calendar.js";
 import { encryptBytes, encryptText } from "./crypto.js";
 import { sendPush } from "./push.js";
 import { consumeAll } from "./ratelimit.js";
@@ -185,7 +186,7 @@ export async function storeInbound(
   }
   const messageId = uuid();
   const user = await env.DB.prepare(
-    "SELECT storage_used, pgp_enabled, pgp_public_key, settings_json FROM users WHERE id = ?",
+    "SELECT id, address, storage_used, pgp_enabled, pgp_public_key, settings_json FROM users WHERE id = ?",
   )
     .bind(userId)
     .first();
@@ -473,6 +474,21 @@ export async function storeInbound(
         now(),
       )
       .run();
+  }
+
+  if (folder !== "spam" && user) {
+    const cal = (parsed.attachments || []).find(
+      (a) => /^text\/calendar/i.test(a.mimeType || "") || /\.ics$/i.test(a.filename || ""),
+    );
+    if (cal) {
+      try {
+        const body =
+          typeof cal.content === "string" ? cal.content : new TextDecoder().decode(cal.content);
+        await ingestCalendar(env, user, body, messageId);
+      } catch (e) {
+        console.error("calendar ingest error", e?.stack || e);
+      }
+    }
   }
 
   for (const label of autoLabels) {

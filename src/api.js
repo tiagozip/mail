@@ -19,6 +19,7 @@ import {
   sendVerifyProbe,
   verifyRelay,
 } from "./byod.js";
+import { calendarFeed, routeCalendar } from "./calendar.js";
 import { encryptBytes, encryptText, tryDecryptBytes, tryDecryptText } from "./crypto.js";
 import { checkOwnership, checkSendingDns, lookupMx } from "./domains.js";
 import { brandLogo, gravatarFace, proxyImage, proxyUrl } from "./img.js";
@@ -1061,6 +1062,9 @@ export async function handleApi(request, env, ctx) {
     );
 
   if (path === "/api/mcp") return handleMcp(request, env, ctx, routeApi, ip);
+  const feed = path.match(/^\/api\/cal\/([\w-]+)\/([\w-]+)\.ics$/);
+  if (feed && method === "GET")
+    return withIpLimit(env, "cal:feed", ip, () => calendarFeed(env, feed[1], feed[2]));
 
   const auth = await authenticate(request, env);
   if (!auth?.viaApiKey && !requireOrigin(request, env)) return error(403, "bad origin");
@@ -1104,6 +1108,11 @@ async function routeApi(request, env, ctx, auth) {
       { ok: true, logoutUrl },
       { headers: { "set-cookie": clearCookie(isSecure(request)) } },
     );
+  }
+
+  if (path.startsWith("/api/calendar/")) {
+    const res = await routeCalendar(request, env, user, path, method);
+    if (res) return res;
   }
 
   if (path === "/api/folders" && method === "GET") {

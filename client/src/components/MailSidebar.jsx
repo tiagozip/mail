@@ -2,6 +2,7 @@ import { AppSwitcher } from "./AppSwitcher.jsx";
 import { DropdownMenu } from "@cloudflare/kumo";
 import {
   Archive,
+  CalendarBlank,
   CaretUpDown,
   Clock,
   ClockCountdown,
@@ -50,13 +51,15 @@ export function MailSidebar({
   onOpenScheduled,
   onSignOut,
   onNavigate,
+  onOpenCalendar,
+  calendarActive,
 }) {
   const { user, view, goView, counts, labels, refreshLabels, userFolders, refreshCounts } = store;
   const [modalOpen, setModalOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(null);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [editFolder, setEditFolder] = useState(null);
-  const active = activeKey(view);
+  const active = calendarActive ? null : activeKey(view);
   function navigate(v) {
     goView(v);
     onNavigate?.();
@@ -99,6 +102,16 @@ export function MailSidebar({
         })}
       </div>
 
+      <div className="em-nav-list">
+        <button
+          type="button"
+          className={`em-nav-item${calendarActive ? " is-active" : ""}`}
+          onClick={onOpenCalendar}
+        >
+          <CalendarBlank size={18} />
+          <span className="em-nav-label">Calendar</span>
+        </button>
+      </div>
       <div className="em-nav-list">
         {labels.map((l) => (
           <div

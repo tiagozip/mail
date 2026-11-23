@@ -38,6 +38,8 @@ import {
   Checks,
 } from "@phosphor-icons/react";
 import { sanitize } from "lettersanitizer";
+import { rsvpEvent } from "../calendar.js";
+import { InviteDetails } from "./CalendarView.jsx";
 import { createPortal } from "react-dom";
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
@@ -551,6 +553,35 @@ function AttViewer({ list, index, onIndex, onClose }) {
   );
 }
 
+function InviteCard({ messageId }) {
+  const [events, setEvents] = useState([]);
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    let live = true;
+    api
+      .messageEvents(messageId)
+      .then((d) => live && setEvents(d.events || []))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [messageId]);
+  async function reply(ev, status) {
+    setBusy(status);
+    try {
+      const next = await rsvpEvent(ev.id, status);
+      setEvents((list) => list.map((e) => (e.id === ev.id ? { ...e, myStatus: next.myStatus } : e)));
+      notify(status === "accepted" ? "Invitation accepted" : status === "declined" ? "Invitation declined" : "Replied maybe", "", "success");
+    } catch (e) {
+      notifyError(e);
+    }
+    setBusy("");
+  }
+  return events.map((ev) => (
+    <InviteDetails key={ev.id} event={ev} busy={busy} compact onRsvp={(s) => reply(ev, s)} />
+  ));
+}
+
 function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) {
   const [pgpScan, setPgpScan] = useState({ trackers: 0, hasRemote: false, names: [] });
   const [pgpShown, setPgpShown] = useState(false);
@@ -726,6 +757,9 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked }) 
               </div>
             </Tooltip>
           )}
+          {(message.attachments || []).some(
+            (a) => /^text\/calendar/i.test(a.mime || "") || /\.ics$/i.test(a.filename || ""),
+          ) && <InviteCard messageId={message.id} />}
           {message.pgp ? (
             <PgpBody
               message={message}
