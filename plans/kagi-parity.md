@@ -15,9 +15,9 @@ Source: https://blog.kagi.com/kagi-mail-public-beta (2026-11-23).
 
 ## Gaps, in order of value
 
-1. Built-in calendar: month and week views, event creation, ICS invites parsed from incoming mail with accept and decline replies, an `.ics` feed. Done in this branch.
-2. Sender screening: hold mail from first-time senders until approved.
-3. Newsletter view: the spam classifier already tags newsletters, but there is no feed view for them.
+1. Built-in calendar: month and week views, event creation, ICS invites parsed from incoming mail with accept and decline replies, an `.ics` feed. Done.
+2. Sender screening: hold mail from first-time senders in Screener until let in or blocked. Done, opt-in in Settings, Filters.
+3. Newsletter view: list mail with a `List-Unsubscribe` header goes to a Newsletters folder. Done as a folder, opt-in. Not done: a feed-style reader and one-click unsubscribe.
 4. One-click export of mail and calendar.
 5. Command palette.
 6. BIMI logos for verified senders.
@@ -25,3 +25,10 @@ Source: https://blog.kagi.com/kagi-mail-public-beta (2026-11-23).
 8. Translate and proofread in compose.
 9. IMAP, JMAP, CalDAV access for third-party clients. Needs a server outside Workers, out of scope here.
 10. Shared addresses with per-person access.
+
+## Calendar limits left for later
+
+- Inviting guests from an event you create. Events you make have no attendees yet.
+- RSVP replies go out as an `.ics` attachment, because the Workers email binding has no way to add a `text/calendar` alternative part. Most clients still read it, but Outlook may not update the organizer's view.
+- Recurrence covers FREQ with INTERVAL, COUNT, UNTIL and weekly BYDAY. EXDATE and per-occurrence overrides from invites are ignored, and editing one occurrence edits the series.
+- Invite details are stored in plaintext in D1 even when PGP is on, since they are parsed at ingest.

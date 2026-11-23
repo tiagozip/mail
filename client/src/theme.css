@@ -6600,6 +6600,7 @@ body > div > [role="presentation"][data-side] {
 }
 
 .em-cal-gutter {
+  white-space: nowrap;
   font-size: 0.7rem;
   color: var(--text-color-kumo-subtle);
   text-align: right;
@@ -6879,11 +6880,18 @@ body > div > [role="presentation"][data-side] {
     flex-wrap: wrap;
   }
   .em-cal-title {
-    flex: 1;
+    flex: 1 1 calc(100% - 56px);
     font-size: 1.05rem;
   }
   .em-cal-nav {
     margin-left: 0;
+  }
+  .em-cal-bar > :last-child {
+    margin-left: auto;
+  }
+  .em-cal-gutter {
+    font-size: 0.62rem;
+    padding-right: 4px;
   }
   .em-cal-ev-time {
     display: none;
@@ -6894,7 +6902,7 @@ body > div > [role="presentation"][data-side] {
   .em-cal-weekhead,
   .em-cal-allday,
   .em-cal-hours {
-    grid-template-columns: 40px repeat(7, minmax(0, 1fr));
+    grid-template-columns: 38px repeat(7, minmax(0, 1fr));
   }
 }
 
