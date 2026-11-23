@@ -267,6 +267,7 @@ CREATE TABLE IF NOT EXISTS events (
   my_address TEXT,
   my_status TEXT,
   sequence INTEGER NOT NULL DEFAULT 0,
+  reminder_min INTEGER NOT NULL DEFAULT 10,
   source_message_id TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
@@ -274,3 +275,4 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_range ON events(user_id, start_at);
 CREATE INDEX IF NOT EXISTS idx_events_message ON events(user_id, source_message_id);
+CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_at);

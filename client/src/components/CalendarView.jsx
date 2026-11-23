@@ -56,6 +56,15 @@ const REPEAT = [
   ["FREQ=MONTHLY", "Every month"],
   ["FREQ=YEARLY", "Every year"],
 ];
+const REMINDERS = [
+  ["-1", "No reminder"],
+  ["0", "Remind me when it starts"],
+  ["5", "5 minutes before"],
+  ["10", "10 minutes before"],
+  ["30", "30 minutes before"],
+  ["60", "1 hour before"],
+  ["1440", "1 day before"],
+];
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 const hourFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric" });
@@ -143,6 +152,7 @@ function payloadOf(e, start, end) {
     allDay: e.allDay,
     rrule: e.rrule,
     color: e.color,
+    reminder: e.reminder ?? 10,
     tz: e.tz || TZ,
     guests: (e.attendees || []).map((a) => a.address),
     start: start + shift,
@@ -945,6 +955,7 @@ function EventDialog({ event, onClose }) {
       location: event.location || "",
       description: event.description || "",
       guests: event.attendees || [],
+      reminder: String(event.reminder ?? 10),
     });
     setBusy("");
   }, [event]);
@@ -988,6 +999,7 @@ function EventDialog({ event, onClose }) {
       location: form.location,
       description: form.description,
       guests: form.guests.map((g) => g.address),
+      reminder: Number(form.reminder),
       tz: event.tz || TZ,
     };
     onClose();
@@ -1171,6 +1183,20 @@ function EventDialog({ event, onClose }) {
                 </Select.Option>
               ))}
             </Select>
+            {!form.allDay && (
+              <Select
+                aria-label="Reminder"
+                value={form.reminder}
+                onValueChange={set("reminder")}
+                renderValue={(v) => REMINDERS.find(([x]) => x === v)?.[1] || `${v} minutes before`}
+              >
+                {REMINDERS.map(([v, l]) => (
+                  <Select.Option key={v} value={v}>
+                    {l}
+                  </Select.Option>
+                ))}
+              </Select>
+            )}
             <GuestField guests={form.guests} onChange={set("guests")} />
             <Input
               placeholder="Add a location"

@@ -1,4 +1,5 @@
 import { handleApi } from "./api.js";
+import { sendEventReminders } from "./calendar.js";
 import { reverifyAllDomains } from "./domains.js";
 import { handleEmail } from "./mail.js";
 import { purgeRateLimits } from "./ratelimit.js";
@@ -9,6 +10,7 @@ import {
   purgeStaleUploads,
   wakeSnoozed,
 } from "./scheduler.js";
+import { sendPush } from "./push.js";
 import { handlePixel } from "./track.js";
 import { error } from "./util.js";
 
@@ -128,6 +130,9 @@ export default {
       Promise.all([
         processScheduledSends(env).catch((e) => console.error("sched send error", e?.stack || e)),
         wakeSnoozed(env).catch((e) => console.error("wake snooze error", e?.stack || e)),
+        sendEventReminders(env, sendPush).catch((e) =>
+          console.error("event reminder error", e?.stack || e),
+        ),
       ]),
     );
   },

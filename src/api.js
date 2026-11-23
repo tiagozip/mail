@@ -19,7 +19,7 @@ import {
   sendVerifyProbe,
   verifyRelay,
 } from "./byod.js";
-import { calendarFeed, routeCalendar } from "./calendar.js";
+import { calendarFeed, dueReminder, routeCalendar } from "./calendar.js";
 import { encryptBytes, encryptText, tryDecryptBytes, tryDecryptText } from "./crypto.js";
 import { checkOwnership, checkSendingDns, lookupMx } from "./domains.js";
 import { brandLogo, gravatarFace, proxyImage, proxyUrl } from "./img.js";
@@ -2225,6 +2225,8 @@ async function routeApi(request, env, ctx, auth) {
     return json({ ok: true });
   }
   if (path === "/api/push/latest" && method === "GET") {
+    const reminder = await dueReminder(env, user.id);
+    if (reminder) return json({ count: 0, ...reminder });
     const unread = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM messages WHERE user_id = ? AND folder = 'inbox' AND is_read = 0",
     )

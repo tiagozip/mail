@@ -342,6 +342,7 @@ function shape(r) {
     exdates: exdatesOf(r),
     recurrenceId: r.recurrence_id || 0,
     color: r.color,
+    reminder: r.reminder_min ?? 10,
     status: r.status,
     organizer: r.organizer,
     organizerName: r.organizer_name,
@@ -581,6 +582,7 @@ function readEventBody(b) {
     tz: validZone(b.tz) || "UTC",
     rrule,
     color: COLORS.has(b.color) ? b.color : null,
+    reminder: clampInt(b.reminder, -1, 10080, 10),
     guests,
   };
 }
@@ -723,6 +725,58 @@ function mergeGuests(previous, guests) {
   );
 }
 
+const REMINDER_WINDOW = 90000;
+
+async function dueRows(env, t, horizon) {
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM events WHERE reminder_min >= 0 AND all_day = 0 AND status != 'cancelled' AND (my_status IS NULL OR my_status != 'declined') AND ((rrule IS NULL AND start_at > ? AND start_at <= ?) OR (rrule IS NOT NULL AND start_at <= ?)) LIMIT 2000",
+  )
+    .bind(t, t + horizon, t + horizon)
+    .all();
+  return (results || []).flatMap((r) =>
+    expand(shape(r), t, t + horizon).map((e) => ({ ...e, userId: r.user_id })),
+  );
+}
+
+export async function sendEventReminders(env, sendPush) {
+  const t = now();
+  const due = (await dueRows(env, t, 7 * DAY_MS)).filter((e) => {
+    const at = e.start - e.reminder * 60000;
+    return at <= t && at > t - 60000;
+  });
+  for (const userId of new Set(due.map((e) => e.userId))) await sendPush(env, userId);
+}
+
+export async function dueReminder(env, userId) {
+  const t = now();
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM events WHERE user_id = ? AND reminder_min >= 0 AND all_day = 0 AND status != 'cancelled' AND (my_status IS NULL OR my_status != 'declined') AND ((rrule IS NULL AND start_at > ? AND start_at <= ?) OR (rrule IS NOT NULL AND start_at <= ?)) LIMIT 200",
+  )
+    .bind(userId, t - 60000, t + 7 * DAY_MS, t + 7 * DAY_MS)
+    .all();
+  const hit = (results || [])
+    .map(shape)
+    .flatMap((e) => expand(e, t - 60000, t + 7 * DAY_MS))
+    .filter((e) => {
+      const at = e.start - e.reminder * 60000;
+      return at <= t && at > t - REMINDER_WINDOW;
+    })
+    .sort((a, b) => a.start - b.start)[0];
+  if (!hit) return null;
+  const mins = Math.round((hit.start - t) / 60000);
+  const when = new Intl.DateTimeFormat("en-US", {
+    timeZone: hit.tz || "UTC",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(hit.start));
+  return {
+    title: hit.title || "Event",
+    body: `${mins <= 0 ? "Now" : `In ${mins} min`}, ${when}${hit.location ? `, ${hit.location}` : ""}`,
+    tag: `estrogen-cal-${hit.id}-${hit.start}`,
+    url: "/calendar",
+  };
+}
+
 export async function routeCalendar(request, env, user, path, method) {
   const url = new URL(request.url);
   if (path === "/api/calendar/events" && method === "GET") {
@@ -738,7 +792,7 @@ export async function routeCalendar(request, env, user, path, method) {
     const t = now();
     const organizer = b.guests.length ? await pickOrganizer(env, user, raw.from) : null;
     await env.DB.prepare(
-      "INSERT INTO events (id, user_id, uid, title, description, location, start_at, end_at, all_day, tz, rrule, color, organizer, organizer_name, attendees_json, my_address, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO events (id, user_id, uid, title, description, location, start_at, end_at, all_day, tz, rrule, color, reminder_min, organizer, organizer_name, attendees_json, my_address, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
       .bind(
         id,
@@ -753,6 +807,7 @@ export async function routeCalendar(request, env, user, path, method) {
         b.tz,
         b.rrule,
         b.color,
+        b.reminder,
         organizer,
         organizer ? user.display_name || user.username : null,
         JSON.stringify(mergeGuests([], b.guests)),
@@ -804,9 +859,12 @@ export async function routeCalendar(request, env, user, path, method) {
     if (method === "PATCH" || method === "PUT") {
       const raw = await request.json().catch(() => ({}));
       if (!owned) {
-        const color = COLORS.has(raw.color) ? raw.color : null;
-        await env.DB.prepare("UPDATE events SET color = ?, updated_at = ? WHERE id = ?")
-          .bind(color, now(), row.id)
+        const color = COLORS.has(raw.color) ? raw.color : row.color;
+        const reminder = clampInt(raw.reminder, -1, 10080, row.reminder_min ?? 10);
+        await env.DB.prepare(
+          "UPDATE events SET color = ?, reminder_min = ?, updated_at = ? WHERE id = ?",
+        )
+          .bind(color, reminder, now(), row.id)
           .run();
         return json({ event: shape(await eventById(env, row.id)) });
       }
@@ -827,7 +885,7 @@ export async function routeCalendar(request, env, user, path, method) {
         (b.rrule || null) !== (row.rrule || null) ||
         b.allDay !== row.all_day;
       await env.DB.prepare(
-        "UPDATE events SET title = ?, description = ?, location = ?, start_at = ?, end_at = ?, all_day = ?, tz = ?, rrule = ?, exdates = ?, color = ?, organizer = ?, organizer_name = ?, attendees_json = ?, my_address = ?, sequence = sequence + ?, updated_at = ? WHERE id = ?",
+        "UPDATE events SET title = ?, description = ?, location = ?, start_at = ?, end_at = ?, all_day = ?, tz = ?, rrule = ?, exdates = ?, color = ?, reminder_min = ?, organizer = ?, organizer_name = ?, attendees_json = ?, my_address = ?, sequence = sequence + ?, updated_at = ? WHERE id = ?",
       )
         .bind(
           b.title,
@@ -840,6 +898,7 @@ export async function routeCalendar(request, env, user, path, method) {
           b.rrule,
           JSON.stringify(b.rrule ? exdatesOf(row).map((x) => x + (b.start - row.start_at)) : []),
           b.color,
+          b.reminder,
           organizer,
           organizer ? row.organizer_name || user.display_name || user.username : null,
           JSON.stringify(attendees),

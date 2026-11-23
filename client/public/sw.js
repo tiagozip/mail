@@ -7,6 +7,8 @@ self.addEventListener("push", (event) => {
       let title = "New mail";
       let body = "";
       let count = 0;
+      let tag = "estrogen-mail";
+      let url = "/";
       try {
         const res = await fetch("/api/push/latest", { credentials: "same-origin" });
         if (res.ok) {
@@ -14,6 +16,8 @@ self.addEventListener("push", (event) => {
           title = data.title || title;
           body = data.body || "";
           count = data.count || 0;
+          tag = data.tag || tag;
+          url = data.url || url;
         }
       } catch {}
       if (event.data) {
@@ -25,9 +29,9 @@ self.addEventListener("push", (event) => {
       }
       await self.registration.showNotification(title, {
         body,
-        tag: "estrogen-mail",
+        tag,
         renotify: true,
-        data: { url: "/", count },
+        data: { url, count },
       });
     })(),
   );
@@ -42,6 +46,7 @@ self.addEventListener("notificationclick", (event) => {
       for (const client of all) {
         if ("focus" in client) {
           await client.focus();
+          if (target !== "/" && "navigate" in client) await client.navigate(target);
           return;
         }
       }
