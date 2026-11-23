@@ -22,6 +22,7 @@ import {
 import { encryptBytes, encryptText, tryDecryptBytes, tryDecryptText } from "./crypto.js";
 import { checkOwnership, checkSendingDns, lookupMx } from "./domains.js";
 import { brandLogo, gravatarFace, proxyImage, proxyUrl } from "./img.js";
+import { handleMcp } from "./mcp.js";
 import {
   authorizeUrl,
   challengeFor,
@@ -1058,6 +1059,8 @@ export async function handleApi(request, env, ctx) {
           headers: { "retry-after": String(r.retryAfter) },
         }),
     );
+
+  if (path === "/api/mcp") return handleMcp(request, env, ctx, routeApi, ip);
 
   const auth = await authenticate(request, env);
   if (!auth?.viaApiKey && !requireOrigin(request, env)) return error(403, "bad origin");
