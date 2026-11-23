@@ -80,6 +80,7 @@ export const LIMITS = {
   calendar: { limit: 300, window: HOUR, scope: "user", message: "too many calendar changes" },
   rsvp: { limit: 60, window: HOUR, scope: "user", message: "too many invitation replies" },
   screener: { limit: 300, window: HOUR, scope: "user" },
+  export: { limit: 60, window: HOUR, scope: "user", message: "too many exports, try again later" },
   "cal:feed": { limit: 60, window: MINUTE, scope: "ip" },
 };
 
@@ -218,6 +219,8 @@ const ROUTES = [
   ["POST", /^\/api\/calendar\/events\/[\w-]+\/rsvp$/, ["rsvp", "send", "send:hour"]],
   ["WRITE", /^\/api\/calendar\//, ["calendar"]],
   ["POST", /^\/api\/screener\//, ["screener"]],
+  ["GET", /^\/api\/export\/mail$/, ["export"]],
+  ["GET", /^\/api\/calendar\/export$/, ["export"]],
   ["POST", /^\/api\/aliases$/, ["alias:create", "alias:create:day"]],
   ["POST", /^\/api\/hidden-aliases$/, ["alias:create", "alias:create:day"]],
   ["POST", /^\/api\/aliases\/[^/]+\/avatar$/, ["avatar"]],

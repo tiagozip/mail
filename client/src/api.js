@@ -49,6 +49,7 @@ export const api = {
   messageEvents: (id) => req("GET", `/api/calendar/message/${id}`),
   screenSender: (allow, address, name) =>
     req("POST", `/api/screener/${allow ? "allow" : "block"}`, { address, name }),
+  exportSummary: () => req("GET", "/api/export/summary"),
   calendarFeed: (rotate) => req(rotate ? "POST" : "GET", "/api/calendar/feed"),
   loginUrl: "/api/auth/login",
   logout: () => req("POST", "/api/auth/logout"),

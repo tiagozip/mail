@@ -1,4 +1,5 @@
 const SHORTCUTS = [
+  [["Ctrl", "K"], "Command palette"],
   [["c"], "Compose"],
   [["/"], "Focus search"],
   [["j"], "Next message"],
@@ -10,6 +11,9 @@ const SHORTCUTS = [
   [["r"], "Reply"],
   [["u"], "Back / mark unread"],
   [["g", "i"], "Go to inbox"],
+  [["g", "c"], "Go to calendar"],
+  [["d", "w", "m"], "Calendar day, week or month"],
+  [["t"], "Calendar today"],
   [["?"], "Toggle this help"],
 ];
 

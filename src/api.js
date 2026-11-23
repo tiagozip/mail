@@ -1045,6 +1045,8 @@ async function saveDraft(request, env, user, draftId) {
   return json({ id });
 }
 
+const EXPORT_PART = 400;
+
 export async function handleApi(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -1149,6 +1151,50 @@ async function routeApi(request, env, ctx, auth) {
           .run();
     }
     return json({ ok: true, moved: ids.length, folder: target });
+  }
+
+  if (path === "/api/export/summary" && method === "GET") {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM messages WHERE user_id = ? AND raw_key IS NOT NULL AND is_draft = 0",
+    )
+      .bind(user.id)
+      .first();
+    return json({ messages: row?.n || 0, partSize: EXPORT_PART });
+  }
+
+  if (path === "/api/export/mail" && method === "GET") {
+    const part = clampInt(url.searchParams.get("part"), 0, 100000, 0);
+    const { results } = await env.DB.prepare(
+      "SELECT raw_key, from_addr, date FROM messages WHERE user_id = ? AND raw_key IS NOT NULL AND is_draft = 0 ORDER BY date, id LIMIT ? OFFSET ?",
+    )
+      .bind(user.id, EXPORT_PART, part * EXPORT_PART)
+      .all();
+    const rows = results || [];
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    (async () => {
+      try {
+        for (const r of rows) {
+          const obj = await env.R2.get(r.raw_key);
+          if (!obj) continue;
+          const bytes = await tryDecryptBytes(env, await obj.arrayBuffer());
+          const text = new TextDecoder("latin1").decode(bytes).replace(/\r\n/g, "\n");
+          const escaped = text.replace(/^(>*From )/gm, ">$1");
+          const stamp = new Date(r.date).toUTCString().replace(",", "");
+          const chunk = `From ${r.from_addr || "MAILER-DAEMON"} ${stamp}\n${escaped}\n\n`;
+          await writer.write(Uint8Array.from(chunk, (c) => c.charCodeAt(0) & 255));
+        }
+      } finally {
+        await writer.close();
+      }
+    })();
+    return new Response(readable, {
+      headers: {
+        "content-type": "application/mbox",
+        "content-disposition": `attachment; filename="estrogen-mail-part-${part + 1}.mbox"`,
+        "cache-control": "private, no-store",
+      },
+    });
   }
 
   if (path.startsWith("/api/calendar/")) {

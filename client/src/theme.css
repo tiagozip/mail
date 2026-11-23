@@ -7382,3 +7382,29 @@ body > div > [role="presentation"][data-side] {
   font-size: 0.875rem;
   color: var(--text-color-kumo-subtle);
 }
+
+.em-export-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-2);
+  margin-top: var(--em-4);
+}
+
+.em-export-link {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  min-height: 40px;
+  padding: 0 var(--em-3);
+  border-radius: var(--em-radius-sm);
+  font-size: 0.875rem;
+  color: var(--text-color-kumo-default);
+  text-decoration: none;
+  box-shadow: 0 0 0 1px var(--color-kumo-line);
+}
+
+@media (hover: hover) {
+  .em-export-link:hover {
+    background: var(--color-kumo-tint);
+  }
+}

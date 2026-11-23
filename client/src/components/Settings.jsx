@@ -17,6 +17,7 @@ import {
   Check,
   CheckCircle,
   Code,
+  DownloadSimple,
   Copy,
   Funnel,
   Globe,
@@ -1427,7 +1428,50 @@ const SECTIONS = [
   { id: "encryption", label: "Encryption", icon: LockKey },
   { id: "keys", label: "Keys", icon: Key, needsPgp: true },
   { id: "developer", label: "Developer", icon: Code },
+  { id: "export", label: "Export", icon: DownloadSimple },
 ];
+
+function ExportData() {
+  const [summary, setSummary] = useState(null);
+  useEffect(() => {
+    api
+      .exportSummary()
+      .then(setSummary)
+      .catch(notifyError);
+  }, []);
+  const parts = summary ? Math.max(1, Math.ceil(summary.messages / summary.partSize)) : 0;
+  return (
+    <div className="em-card">
+      <div className="em-card-head">
+        <h2 className="em-card-title">Export your data</h2>
+      </div>
+      <p className="em-card-sub">
+        Your mail downloads as standard mbox files that Thunderbird, Apple Mail and most other
+        clients can import. Messages you received with encryption turned on stay encrypted to your
+        key. Your calendar downloads as one .ics file.
+      </p>
+      <div className="em-export-list">
+        <a className="em-export-link" href="/api/calendar/export" download>
+          <DownloadSimple size={16} />
+          Calendar (.ics)
+        </a>
+        {summary &&
+          Array.from({ length: parts }, (_, i) => {
+            const from = i * summary.partSize + 1;
+            const to = Math.min(summary.messages, (i + 1) * summary.partSize);
+            return (
+              <a key={i} className="em-export-link" href={`/api/export/mail?part=${i}`} download>
+                <DownloadSimple size={16} />
+                {parts === 1
+                  ? `All mail, ${summary.messages} messages (.mbox)`
+                  : `Mail part ${i + 1}, messages ${from} to ${to} (.mbox)`}
+              </a>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
 
 export function Settings({ open, user, setUser, palette, onSetPalette, onClose }) {
   const [displayName, setDisplayName] = useState(user.displayName || "");
@@ -1896,6 +1940,8 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
             {section === "keys" && <KeyRing />}
 
             {section === "developer" && <ApiKeys />}
+
+            {section === "export" && <ExportData />}
           </div>
         </div>
       </Dialog>
