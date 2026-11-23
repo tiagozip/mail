@@ -528,7 +528,8 @@ export async function storeInbound(
   }
 
   await updateStorage(env, userId, used - (user?.storage_used || 0));
-  if (folder !== "spam" && folder !== "screener") ctx.waitUntil(bumpContact(env, userId, fromAddr, fromName));
+  if (folder !== "spam" && folder !== "screener")
+    ctx.waitUntil(bumpContact(env, userId, fromAddr, fromName));
   if (matchedAddress) {
     ctx.waitUntil(
       env.DB.prepare(
@@ -539,7 +540,7 @@ export async function storeInbound(
     );
   }
 
-  if (folder !== "spam" && folder !== "screener") {
+  if (folder === "inbox" || folder === "archive") {
     ctx.waitUntil(
       sendPush(env, userId, {
         title: fromName || fromAddr,
