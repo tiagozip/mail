@@ -1481,7 +1481,7 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
   const [aiSpam, setAiSpam] = useState(user.settings?.aiSpam !== false);
   const [screenSenders, setScreenSenders] = useState(user.settings?.screenSenders === true);
   const [newsletterFolder, setNewsletterFolder] = useState(
-    user.settings?.newsletterFolder === true,
+    user.settings?.newsletterFolder !== false,
   );
   const [randomAvatars, setRandomAvatarsState] = useState(!!user.settings?.randomAvatars);
   const [undoSend, setUndoSend] = useState(user.settings?.undoSend || 0);

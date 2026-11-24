@@ -189,6 +189,8 @@ export function CalendarView({ onMenu, newEventTick }) {
   const [anchor, setAnchor] = useState(() => startOfDay(Date.now()));
   const [editing, setEditing] = useState(null);
   const [feedOpen, setFeedOpen] = useState(false);
+  const [navSlot, setNavSlot] = useState(null);
+  useEffect(() => setNavSlot(document.getElementById("em-nav-slot")), []);
   const [nowTs, setNowTs] = useState(Date.now());
 
   useEffect(() => {
@@ -293,20 +295,21 @@ export function CalendarView({ onMenu, newEventTick }) {
 
   return (
     <div className="em-cal">
-      <aside className="em-cal-side">
-        <Button variant="primary" icon={Plus} onClick={() => newAt()}>
-          New event
-        </Button>
-        <MiniMonth
-          anchor={anchor}
-          nowTs={nowTs}
-          onPick={(d) => {
-            setAnchor(d);
-            if (mode === "month") setMode("day");
-          }}
-        />
-        <Agenda nowTs={nowTs} onOpen={setEditing} />
-      </aside>
+      {navSlot &&
+        createPortal(
+          <div className="em-cal-side">
+            <MiniMonth
+              anchor={anchor}
+              nowTs={nowTs}
+              onPick={(d) => {
+                setAnchor(d);
+                if (mode === "month") setMode("day");
+              }}
+            />
+            <Agenda nowTs={nowTs} onOpen={setEditing} />
+          </div>,
+          navSlot,
+        )}
       <div className="em-cal-main">
         <div className="em-cal-bar">
           <Button
@@ -363,7 +366,6 @@ export function CalendarView({ onMenu, newEventTick }) {
             onClick={() => setFeedOpen(true)}
           />
           <Button
-            className="em-cal-newbtn"
             size="sm"
             variant="primary"
             icon={Plus}

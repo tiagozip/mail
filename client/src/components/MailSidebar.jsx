@@ -3,6 +3,7 @@ import { DropdownMenu } from "@cloudflare/kumo";
 import {
   Archive,
   CalendarBlank,
+  CaretDown,
   CaretUpDown,
   Clock,
   ClockCountdown,
@@ -27,18 +28,23 @@ import { FOLDER_LABELS, initials, monoColor } from "../util.js";
 import { FolderSetup } from "./FolderSetup.jsx";
 import { LabelModal } from "./LabelModal.jsx";
 
-const FOLDERS = [
+const PRIMARY = [
   { key: "inbox", icon: Tray },
-  { key: "screener", icon: UserPlus },
   { key: "newsletters", icon: Newspaper },
+  { key: "screener", icon: UserPlus },
   { key: "starred", icon: Star },
   { key: "sent", icon: PaperPlaneTilt },
   { key: "drafts", icon: FileText },
+];
+
+const MORE = [
   { key: "snoozed", icon: Clock },
   { key: "archive", icon: Archive },
   { key: "spam", icon: Warning },
   { key: "trash", icon: Trash },
 ];
+
+const MORE_KEY = "em-nav-more";
 
 function activeKey(view) {
   if (view.kind === "folder") return view.folder;
@@ -63,7 +69,17 @@ export function MailSidebar({
   const [editLabel, setEditLabel] = useState(null);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [editFolder, setEditFolder] = useState(null);
+  const [moreOpen, setMoreOpen] = useState(() => {
+    try {
+      return localStorage.getItem(MORE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const active = calendarActive ? null : activeKey(view);
+  const moreActive = MORE.some((f) => f.key === active);
+  const showMore = moreOpen || moreActive;
+
   function navigate(v) {
     goView(v);
     onNavigate?.();
@@ -72,6 +88,14 @@ export function MailSidebar({
   function selectFolder(key) {
     if (key === "starred") navigate({ kind: "starred" });
     else navigate({ kind: "folder", folder: key });
+  }
+
+  function toggleMore() {
+    const next = !showMore;
+    setMoreOpen(next);
+    try {
+      localStorage.setItem(MORE_KEY, next ? "1" : "0");
+    } catch {}
   }
 
   function openCreate() {
@@ -85,125 +109,164 @@ export function MailSidebar({
     setModalOpen(true);
   }
 
+  function folderButton({ key, icon: Icon }) {
+    const on = active === key;
+    const badge =
+      key === "inbox" || key === "newsletters"
+        ? counts?.[key]?.unread
+        : key === "screener"
+          ? counts?.[key]?.total
+          : key === "drafts"
+            ? counts?.[key]?.total
+            : 0;
+    return (
+      <button
+        key={key}
+        type="button"
+        className={`em-nav-item${on ? " is-active" : ""}`}
+        aria-current={on ? "page" : undefined}
+        onClick={() => selectFolder(key)}
+      >
+        <Icon size={18} weight={on ? "fill" : "regular"} />
+        <span className="em-nav-label">{FOLDER_LABELS[key]}</span>
+        {badge > 0 && <span className="em-nav-badge">{badge}</span>}
+      </button>
+    );
+  }
+
+  const primary = PRIMARY.filter(({ key }) => {
+    if (key === "screener") return user.settings?.screenSenders === true;
+    if (key === "newsletters") return user.settings?.newsletterFolder !== false;
+    return true;
+  });
+
   return (
     <div className="em-nav">
-      <div className="em-nav-list">
-        {FOLDERS.map(({ key, icon: Icon }) => {
-          if (key === "screener" && !user.settings?.screenSenders && !counts?.screener?.total)
-            return null;
-          if (
-            key === "newsletters" &&
-            !user.settings?.newsletterFolder &&
-            !counts?.newsletters?.total
-          )
-            return null;
-          const unread =
-            key === "inbox" || key === "newsletters"
-              ? counts?.[key]?.unread
-              : key === "screener" ? counts?.[key]?.total : 0;
-          const on = active === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              className={`em-nav-item${on ? " is-active" : ""}`}
-              onClick={() => selectFolder(key)}
-            >
-              <Icon size={18} />
-              <span className="em-nav-label">{FOLDER_LABELS[key]}</span>
-              {unread > 0 && <span className="em-nav-badge">{unread}</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="em-nav-list">
+      <div className="em-switch" role="tablist" aria-label="App">
+        <span className={`em-switch-thumb${calendarActive ? " is-right" : ""}`} aria-hidden="true" />
         <button
           type="button"
-          className={`em-nav-item${calendarActive ? " is-active" : ""}`}
+          role="tab"
+          aria-selected={!calendarActive}
+          className={calendarActive ? "" : "is-on"}
+          onClick={() => onNavigate?.()}
+        >
+          <Tray size={16} weight={calendarActive ? "regular" : "fill"} />
+          Mail
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={calendarActive}
+          className={calendarActive ? "is-on" : ""}
           onClick={onOpenCalendar}
         >
-          <CalendarBlank size={18} />
-          <span className="em-nav-label">Calendar</span>
-        </button>
-      </div>
-      <div className="em-nav-list">
-        {labels.map((l) => (
-          <div
-            key={l.id}
-            className={`em-nav-item em-nav-labelrow${active === `label:${l.id}` ? " is-active" : ""}`}
-          >
-            <button
-              type="button"
-              className="em-nav-labelmain"
-              onClick={() => navigate({ kind: "label", labelId: l.id, name: l.name })}
-            >
-              <span className="em-label-dot" style={{ background: l.color }} />
-              <span className="em-nav-label">{l.name}</span>
-              {l.rule?.conditions?.length > 0 && (
-                <span className="em-label-auto" aria-hidden="true" />
-              )}
-            </button>
-            <button
-              type="button"
-              className="em-label-edit"
-              aria-label={`Edit ${l.name}`}
-              onClick={(e) => openEdit(l, e)}
-            >
-              <PencilSimple size={14} />
-            </button>
-          </div>
-        ))}
-        <button type="button" className="em-nav-item em-nav-muted" onClick={openCreate}>
-          <Plus size={18} />
-          <span className="em-nav-label">Add label</span>
+          <CalendarBlank size={16} weight={calendarActive ? "fill" : "regular"} />
+          Calendar
         </button>
       </div>
 
-      <div className="em-nav-list">
-        {(userFolders || []).map((f) => {
-          const on = active === `folder:${f.id}`;
-          return (
-            <div
-              key={f.id}
-              className={`em-nav-item em-nav-labelrow${on ? " is-active" : ""}`}
+      {calendarActive ? (
+        <div id="em-nav-slot" className="em-nav-slot" />
+      ) : (
+        <>
+          <div className="em-nav-list">
+            {primary.map(folderButton)}
+            <button
+              type="button"
+              className="em-nav-item em-nav-more"
+              aria-expanded={showMore}
+              onClick={toggleMore}
             >
-              <button
-                type="button"
-                className="em-nav-labelmain"
-                onClick={() => navigate({ kind: "userfolder", folderId: f.id, name: f.name })}
-              >
-                <Folder size={18} weight={on ? "fill" : "regular"} style={{ color: f.color }} />
-                <span className="em-nav-label">{f.name}</span>
-                {f.unread > 0 && <span className="em-nav-badge">{f.unread}</span>}
+              <CaretDown size={16} className="em-nav-caret" />
+              <span className="em-nav-label">{showMore ? "Less" : "More"}</span>
+            </button>
+            {showMore && MORE.map(folderButton)}
+          </div>
+
+          <div className="em-nav-list">
+            <div className="em-nav-head">
+              <span>Labels</span>
+              <button type="button" aria-label="New label" onClick={openCreate}>
+                <Plus size={14} />
               </button>
+            </div>
+            {labels.map((l) => (
+              <div
+                key={l.id}
+                className={`em-nav-item em-nav-labelrow${active === `label:${l.id}` ? " is-active" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="em-nav-labelmain"
+                  onClick={() => navigate({ kind: "label", labelId: l.id, name: l.name })}
+                >
+                  <span className="em-label-dot" style={{ background: l.color }} />
+                  <span className="em-nav-label">{l.name}</span>
+                  {l.rule?.conditions?.length > 0 && (
+                    <span className="em-label-auto" aria-hidden="true" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="em-label-edit"
+                  aria-label={`Edit ${l.name}`}
+                  onClick={(e) => openEdit(l, e)}
+                >
+                  <PencilSimple size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="em-nav-list">
+            <div className="em-nav-head">
+              <span>Folders</span>
               <button
                 type="button"
-                className="em-label-edit"
-                aria-label={`Edit ${f.name}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditFolder(f);
+                aria-label="New folder"
+                onClick={() => {
+                  setEditFolder(null);
                   setFolderModalOpen(true);
                 }}
               >
-                <PencilSimple size={14} />
+                <Plus size={14} />
               </button>
             </div>
-          );
-        })}
-        <button
-          type="button"
-          className="em-nav-item em-nav-muted"
-          onClick={() => {
-            setEditFolder(null);
-            setFolderModalOpen(true);
-          }}
-        >
-          <Plus size={18} />
-          <span className="em-nav-label">Add folder</span>
-        </button>
-      </div>
+            {(userFolders || []).map((f) => {
+              const on = active === `folder:${f.id}`;
+              return (
+                <div
+                  key={f.id}
+                  className={`em-nav-item em-nav-labelrow${on ? " is-active" : ""}`}
+                >
+                  <button
+                    type="button"
+                    className="em-nav-labelmain"
+                    onClick={() => navigate({ kind: "userfolder", folderId: f.id, name: f.name })}
+                  >
+                    <Folder size={18} weight={on ? "fill" : "regular"} style={{ color: f.color }} />
+                    <span className="em-nav-label">{f.name}</span>
+                    {f.unread > 0 && <span className="em-nav-badge">{f.unread}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className="em-label-edit"
+                    aria-label={`Edit ${f.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditFolder(f);
+                      setFolderModalOpen(true);
+                    }}
+                  >
+                    <PencilSimple size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <div className="em-nav-foot">
         <DropdownMenu>

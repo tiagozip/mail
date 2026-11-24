@@ -380,7 +380,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
     ];
     for (const key of ["inbox", "screener", "newsletters", "starred", "sent", "drafts", "snoozed", "archive", "spam", "trash"]) {
       if (key === "screener" && !user.settings?.screenSenders) continue;
-      if (key === "newsletters" && !user.settings?.newsletterFolder) continue;
+      if (key === "newsletters" && user.settings?.newsletterFolder === false) continue;
       list.push({
         id: `go:${key}`,
         label: `Go to ${FOLDER_LABELS[key]}`,

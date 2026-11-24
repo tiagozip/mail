@@ -199,12 +199,12 @@ export async function storeInbound(
   let used = user?.storage_used || 0;
   let aiSpamEnabled = true;
   let screenSenders = false;
-  let newsletterFolder = false;
+  let newsletterFolder = true;
   try {
     const prefs = JSON.parse(user?.settings_json || "{}");
     aiSpamEnabled = prefs.aiSpam !== false;
     screenSenders = prefs.screenSenders === true;
-    newsletterFolder = prefs.newsletterFolder === true;
+    newsletterFolder = prefs.newsletterFolder !== false;
   } catch {}
 
   const rawText = new TextDecoder().decode(raw);
