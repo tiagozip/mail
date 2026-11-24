@@ -48,7 +48,8 @@ export function AppSwitcher({ src, placement = "up" }) {
   }, [open, origin]);
 
   if (!src) return null;
-  const url = `${src}?current=${encodeURIComponent(location.hostname)}`;
+  const here = `${location.hostname}${location.pathname.startsWith("/calendar") ? "/calendar" : ""}`;
+  const url = `${src}?current=${encodeURIComponent(here)}`;
 
   return (
     <div className="em-switcher" ref={root}>

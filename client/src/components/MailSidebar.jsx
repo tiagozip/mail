@@ -2,7 +2,6 @@ import { AppSwitcher } from "./AppSwitcher.jsx";
 import { DropdownMenu } from "@cloudflare/kumo";
 import {
   Archive,
-  CalendarBlank,
   CaretDown,
   CaretUpDown,
   Clock,
@@ -142,33 +141,6 @@ export function MailSidebar({
 
   return (
     <div className="em-nav">
-      {user.settings?.calendar !== false && (
-        <div className="em-pill" role="tablist" aria-label="App">
-          <span className={`em-pill-thumb${calendarActive ? " is-right" : ""}`} aria-hidden="true" />
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!calendarActive}
-            aria-label="Mail"
-            title="Mail"
-            className={calendarActive ? "" : "is-on"}
-            onClick={() => onNavigate?.()}
-          >
-            <Tray size={14} />
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={calendarActive}
-            aria-label="Calendar"
-            title="Calendar"
-            className={calendarActive ? "is-on" : ""}
-            onClick={onOpenCalendar}
-          >
-            <CalendarBlank size={14} />
-          </button>
-        </div>
-      )}
       {calendarActive ? (
         <div id="em-nav-slot" className="em-nav-slot" />
       ) : (
