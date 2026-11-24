@@ -8065,3 +8065,42 @@ div:has(> .em-label-dialog) {
   background: none;
   padding-inline: 0;
 }
+
+.em-app {
+  justify-content: flex-start;
+}
+
+.em-app > .em-main {
+  max-width: none;
+}
+
+.em-app > .em-main > .em-column {
+  margin-inline: auto;
+}
+
+.em-cal-seg {
+  gap: 2px;
+  padding: 0;
+  background: none;
+}
+
+.em-cal-seg button {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-color-kumo-inactive);
+}
+
+.em-cal-seg button.is-on {
+  background: var(--color-kumo-fill);
+  color: var(--text-color-kumo-strong);
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .em-cal-seg button:not(.is-on):hover {
+    color: var(--text-color-kumo-default);
+  }
+}
