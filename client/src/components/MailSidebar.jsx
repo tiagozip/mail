@@ -143,15 +143,7 @@ export function MailSidebar({
   return (
     <div className="em-nav">
       {calendarActive ? (
-        <>
-          <div className="em-nav-list">
-            <button type="button" className="em-nav-item" onClick={() => onNavigate?.()}>
-              <Tray size={16} />
-              <span className="em-nav-label">Mail</span>
-            </button>
-          </div>
-          <div id="em-nav-slot" className="em-nav-slot" />
-        </>
+        <div id="em-nav-slot" className="em-nav-slot" />
       ) : (
         <>
           <div className="em-nav-list">
@@ -166,12 +158,6 @@ export function MailSidebar({
               <span className="em-nav-label">{showMore ? "Less" : "More"}</span>
             </button>
             {showMore && MORE.map(folderButton)}
-            {user.settings?.calendar !== false && (
-              <button type="button" className="em-nav-item" onClick={onOpenCalendar}>
-                <CalendarBlank size={16} />
-                <span className="em-nav-label">Calendar</span>
-              </button>
-            )}
           </div>
 
           <div className="em-nav-list">
@@ -298,6 +284,17 @@ export function MailSidebar({
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu>
+        {user.settings?.calendar !== false && (
+          <button
+            type="button"
+            className="em-switcher-btn"
+            aria-label={calendarActive ? "Open mail" : "Open calendar"}
+            title={calendarActive ? "Mail" : "Calendar"}
+            onClick={calendarActive ? () => onNavigate?.() : onOpenCalendar}
+          >
+            {calendarActive ? <Tray size={18} /> : <CalendarBlank size={18} />}
+          </button>
+        )}
         <AppSwitcher src={user.switcherUrl} placement="up" />
       </div>
 
