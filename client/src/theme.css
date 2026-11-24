@@ -8104,3 +8104,42 @@ div:has(> .em-label-dialog) {
     color: var(--text-color-kumo-default);
   }
 }
+
+.em-switch {
+  display: inline-flex;
+  align-self: flex-start;
+  width: auto;
+  gap: 2px;
+  padding: 0;
+  margin: 0 0 8px 4px;
+  background: none;
+}
+
+.em-switch button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  flex: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-color-kumo-inactive);
+  transition: scale 200ms ease-out;
+}
+
+.em-switch button:active {
+  scale: 0.96;
+}
+
+.em-switch button.is-on {
+  background: var(--color-kumo-fill);
+  color: var(--text-color-kumo-strong);
+}
+
+@media (hover: hover) {
+  .em-switch button:not(.is-on):hover {
+    background: var(--color-kumo-tint);
+    color: var(--text-color-kumo-default);
+  }
+}
