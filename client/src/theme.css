@@ -8143,3 +8143,20 @@ div:has(> .em-label-dialog) {
     color: var(--text-color-kumo-default);
   }
 }
+
+.em-nav-foot > .em-account-chip {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.em-nav-foot > .em-switcher-btn,
+.em-nav-foot > .em-switcher {
+  flex: none;
+}
+
+.em-nav-foot > .em-switcher-btn,
+.em-nav-foot > .em-switcher .em-switcher-btn {
+  width: 36px;
+  height: 36px;
+}
