@@ -8217,3 +8217,32 @@ div:has(> .em-label-dialog) {
     transition: none;
   }
 }
+
+.em-pill {
+  margin: 0 0 calc(-1 * var(--em-5) + 8px) 0;
+  padding: 0;
+  background: none;
+}
+
+.em-pill-thumb {
+  top: 0;
+  left: 0;
+  background: var(--color-kumo-tint);
+  box-shadow: none;
+}
+
+.em-pill button {
+  color: var(--text-color-kumo-inactive);
+  opacity: 0.7;
+}
+
+.em-pill button.is-on {
+  color: var(--text-color-kumo-default);
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .em-pill button:not(.is-on):hover {
+    opacity: 1;
+  }
+}
