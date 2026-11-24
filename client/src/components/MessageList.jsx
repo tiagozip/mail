@@ -80,7 +80,7 @@ function Row({
       onPointerDown={() => onPrefetch(item.threadId)}
     >
       <span className="em-lrow-lead">
-        <SenderAvatar from={{ ...item.from, name: sender, address: addr }} />
+        <SenderAvatar from={{ ...item.from, name: sender, address: addr }} auth={item.authStatus} />
         <button
           type="button"
           role="checkbox"
@@ -486,7 +486,7 @@ export function MessageList({
     count: entries.length,
     scrollMargin: titleRef.current?.offsetHeight ?? 64,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => (entries[i]?.group ? 54 : 52),
+    estimateSize: (i) => (entries[i]?.group ? 54 : view.folder === "newsletters" ? 84 : 52),
     overscan: 12,
   });
 
@@ -542,7 +542,9 @@ export function MessageList({
   }, [listLoading]);
 
   return (
-    <div className={`em-pane em-pane-list${selecting ? " is-selecting" : ""}`}>
+    <div
+      className={`em-pane em-pane-list${selecting ? " is-selecting" : ""}${store.view?.folder === "newsletters" ? " is-feed" : ""}`}
+    >
       <div className="em-pane-topbar">
         <Button
           className="em-menu-btn"

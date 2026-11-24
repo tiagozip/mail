@@ -169,6 +169,25 @@ export async function handleEmail(message, env, ctx) {
     }
     throw e;
   }
+  if (!resolved.address) return;
+  const { results: members } = await env.DB.prepare(
+    "SELECT user_id FROM address_members WHERE address = ? AND user_id != ?",
+  )
+    .bind(resolved.address, resolved.userId)
+    .all();
+  for (const { user_id } of members || []) {
+    try {
+      await storeInbound(env, ctx, {
+        raw,
+        userId: user_id,
+        matchedAddress: resolved.address,
+        deliveredTo: resolved.deliveredTo || null,
+        envelopeFrom: message.from,
+      });
+    } catch (e) {
+      console.log("shared delivery failed", user_id, e?.message);
+    }
+  }
 }
 
 export async function storeInbound(

@@ -579,6 +579,20 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
                 <ThreadView
                   key="reader"
                   store={store}
+                  onStep={(d, first) => {
+                    const at = threads.findIndex(
+                      (t) => t.id === store.openId || t._members?.some((m) => m.id === store.openId),
+                    );
+                    const target = threads[at + d];
+                    first?.();
+                    if (target) store.openMessage(target);
+                  }}
+                  stepState={(() => {
+                    const at = threads.findIndex(
+                      (t) => t.id === store.openId || t._members?.some((m) => m.id === store.openId),
+                    );
+                    return { prev: at > 0, next: at >= 0 && at < threads.length - 1 };
+                  })()}
                   onReply={startReply}
                   onForward={startForward}
                   onBack={closeReader}

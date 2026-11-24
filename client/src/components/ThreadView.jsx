@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CalendarBlank,
   CaretDown,
+  CaretUp,
   CaretLeft,
   CaretRight,
   Clock,
@@ -616,7 +617,7 @@ function InviteCard({ messageId }) {
   ));
 }
 
-function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked, onScreen }) {
+function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked, onScreen, reader }) {
   const [pgpScan, setPgpScan] = useState({ trackers: 0, hasRemote: false, names: [] });
   const [pgpShown, setPgpShown] = useState(false);
   const [viewing, setViewing] = useState(-1);
@@ -656,7 +657,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked, on
   return (
     <div className={`em-msg${expanded ? "" : " is-collapsed"}`}>
       <div className="em-msg-head" onClick={onToggle}>
-        <SenderAvatar from={message.from} />
+        <SenderAvatar from={message.from} auth={message.authStatus} />
         <div className="em-msg-head-main">
           <div className="em-msg-from">
             {message.from?.name || message.from?.address}
@@ -810,7 +811,7 @@ function MessageCard({ message, expanded, onToggle, onShowImages, onUnlocked, on
           {(message.attachments || []).some(
             (a) => /^text\/calendar/i.test(a.mime || "") || /\.ics$/i.test(a.filename || ""),
           ) && <InviteCard messageId={message.id} />}
-          {message.unsubscribe && <UnsubscribeBar message={message} />}
+          {message.unsubscribe && !reader && <UnsubscribeBar message={message} />}
           {message.pgp ? (
             <PgpBody
               message={message}
@@ -1358,7 +1359,7 @@ function BackBar({ onBack, label }) {
   );
 }
 
-export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
+export function ThreadView({ store, onReply, onForward, onBack, onSent, onStep, stepState }) {
   const {
     user,
     thread,
@@ -1584,6 +1585,104 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent }) {
     win.document.close();
     win.focus();
     setTimeout(() => win.print(), 250);
+  }
+
+  if (listItem?.folder === "newsletters" || (!listItem && last?.folder === "newsletters")) {
+    const m = last;
+    const words = String(m.bodyText || m.snippet || "").split(/\s+/).length;
+    const minutes = Math.max(1, Math.round(words / 230));
+    return (
+      <div className="em-pane em-pane-reader em-news">
+        <div className="em-reader-topbar">
+          <Button
+            className="em-reader-back"
+            size="sm"
+            variant="ghost"
+            shape="square"
+            icon={ArrowLeft}
+            onClick={onBack}
+            aria-label={`Back to ${backLabel}`}
+          />
+          <div className="em-spacer" />
+          <Tooltip content="Previous issue">
+            <Button
+              size="sm"
+              variant="ghost"
+              shape="square"
+              aria-label="Previous issue"
+              icon={CaretUp}
+              disabled={!stepState?.prev}
+              onClick={() => onStep?.(-1)}
+            />
+          </Tooltip>
+          <Tooltip content="Next issue">
+            <Button
+              size="sm"
+              variant="ghost"
+              shape="square"
+              aria-label="Next issue"
+              icon={CaretDown}
+              disabled={!stepState?.next}
+              onClick={() => onStep?.(1)}
+            />
+          </Tooltip>
+          <Tooltip content={headerItem.isStarred ? "Unstar" : "Star"}>
+            <Button
+              size="sm"
+              variant="ghost"
+              shape="square"
+              aria-label={headerItem.isStarred ? "Unstar" : "Star"}
+              className={headerItem.isStarred ? "em-star-active" : ""}
+              icon={<Star weight={headerItem.isStarred ? "fill" : "regular"} />}
+              onClick={() => toggleStar(headerItem)}
+            />
+          </Tooltip>
+          <Tooltip content="Archive">
+            <Button
+              size="sm"
+              variant="ghost"
+              shape="square"
+              aria-label="Archive"
+              icon={Archive}
+              onClick={() => moveMessage(headerItem, "archive")}
+            />
+          </Tooltip>
+        </div>
+        <article className="em-news-page">
+          <header className="em-news-mast">
+            <SenderAvatar from={m.from} auth={m.authStatus} />
+            <span className="em-news-sender">{m.from?.name || m.from?.address}</span>
+            <span className="em-news-meta">
+              {fullDate(m.date)}, {minutes} min read
+            </span>
+          </header>
+          <h1 className="em-news-title">{subject}</h1>
+          <MessageCard
+            message={m}
+            reader
+            expanded
+            onToggle={() => {}}
+            onShowImages={() => showImages(m)}
+            onUnlocked={() => setPgpTick((t) => t + 1)}
+            onScreen={() => {}}
+          />
+          <footer className="em-news-foot">
+            {m.unsubscribe && <UnsubscribeBar message={m} />}
+            {stepState?.next && (
+              <Button
+                variant="secondary"
+                icon={CaretDown}
+                onClick={() => {
+                  onStep?.(1, () => moveMessage(headerItem, "archive"));
+                }}
+              >
+                Archive and read next
+              </Button>
+            )}
+          </footer>
+        </article>
+      </div>
+    );
   }
 
   return (

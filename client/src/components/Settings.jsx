@@ -1,4 +1,5 @@
 import { setRandomAvatars } from "./SenderAvatar.jsx";
+import { ShareAddress } from "./ShareAddress.jsx";
 import {
   Badge,
   Button,
@@ -33,6 +34,7 @@ import {
   Star,
   Trash,
   User,
+  UsersThree,
   Warning,
   X,
 } from "@phosphor-icons/react";
@@ -184,6 +186,8 @@ function ApiKeys() {
 
 function Addresses({ user, setUser }) {
   const [addresses, setAddresses] = useState(user.addresses || null);
+  const [shared, setShared] = useState(user.sharedAddresses || []);
+  const [sharing, setSharing] = useState(null);
   const [localPart, setLocalPart] = useState("");
   const [domains, setDomains] = useState([]);
   const [domain, setDomain] = useState("");
@@ -194,7 +198,10 @@ function Addresses({ user, setUser }) {
   function refreshAddresses() {
     api
       .aliases()
-      .then((d) => setAddresses(d.addresses || []))
+      .then((d) => {
+        setAddresses(d.addresses || []);
+        setShared(d.shared || []);
+      })
       .catch(() => {});
     refreshUser();
   }
@@ -202,7 +209,10 @@ function Addresses({ user, setUser }) {
   useEffect(() => {
     api
       .aliases()
-      .then((d) => setAddresses(d.addresses || []))
+      .then((d) => {
+        setAddresses(d.addresses || []);
+        setShared(d.shared || []);
+      })
       .catch(notifyError);
     api
       .aliasDomains()
@@ -289,6 +299,11 @@ function Addresses({ user, setUser }) {
                 >
                   Identity
                 </Button>
+                {!a.isPrimary && (
+                  <Button size="sm" variant="ghost" icon={UsersThree} onClick={() => setSharing(a.address)}>
+                    Share
+                  </Button>
+                )}
                 {a.isPrimary ? (
                   <Badge variant="neutral">Primary</Badge>
                 ) : (
@@ -351,6 +366,43 @@ function Addresses({ user, setUser }) {
         </div>
       )}
     </div>
+    {shared.length > 0 && (
+      <div className="em-card">
+        <div className="em-card-head">
+          <h2 className="em-card-title">Shared with you</h2>
+          <p className="em-card-sub">You get mail sent to these addresses and can send as them.</p>
+        </div>
+        <div className="em-alias-list">
+          {shared.map((a) => (
+            <div key={a.address} className="em-alias-row">
+              <span className="em-alias-addr">
+                <span>
+                  {a.address}
+                  <span className="em-share-owner"> from {a.owner}</span>
+                </span>
+              </span>
+              <div className="em-alias-actions">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      await api.removeAddressMember(a.address, user.id);
+                      setShared((list) => list.filter((x) => x.address !== a.address));
+                    } catch (err) {
+                      notifyError(err);
+                    }
+                  }}
+                >
+                  Leave
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+    <ShareAddress address={sharing} onClose={() => setSharing(null)} />
     <AliasIdentity
       open={!!identityAlias}
       alias={identityAlias}

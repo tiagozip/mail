@@ -164,9 +164,9 @@ export async function sendMessage(env, user, payload) {
     const wanted = normalizeAddr(payload.from || user.address);
     const lookup = (addr) =>
       env.DB.prepare(
-        "SELECT address, kind, label, display_name, signature FROM addresses WHERE address = ? AND user_id = ?",
+        "SELECT a.address, a.kind, a.label, a.display_name, a.signature FROM addresses a WHERE a.address = ? AND (a.user_id = ? OR EXISTS (SELECT 1 FROM address_members m WHERE m.address = a.address AND m.user_id = ?))",
       )
-        .bind(addr, user.id)
+        .bind(addr, user.id, user.id)
         .first();
     let owned = await lookup(wanted);
     const plus = !owned && wanted.match(/^([^+@]+)\+[a-z0-9._-]{1,64}@([^@]+)$/);

@@ -1,3 +1,4 @@
+import { ShieldCheck, Warning } from "@phosphor-icons/react";
 import { useState } from "react";
 import { initials } from "../util.js";
 
@@ -53,7 +54,7 @@ export function setRandomAvatars(on) {
   } catch {}
 }
 
-export function SenderAvatar({ from, className = "" }) {
+export function SenderAvatar({ from, auth, className = "" }) {
   const domain = brandDomain(from?.address);
   const sources = [
     from?.avatar && { src: from.avatar, kind: "user" },
@@ -68,7 +69,7 @@ export function SenderAvatar({ from, className = "" }) {
   const [, bump] = useState(0);
   const pick = sources[0];
   if (!pick) return <span className={`em-avatar ${className}`}>{initials(from || {})}</span>;
-  return (
+  const img = (
     <img
       key={pick.src}
       className={`em-avatar em-avatar-img${pick.kind === "logo" ? " em-avatar-logo" : ""} ${className}`}
@@ -79,5 +80,22 @@ export function SenderAvatar({ from, className = "" }) {
         bump((n) => n + 1);
       }}
     />
+  );
+  if (pick.kind !== "logo" || !auth || auth === "pass") return img;
+  const fail = auth === "fail";
+  return (
+    <>
+      {img}
+      <span
+        className={`em-avatar-badge${fail ? " is-fail" : ""}`}
+        title={
+          fail
+            ? `This message failed sender checks, so it may not really be from ${domain}`
+            : `This message has no sender checks, so the ${domain} logo is not verified`
+        }
+      >
+        {fail ? <Warning size={9} weight="fill" /> : <ShieldCheck size={9} weight="bold" />}
+      </span>
+    </>
   );
 }

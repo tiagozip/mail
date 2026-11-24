@@ -99,6 +99,11 @@ export const api = {
   addAlias: (localPart, domain) => req("POST", "/api/aliases", { localPart, domain }),
   removeAlias: (address) => req("DELETE", `/api/aliases/${encodeURIComponent(address)}`),
   setPrimaryAddress: (address) => req("POST", "/api/aliases/primary", { address }),
+  addressMembers: (address) => req("GET", `/api/aliases/${encodeURIComponent(address)}/members`),
+  addAddressMember: (address, who) =>
+    req("POST", `/api/aliases/${encodeURIComponent(address)}/members`, { who }),
+  removeAddressMember: (address, id) =>
+    req("DELETE", `/api/aliases/${encodeURIComponent(address)}/members/${id}`),
   setAliasIdentity: (address, body) =>
     req("PATCH", `/api/aliases/${encodeURIComponent(address)}/identity`, body),
   uploadAliasAvatar: (address, file) => {

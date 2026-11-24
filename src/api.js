@@ -502,6 +502,23 @@ async function listAddresses(env, userId) {
   }));
 }
 
+async function listShared(env, userId) {
+  const res = await env.DB.prepare(
+    "SELECT a.address, a.display_name, a.signature, a.avatar_url, u.display_name AS owner_name, u.username AS owner FROM address_members m JOIN addresses a ON a.address = m.address JOIN users u ON u.id = a.user_id WHERE m.user_id = ? AND a.enabled = 1 ORDER BY a.address",
+  )
+    .bind(userId)
+    .all();
+  return (res.results || []).map((r) => ({
+    address: r.address,
+    isPrimary: false,
+    shared: true,
+    owner: r.owner_name || r.owner,
+    displayName: r.display_name || "",
+    signature: r.signature || "",
+    avatar: r.avatar_url || null,
+  }));
+}
+
 async function listSendableHidden(env, userId) {
   const res = await env.DB.prepare(
     "SELECT address, label, display_name, signature, avatar_url FROM addresses WHERE user_id = ? AND kind = 'hidden' AND enabled = 1 ORDER BY created_at DESC",
@@ -1127,6 +1144,8 @@ async function routeApi(request, env, ctx, auth) {
     const me = publicUser(auth.user);
     me.addresses = await listAddresses(env, auth.user.id);
     me.sendAliases = await listSendableHidden(env, auth.user.id);
+    me.sharedAddresses = await listShared(env, auth.user.id);
+    me.sendAliases.push(...me.sharedAddresses);
     me.switcherUrl = env.OIDC_ISSUER ? `${env.OIDC_ISSUER.replace(/\/$/, "")}/switcher` : null;
     return json({ user: me, syncCursor: await currentCursor(env, auth.user.id) });
   }
@@ -1961,7 +1980,10 @@ async function routeApi(request, env, ctx, auth) {
   }
 
   if (path === "/api/aliases" && method === "GET") {
-    return json({ addresses: await listAddresses(env, user.id) });
+    return json({
+      addresses: await listAddresses(env, user.id),
+      shared: await listShared(env, user.id),
+    });
   }
   if (path === "/api/aliases" && method === "POST") {
     const b = await readJson(request);
@@ -1991,6 +2013,78 @@ async function routeApi(request, env, ctx, auth) {
       .bind(address, user.id, now())
       .run();
     return json({ address, isPrimary: false });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/members$/)) && method === "GET") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const owned = await env.DB.prepare("SELECT 1 FROM addresses WHERE address = ? AND user_id = ?")
+      .bind(address, user.id)
+      .first();
+    if (!owned) return error(404, "not found");
+    const { results } = await env.DB.prepare(
+      "SELECT u.id, u.username, u.address, u.display_name, u.avatar_url FROM address_members m JOIN users u ON u.id = m.user_id WHERE m.address = ? ORDER BY m.created_at",
+    )
+      .bind(address)
+      .all();
+    return json({
+      members: (results || []).map((r) => ({
+        id: r.id,
+        username: r.username,
+        address: r.address,
+        displayName: r.display_name || "",
+        avatar: r.avatar_url || null,
+      })),
+    });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/members$/)) && method === "POST") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const owned = await env.DB.prepare(
+      "SELECT kind, is_primary FROM addresses WHERE address = ? AND user_id = ?",
+    )
+      .bind(address, user.id)
+      .first();
+    if (!owned) return error(404, "not found");
+    if (owned.kind !== "standard") return error(400, "hidden aliases can't be shared");
+    if (owned.is_primary) return error(400, "add a separate address to share, like support@");
+    const b = await readJson(request);
+    const who = String(b.who || "").trim().toLowerCase().replace(/^@/, "");
+    if (!who || who.length > 254) return error(400, "enter a username or address");
+    const target = await env.DB.prepare(
+      "SELECT u.id, u.username, u.address, u.display_name, u.avatar_url FROM users u WHERE u.username = ? OR u.id = (SELECT user_id FROM addresses WHERE address = ? AND kind = 'standard')",
+    )
+      .bind(who, normalizeAddr(who))
+      .first();
+    if (!target) return error(404, "no estrogen.delivery user with that name or address");
+    if (target.id === user.id) return error(400, "you already own this address");
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM address_members WHERE address = ?")
+      .bind(address)
+      .first();
+    if ((count?.n || 0) >= 20) return error(400, "an address can be shared with at most 20 people");
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO address_members (address, user_id, created_at) VALUES (?,?,?)",
+    )
+      .bind(address, target.id, now())
+      .run();
+    return json({
+      member: {
+        id: target.id,
+        username: target.username,
+        address: target.address,
+        displayName: target.display_name || "",
+        avatar: target.avatar_url || null,
+      },
+    });
+  }
+  if ((m = path.match(/^\/api\/aliases\/([^/]+)\/members\/([\w-]+)$/)) && method === "DELETE") {
+    const address = normalizeAddr(decodeURIComponent(m[1]));
+    const memberId = m[2];
+    const owned = await env.DB.prepare("SELECT 1 FROM addresses WHERE address = ? AND user_id = ?")
+      .bind(address, user.id)
+      .first();
+    if (!owned && memberId !== user.id) return error(404, "not found");
+    await env.DB.prepare("DELETE FROM address_members WHERE address = ? AND user_id = ?")
+      .bind(address, memberId)
+      .run();
+    return json({ ok: true });
   }
   if ((m = path.match(/^\/api\/aliases\/([^/]+)\/identity$/)) && method === "PATCH") {
     const address = normalizeAddr(decodeURIComponent(m[1]));

@@ -149,9 +149,45 @@ export function brandDomain(address) {
   return FREE_MAIL.has(root) ? null : root;
 }
 
+async function bimiLogo(domain, get) {
+  try {
+    const dns = await fetch(
+      `https://cloudflare-dns.com/dns-query?name=default._bimi.${domain}&type=TXT`,
+      { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(2500) },
+    );
+    const answers = dns.ok ? (await dns.json()).Answer || [] : [];
+    const record = answers
+      .map((a) =>
+        String(a.data || "")
+          .replace(/^"|"$/g, "")
+          .replace(/"\s*"/g, ""),
+      )
+      .find((t) => /^v=BIMI1/i.test(t));
+    const url = record?.match(/(?:^|;)\s*l=([^;\s]+)/i)?.[1];
+    if (!url?.startsWith("https://")) return null;
+    const r = (await get(url, "image/svg+xml", 3000))?.res;
+    if (!r?.ok) return null;
+    const buf = await r.arrayBuffer();
+    if (buf.byteLength < 100 || buf.byteLength > 64 * 1024) return null;
+    const head = new TextDecoder().decode(buf.slice(0, 2048)).toLowerCase();
+    if (!head.includes("<svg")) return null;
+    return new Response(buf, {
+      headers: {
+        "content-type": "image/svg+xml",
+        "cache-control": "public, max-age=604800",
+        "x-content-type-options": "nosniff",
+        "x-logo-source": "bimi",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      },
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function brandLogo(domain, ctx) {
   if (brandDomain(`x@${domain}`) !== domain) return deny(404, "none");
-  const key = new Request(`https://logo.cache/v3/${domain}`);
+  const key = new Request(`https://logo.cache/v4/${domain}`);
   const cache = caches.default;
   const hit = await cache.match(key);
   if (hit) return hit;
@@ -171,13 +207,13 @@ export async function brandLogo(domain, ctx) {
     }
     return null;
   };
+  let res = await bimiLogo(domain, get);
   const candidates = [
     `https://${domain}/apple-touch-icon.png`,
     `https://www.${domain}/apple-touch-icon.png`,
     `https://${domain}/favicon.ico`,
     `https://www.${domain}/favicon.ico`,
   ];
-  let res = null;
   const tryIcon = async (url) => {
     try {
       const r = (await get(url, "image/*", 3000))?.res;
@@ -197,7 +233,7 @@ export async function brandLogo(domain, ctx) {
       return null;
     }
   };
-  for (const url of candidates) {
+  for (const url of res ? [] : candidates) {
     res = await tryIcon(url);
     if (res) break;
   }
