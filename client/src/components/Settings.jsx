@@ -1536,6 +1536,7 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
     user.settings?.newsletterFolder !== false,
   );
   const [randomAvatars, setRandomAvatarsState] = useState(!!user.settings?.randomAvatars);
+  const [calendarOn, setCalendarOn] = useState(user.settings?.calendar !== false);
   const [undoSend, setUndoSend] = useState(user.settings?.undoSend || 0);
   const [busy, setBusy] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -1618,6 +1619,21 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
       setUser(data.user);
     } catch (e) {
       setUndoSend(prev);
+      notifyError(e);
+    }
+  }
+
+  async function saveCalendar(v) {
+    setCalendarOn(v);
+    try {
+      const data = await api.saveSettings({
+        displayName,
+        signature,
+        settings: { ...user.settings, calendar: v },
+      });
+      setUser(data.user);
+    } catch (e) {
+      setCalendarOn(!v);
       notifyError(e);
     }
   }
@@ -1894,6 +1910,20 @@ export function Settings({ open, user, setUser, palette, onSetPalette, onClose }
                       aria-label="Anime pictures for senders without one"
                       checked={randomAvatars}
                       onCheckedChange={saveRandomAvatars}
+                    />
+                  </div>
+                  <div className="em-toggle-row">
+                    <div className="em-toggle-copy">
+                      <div className="em-toggle-title">Show the calendar</div>
+                      <div className="em-toggle-sub">
+                        Adds a switch between Mail and Calendar at the top of the sidebar. Invites
+                        still show in messages when this is off.
+                      </div>
+                    </div>
+                    <Switch
+                      aria-label="Show the calendar"
+                      checked={calendarOn}
+                      onCheckedChange={saveCalendar}
                     />
                   </div>
                 </div>

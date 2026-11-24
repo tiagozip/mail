@@ -142,6 +142,7 @@ export function MailSidebar({
 
   return (
     <div className="em-nav">
+      {user.settings?.calendar !== false && (
       <div className="em-switch" role="tablist" aria-label="App">
         <span className={`em-switch-thumb${calendarActive ? " is-right" : ""}`} aria-hidden="true" />
         <button
@@ -151,7 +152,7 @@ export function MailSidebar({
           className={calendarActive ? "" : "is-on"}
           onClick={() => onNavigate?.()}
         >
-          <Tray size={16} weight={calendarActive ? "regular" : "fill"} />
+          <Tray size={16} />
           Mail
         </button>
         <button
@@ -161,10 +162,11 @@ export function MailSidebar({
           className={calendarActive ? "is-on" : ""}
           onClick={onOpenCalendar}
         >
-          <CalendarBlank size={16} weight={calendarActive ? "fill" : "regular"} />
+          <CalendarBlank size={16} />
           Calendar
         </button>
       </div>
+      )}
 
       {calendarActive ? (
         <div id="em-nav-slot" className="em-nav-slot" />

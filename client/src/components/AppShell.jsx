@@ -288,7 +288,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         if (e.key === "i") {
           setScreen("mail");
           store.goView({ kind: "folder", folder: "inbox" });
-        } else if (e.key === "c") setScreen("calendar");
+        } else if (e.key === "c" && user.settings?.calendar !== false) setScreen("calendar");
         return;
       }
       if (e.key === "g") {
@@ -377,7 +377,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         },
       },
       { id: "calendar", label: "Go to calendar", icon: CalendarBlank, keys: "g c", run: () => setScreen("calendar") },
-    ];
+    ].filter((c) => user.settings?.calendar !== false || (c.id !== "new-event" && c.id !== "calendar"));
     for (const key of ["inbox", "screener", "newsletters", "starred", "sent", "drafts", "snoozed", "archive", "spam", "trash"]) {
       if (key === "screener" && !user.settings?.screenSenders) continue;
       if (key === "newsletters" && user.settings?.newsletterFolder === false) continue;
@@ -551,7 +551,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
             setScheduledOpen(true);
           }}
           onSignOut={signOut}
-          calendarActive={screen === "calendar"}
+          calendarActive={screen === "calendar" && user.settings?.calendar !== false}
           onOpenCalendar={() => {
             setSidebarOpen(false);
             setScreen("calendar");
@@ -563,7 +563,7 @@ export function AppShell({ initialUser, palette, onSetPalette }) {
         />
       </div>
 
-      {screen === "calendar" ? (
+      {screen === "calendar" && user.settings?.calendar !== false ? (
         <Suspense fallback={readerFallback}>
           <CalendarView onMenu={() => setSidebarOpen(true)} newEventTick={newEventTick} />
         </Suspense>

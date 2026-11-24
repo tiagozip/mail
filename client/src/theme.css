@@ -7985,3 +7985,83 @@ div:has(> .em-label-dialog) {
   position: relative;
   z-index: 450;
 }
+
+.em-switch {
+  padding: 0;
+  gap: 2px;
+  background: none;
+  border-radius: 9px;
+}
+
+.em-switch-thumb {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(50% - 1px);
+  border-radius: 9px;
+  background: var(--color-kumo-fill);
+  box-shadow: none;
+}
+
+.em-switch-thumb.is-right {
+  translate: calc(100% + 2px) 0;
+}
+
+.em-switch button {
+  height: 32px;
+  font-weight: 500;
+  color: var(--text-color-kumo-inactive);
+}
+
+.em-switch button.is-on,
+.em-switch button.is-on svg {
+  color: var(--text-color-kumo-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .em-switch-thumb {
+    transition: none;
+  }
+}
+
+.em-nav-item.is-active > svg,
+.em-nav-item.is-active .em-nav-badge {
+  color: var(--text-color-kumo-strong);
+}
+
+.em-tracker-bar,
+.em-images-bar {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.8125rem;
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-tracker-bar svg {
+  color: var(--text-color-kumo-inactive);
+}
+
+.em-recip-row {
+  align-items: center;
+}
+
+.em-recip-row > label {
+  padding-top: 0;
+}
+
+.em-compose-actions {
+  border-top: 0;
+}
+
+.em-track-on {
+  color: var(--text-color-kumo-strong) !important;
+}
+
+.em-compose-from .kumo-select,
+.em-compose-from [role="combobox"] {
+  border-color: transparent;
+  background: none;
+  padding-inline: 0;
+}
