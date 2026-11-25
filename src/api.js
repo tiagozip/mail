@@ -2046,7 +2046,10 @@ async function routeApi(request, env, ctx, auth) {
     if (owned.kind !== "standard") return error(400, "hidden aliases can't be shared");
     if (owned.is_primary) return error(400, "add a separate address to share, like support@");
     const b = await readJson(request);
-    const who = String(b.who || "").trim().toLowerCase().replace(/^@/, "");
+    const who = String(b.who || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, "");
     if (!who || who.length > 254) return error(400, "enter a username or address");
     const target = await env.DB.prepare(
       "SELECT u.id, u.username, u.address, u.display_name, u.avatar_url FROM users u WHERE u.username = ? OR u.id = (SELECT user_id FROM addresses WHERE address = ? AND kind = 'standard')",
@@ -2055,7 +2058,9 @@ async function routeApi(request, env, ctx, auth) {
       .first();
     if (!target) return error(404, "no estrogen.delivery user with that name or address");
     if (target.id === user.id) return error(400, "you already own this address");
-    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM address_members WHERE address = ?")
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM address_members WHERE address = ?",
+    )
       .bind(address)
       .first();
     if ((count?.n || 0) >= 20) return error(400, "an address can be shared with at most 20 people");
