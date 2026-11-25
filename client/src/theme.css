@@ -8066,18 +8066,6 @@ div:has(> .em-label-dialog) {
   padding-inline: 0;
 }
 
-.em-app {
-  justify-content: flex-start;
-}
-
-.em-app > .em-main {
-  max-width: none;
-}
-
-.em-app > .em-main > .em-column {
-  margin-inline: auto;
-}
-
 .em-cal-seg {
   gap: 2px;
   padding: 0;
@@ -8245,4 +8233,8 @@ div:has(> .em-label-dialog) {
   .em-pill button:not(.is-on):hover {
     opacity: 1;
   }
+}
+
+.em-nav-list:has(> .em-nav-head:only-child) + .em-nav-list {
+  margin-top: calc(8px - var(--em-5));
 }
