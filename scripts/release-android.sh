@@ -14,6 +14,12 @@ min="$(sed -n "s/^minSdkVersion:'\([0-9]*\)'.*/\1/p" <<<"$badging" | head -1)"
 size="$(stat -f%z "$apk" 2>/dev/null || stat -c%s "$apk")"
 sha="$(shasum -a 256 "$apk" | cut -d' ' -f1)"
 
+current="$(curl -fsS https://mail.estrogen.delivery/api/app/android.json 2>/dev/null | jq -r '.versionCode // 0' || echo 0)"
+if [ "$code" -le "${current:-0}" ]; then
+  echo "versionCode $code is not above the published $current, bump it in build.gradle.kts" >&2
+  exit 1
+fi
+
 manifest="$(mktemp)"
 jq -n --argjson code "$code" --arg name "$name" --argjson size "$size" --arg sha "$sha" \
   --arg notes "$notes" --argjson min "${min:-26}" \
