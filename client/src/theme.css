@@ -8238,3 +8238,36 @@ div:has(> .em-label-dialog) {
 .em-nav-list:has(> .em-nav-head:only-child) + .em-nav-list {
   margin-top: calc(8px - var(--em-5));
 }
+
+.em-app-dl {
+  display: grid;
+  gap: 16px;
+}
+
+.em-app-dl > button {
+  justify-self: start;
+}
+
+.em-app-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 24px;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.em-app-facts dt {
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-app-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.em-app-notes {
+  margin: 0;
+  font-size: 0.875rem;
+  white-space: pre-line;
+  text-wrap: pretty;
+}

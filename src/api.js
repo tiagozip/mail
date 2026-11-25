@@ -1115,6 +1115,26 @@ export async function handleApi(request, env, ctx) {
     );
 
   if (path === "/api/mcp") return handleMcp(request, env, ctx, routeApi, ip);
+  if (method === "GET" && (path === "/api/app/android.json" || path === "/api/app/android.apk"))
+    return withIpLimit(env, "app:dl", ip, async () => {
+      const manifest = await env.R2.get("app/android/latest.json");
+      if (!manifest) return json({ error: "no release" }, 404);
+      if (path.endsWith(".json"))
+        return new Response(manifest.body, {
+          headers: { "content-type": "application/json", "cache-control": "public, max-age=300" },
+        });
+      const { versionCode, versionName } = await manifest.json();
+      const apk = await env.R2.get(`app/android/${versionCode}.apk`);
+      if (!apk) return json({ error: "no release" }, 404);
+      return new Response(apk.body, {
+        headers: {
+          "content-type": "application/vnd.android.package-archive",
+          "content-length": String(apk.size),
+          "content-disposition": `attachment; filename="estrogen-mail-${versionName}.apk"`,
+          "cache-control": "public, max-age=300",
+        },
+      });
+    });
   const feed = path.match(/^\/api\/cal\/([\w-]+)\/([\w-]+)\.ics$/);
   if (feed && method === "GET")
     return withIpLimit(env, "cal:feed", ip, () => calendarFeed(env, feed[1], feed[2]));

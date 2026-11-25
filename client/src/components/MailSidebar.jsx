@@ -1,3 +1,4 @@
+import { AppDownload } from "./AppDownload.jsx";
 import { AppSwitcher } from "./AppSwitcher.jsx";
 import { DropdownMenu } from "@cloudflare/kumo";
 import {
@@ -6,6 +7,7 @@ import {
   CaretUpDown,
   Clock,
   ClockCountdown,
+  DeviceMobile,
   FileText,
   Folder,
   Gear,
@@ -67,6 +69,7 @@ export function MailSidebar({
   const [modalOpen, setModalOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(null);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [appOpen, setAppOpen] = useState(false);
   const [editFolder, setEditFolder] = useState(null);
   const [moreOpen, setMoreOpen] = useState(() => {
     try {
@@ -269,6 +272,9 @@ export function MailSidebar({
             <DropdownMenu.Item icon={ClockCountdown} onClick={onOpenScheduled}>
               Scheduled
             </DropdownMenu.Item>
+            <DropdownMenu.Item icon={DeviceMobile} onClick={() => setAppOpen(true)}>
+              Download the app
+            </DropdownMenu.Item>
             {user.isAdmin && (
               <DropdownMenu.Item icon={ShieldCheck} onClick={onOpenAdmin}>
                 Admin
@@ -285,6 +291,8 @@ export function MailSidebar({
         </DropdownMenu>
         <AppSwitcher src={user.switcherUrl} placement="up" />
       </div>
+
+      <AppDownload open={appOpen} onClose={() => setAppOpen(false)} />
 
       <LabelModal
         open={modalOpen}

@@ -89,6 +89,7 @@ export const LIMITS = {
   unsubscribe: { limit: 60, window: HOUR, scope: "user", message: "too many unsubscribes" },
   export: { limit: 60, window: HOUR, scope: "user", message: "too many exports, try again later" },
   "cal:feed": { limit: 60, window: MINUTE, scope: "ip" },
+  "app:dl": { limit: 30, window: MINUTE, scope: "ip" },
 };
 
 // Buckets whose ceiling is operator-configurable.
