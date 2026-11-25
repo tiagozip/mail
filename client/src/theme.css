@@ -8350,3 +8350,9 @@ div:has(> .em-label-dialog) {
   outline: 1px solid rgb(255 255 255 / 0.08);
   outline-offset: -1px;
 }
+
+.em-app-size {
+  margin-left: 6px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}

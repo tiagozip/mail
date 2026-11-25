@@ -13,13 +13,7 @@ export function AppDownload({ open, onClose }) {
       .catch(() => setRelease(null));
   }, [open, release]);
 
-  const meta = release
-    ? [`Version ${release.versionName}`, release.size && `${(release.size / 1048576).toFixed(1)} MB`, `Android ${{ 26: "8", 27: "8.1", 28: "9" }[release.minSdk] ?? (release.minSdk ?? 26) - 19} or newer`]
-        .filter(Boolean)
-        .join(", ")
-    : release === null
-      ? "Not released yet"
-      : " ";
+  const mb = release?.size ? `${(release.size / 1048576).toFixed(1)} MB` : null;
 
   return (
     <DialogRoot open={open} onOpenChange={(o) => !o && onClose()}>
@@ -39,8 +33,8 @@ export function AppDownload({ open, onClose }) {
               }}
             >
               Download APK
+              {mb && <span className="em-app-size">{mb}</span>}
             </Button>
-            <span className="em-app-meta">{meta}</span>
           </div>
         </div>
         <div className="em-app-art" aria-hidden="true">
