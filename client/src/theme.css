@@ -8239,164 +8239,105 @@ div:has(> .em-label-dialog) {
   margin-top: calc(8px - var(--em-5));
 }
 
-.em-app-dl {
-  display: grid;
-  gap: 16px;
+.em-app-dialog {
+  width: 680px;
+  max-width: 94vw;
+  padding: 0;
+  overflow: hidden;
 }
 
-.em-app-dl > button {
-  justify-self: start;
+.em-app-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  min-height: 400px;
 }
 
-.em-app-facts {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 6px 24px;
+.em-app-side {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 32px;
+}
+
+.em-app-title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
 }
 
-.em-app-facts dt {
+.em-app-lede {
+  margin: 0;
   color: var(--text-color-kumo-subtle);
-}
-
-.em-app-facts dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.em-app-notes {
-  margin: 0;
   font-size: 0.875rem;
-  white-space: pre-line;
   text-wrap: pretty;
 }
 
-.em-app-split {
+.em-app-cta {
   display: grid;
-  grid-template-columns: 1fr 240px;
+  justify-items: start;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.em-app-meta {
+  color: var(--text-color-kumo-inactive);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .em-app-art {
   display: grid;
   place-items: center;
-  margin: -8px -8px -8px 0;
-  padding: 24px 0;
-  border-radius: 0 0 12px 0;
-  background: radial-gradient(circle at 50% 40%, color-mix(in oklab, #f08aae 22%, transparent), transparent 70%);
+  padding: 32px 0;
+  background: #1f1922 url(/app-art.webp) center / cover no-repeat;
   overflow: hidden;
 }
 
 .em-phone {
-  width: 168px;
-  height: 340px;
-  padding: 6px;
-  border-radius: 30px;
+  width: 150px;
+  aspect-ratio: 1080 / 2400;
+  padding: 5px;
+  border-radius: 28px;
   background: #0f0c11;
   box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.08),
-    0 2px 4px rgb(0 0 0 / 0.12),
-    0 12px 24px rgb(0 0 0 / 0.18),
-    0 32px 64px rgb(0 0 0 / 0.22);
+    0 0 0 1px rgb(255 255 255 / 0.1),
+    0 2px 4px rgb(0 0 0 / 0.14),
+    0 12px 24px rgb(0 0 0 / 0.2),
+    0 32px 64px rgb(0 0 0 / 0.26);
   rotate: -4deg;
 }
 
-.em-phone-screen {
-  position: relative;
+.em-phone-shot {
+  display: block;
+  width: 100%;
   height: 100%;
-  padding: 18px 12px;
-  border-radius: 24px;
+  border-radius: 23px;
+  object-fit: cover;
   background: #1f1922;
-  overflow: hidden;
 }
 
-.em-phone-bar {
-  width: 44px;
-  height: 10px;
-  margin: -10px auto 14px;
-  border-radius: 6px;
-  background: #0f0c11;
-}
-
-.em-phone-title {
-  margin-bottom: 12px;
-  color: #f3e9ee;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.em-phone-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 0;
-}
-
-.em-phone-av {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  border-radius: 50%;
-  opacity: 0.85;
-}
-
-.em-phone-lines {
-  display: grid;
-  gap: 4px;
-  flex: 1;
-}
-
-.em-phone-lines span {
-  height: 5px;
-  border-radius: 3px;
-  background: rgb(250 236 242 / 0.14);
-}
-
-.em-phone-row.is-unread .em-phone-lines span:first-child {
-  background: rgb(250 236 242 / 0.5);
-}
-
-.em-phone-fab {
+.em-app-close {
   position: absolute;
+  top: 12px;
   right: 12px;
-  bottom: 14px;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  background: #f08aae;
+  color: #fff;
+  background: rgb(0 0 0 / 0.28);
+  backdrop-filter: blur(8px);
 }
 
 @media (max-width: 640px) {
-  .em-app-split {
+  .em-app-grid {
     grid-template-columns: 1fr;
+    min-height: 0;
   }
   .em-app-art {
     display: none;
   }
-}
-
-.em-app-art {
-  margin: 0;
-  border-radius: 0 12px 12px 0;
-  background: #1f1922 url(/app-art.webp) center / cover no-repeat;
-}
-
-.em-app-side {
-  padding: 20px 24px 24px;
-  display: grid;
-  align-content: start;
-  gap: 12px;
-}
-
-.em-app-side .em-label-body {
-  padding: 0;
-}
-
-.em-app-side .em-label-head {
-  padding: 0;
-}
-
-.em-app-split {
-  grid-template-columns: 1fr 280px;
-  min-height: 420px;
+  .em-app-close {
+    color: inherit;
+    background: none;
+  }
 }
