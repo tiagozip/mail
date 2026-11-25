@@ -14,7 +14,7 @@ export function AppDownload({ open, onClose }) {
   }, [open, release]);
 
   const meta = release
-    ? [`Version ${release.versionName}`, release.size && `${(release.size / 1048576).toFixed(1)} MB`, "Android 8 or newer"]
+    ? [`Version ${release.versionName}`, release.size && `${(release.size / 1048576).toFixed(1)} MB`, `Android ${{ 26: "8", 27: "8.1", 28: "9" }[release.minSdk] ?? (release.minSdk ?? 26) - 19} or newer`]
         .filter(Boolean)
         .join(", ")
     : release === null
