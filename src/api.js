@@ -1118,14 +1118,14 @@ export async function handleApi(request, env, ctx) {
   if (method === "GET" && (path === "/api/app/android.json" || path === "/api/app/android.apk"))
     return withIpLimit(env, "app:dl", ip, async () => {
       const manifest = await env.R2.get("app/android/latest.json");
-      if (!manifest) return json({ error: "no release" }, 404);
+      if (!manifest) return json({ error: "no release" }, { status: 404 });
       if (path.endsWith(".json"))
         return new Response(manifest.body, {
           headers: { "content-type": "application/json", "cache-control": "public, max-age=300" },
         });
       const { versionCode, versionName } = await manifest.json();
       const apk = await env.R2.get(`app/android/${versionCode}.apk`);
-      if (!apk) return json({ error: "no release" }, 404);
+      if (!apk) return json({ error: "no release" }, { status: 404 });
       return new Response(apk.body, {
         headers: {
           "content-type": "application/vnd.android.package-archive",
