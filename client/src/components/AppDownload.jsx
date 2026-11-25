@@ -26,6 +26,7 @@ export function AppDownload({ open, onClose }) {
       <Dialog className="em-label-dialog em-app-dialog">
         <div className="em-app-grid">
         <div className="em-app-side">
+          <img className="em-app-icon" src="/icon-192.png" alt="" />
           <Dialog.Title className="em-app-title">Estrogen Mail for Android</Dialog.Title>
           <p className="em-app-lede">Your mail and calendar on your phone. The app updates itself.</p>
           <div className="em-app-cta">

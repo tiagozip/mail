@@ -8341,3 +8341,12 @@ div:has(> .em-label-dialog) {
     background: none;
   }
 }
+
+.em-app-icon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: auto;
+  border-radius: 14px;
+  outline: 1px solid rgb(255 255 255 / 0.08);
+  outline-offset: -1px;
+}
