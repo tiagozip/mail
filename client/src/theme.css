@@ -8271,3 +8271,132 @@ div:has(> .em-label-dialog) {
   white-space: pre-line;
   text-wrap: pretty;
 }
+
+.em-app-split {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+}
+
+.em-app-art {
+  display: grid;
+  place-items: center;
+  margin: -8px -8px -8px 0;
+  padding: 24px 0;
+  border-radius: 0 0 12px 0;
+  background: radial-gradient(circle at 50% 40%, color-mix(in oklab, #f08aae 22%, transparent), transparent 70%);
+  overflow: hidden;
+}
+
+.em-phone {
+  width: 168px;
+  height: 340px;
+  padding: 6px;
+  border-radius: 30px;
+  background: #0f0c11;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.08),
+    0 2px 4px rgb(0 0 0 / 0.12),
+    0 12px 24px rgb(0 0 0 / 0.18),
+    0 32px 64px rgb(0 0 0 / 0.22);
+  rotate: -4deg;
+}
+
+.em-phone-screen {
+  position: relative;
+  height: 100%;
+  padding: 18px 12px;
+  border-radius: 24px;
+  background: #1f1922;
+  overflow: hidden;
+}
+
+.em-phone-bar {
+  width: 44px;
+  height: 10px;
+  margin: -10px auto 14px;
+  border-radius: 6px;
+  background: #0f0c11;
+}
+
+.em-phone-title {
+  margin-bottom: 12px;
+  color: #f3e9ee;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.em-phone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+}
+
+.em-phone-av {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  opacity: 0.85;
+}
+
+.em-phone-lines {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+}
+
+.em-phone-lines span {
+  height: 5px;
+  border-radius: 3px;
+  background: rgb(250 236 242 / 0.14);
+}
+
+.em-phone-row.is-unread .em-phone-lines span:first-child {
+  background: rgb(250 236 242 / 0.5);
+}
+
+.em-phone-fab {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: #f08aae;
+}
+
+@media (max-width: 640px) {
+  .em-app-split {
+    grid-template-columns: 1fr;
+  }
+  .em-app-art {
+    display: none;
+  }
+}
+
+.em-app-art {
+  margin: 0;
+  border-radius: 0 12px 12px 0;
+  background: #1f1922 url(/app-art.webp) center / cover no-repeat;
+}
+
+.em-app-side {
+  padding: 20px 24px 24px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.em-app-side .em-label-body {
+  padding: 0;
+}
+
+.em-app-side .em-label-head {
+  padding: 0;
+}
+
+.em-app-split {
+  grid-template-columns: 1fr 280px;
+  min-height: 420px;
+}

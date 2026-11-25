@@ -17,7 +17,9 @@ export function AppDownload({ open, onClose }) {
 
   return (
     <DialogRoot open={open} onOpenChange={(o) => !o && onClose()}>
-      <Dialog className="em-label-dialog" style={{ width: 440, maxWidth: "94vw" }}>
+      <Dialog className="em-label-dialog" style={{ width: 720, maxWidth: "94vw", padding: 0, overflow: "hidden" }}>
+        <div className="em-app-split">
+          <div className="em-app-side">
         <div className="em-label-head">
           <Dialog.Title className="em-label-title">Estrogen Mail for Android</Dialog.Title>
           <Button size="sm" variant="ghost" shape="square" aria-label="Close" icon={X} onClick={onClose} />
@@ -54,6 +56,33 @@ export function AppDownload({ open, onClose }) {
           >
             Download APK
           </Button>
+        </div>
+          </div>
+        <div className="em-app-art" aria-hidden="true">
+          <div className="em-phone">
+            <div className="em-phone-screen">
+              <div className="em-phone-bar" />
+              <div className="em-phone-title">Inbox</div>
+              {[
+                ["#f08aae", 62, 88, true],
+                ["#b9a0f5", 48, 72, true],
+                ["#6fd3bf", 70, 64, false],
+                ["#f0b766", 40, 80, false],
+                ["#f08aae", 56, 70, false],
+                ["#b9a0f5", 66, 58, false],
+              ].map(([c, a, b, unread], i) => (
+                <div key={i} className={`em-phone-row${unread ? " is-unread" : ""}`}>
+                  <span className="em-phone-av" style={{ background: c }} />
+                  <span className="em-phone-lines">
+                    <span style={{ width: `${a}%` }} />
+                    <span style={{ width: `${b}%` }} />
+                  </span>
+                </div>
+              ))}
+              <span className="em-phone-fab" />
+            </div>
+          </div>
+        </div>
         </div>
       </Dialog>
     </DialogRoot>
