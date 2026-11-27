@@ -22,6 +22,13 @@ import {
 import { calendarFeed, dueReminder, routeCalendar } from "./calendar.js";
 import { encryptBytes, encryptText, tryDecryptBytes, tryDecryptText } from "./crypto.js";
 import { checkOwnership, checkSendingDns, lookupMx } from "./domains.js";
+import {
+  filterMatches,
+  loadFilters,
+  MAX_FILTERS,
+  messageFields,
+  validateFilter,
+} from "./filters.js";
 import { brandLogo, gravatarFace, proxyImage, proxyUrl } from "./img.js";
 import { handleMcp } from "./mcp.js";
 import {
@@ -41,8 +48,6 @@ import {
   attKey,
   bumpContact,
   deleteMessageRow,
-  FILTER_ACTIONS,
-  FILTER_FIELDS,
   FOLDERS,
   htmlKey,
   insertMessage,
@@ -1846,45 +1851,180 @@ async function routeApi(request, env, ctx, auth) {
   }
 
   if (path === "/api/filters" && method === "GET") {
-    const res = await env.DB.prepare(
-      "SELECT id, field, match_value, action, action_value, position FROM filters WHERE user_id = ? ORDER BY position, created_at",
-    )
-      .bind(user.id)
-      .all();
-    return json({ filters: res.results || [] });
+    return json({ filters: await loadFilters(env, user.id) });
   }
-  if (path === "/api/filters" && method === "POST") {
+  const filterEdit = method === "PUT" ? path.match(/^\/api\/filters\/([\w-]+)$/) : null;
+  if (
+    filterEdit ||
+    (method === "POST" && (path === "/api/filters" || path === "/api/filters/preview"))
+  ) {
     const b = await readJson(request);
-    const field = FILTER_FIELDS.includes(b.field) ? b.field : null;
-    const action = FILTER_ACTIONS.includes(b.action) ? b.action : null;
-    const matchValue = String(b.matchValue || "")
-      .trim()
-      .slice(0, 200);
-    if (!field || !action) return error(400, "invalid field or action");
-    if (!matchValue) return error(400, "match value required");
-    let actionValue = null;
-    if (action === "forward") {
-      actionValue = normalizeAddr(b.actionValue || "");
-      if (!isValidEmail(actionValue)) return error(400, "a valid forwarding address is required");
+    const [labelRows, folderRows] = await Promise.all([
+      env.DB.prepare("SELECT id FROM labels WHERE user_id = ?").bind(user.id).all(),
+      env.DB.prepare("SELECT id FROM folders WHERE user_id = ?").bind(user.id).all(),
+    ]);
+    const preview = path === "/api/filters/preview";
+    const v = validateFilter(preview ? { ...b, actions: [{ type: "read" }] } : b, {
+      labels: new Set((labelRows.results || []).map((r) => r.id)),
+      folders: new Set((folderRows.results || []).map((r) => r.id)),
+    });
+    if (v.error) return error(400, v.error);
+    const f = v.filter;
+    if (preview) {
+      const rows = await env.DB.prepare(
+        "SELECT id, thread_id, from_addr, from_name, to_json, cc_json, delivered_to, subject, substr(body_text, 1, 20000) AS body, has_attachments, date FROM messages WHERE user_id = ? AND folder NOT IN ('sent', 'drafts') AND is_draft = 0 ORDER BY date DESC LIMIT 500",
+      )
+        .bind(user.id)
+        .all();
+      const cache = new Map();
+      const hits = (rows.results || []).filter((r) =>
+        filterMatches(f, messageFields(rowToFilterMsg(r)), cache),
+      );
+      return json({
+        scanned: rows.results?.length || 0,
+        matched: hits.length,
+        samples: hits.slice(0, 5).map((r) => ({
+          id: r.id,
+          threadId: r.thread_id,
+          from: r.from_name || r.from_addr,
+          subject: r.subject,
+          date: r.date,
+        })),
+      });
+    }
+    if (filterEdit) {
+      const res = await env.DB.prepare(
+        "UPDATE filters SET name = ?, match_mode = ?, conditions_json = ?, actions_json = ?, enabled = ?, stop = ? WHERE id = ? AND user_id = ?",
+      )
+        .bind(
+          f.name || null,
+          f.match,
+          JSON.stringify(f.conditions),
+          JSON.stringify(f.actions),
+          f.enabled ? 1 : 0,
+          f.stop ? 1 : 0,
+          filterEdit[1],
+          user.id,
+        )
+        .run();
+      if (!res.meta?.changes) return error(404, "not found");
+      return json({ id: filterEdit[1], ...f });
     }
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM filters WHERE user_id = ?")
       .bind(user.id)
       .first();
-    if ((count?.n || 0) >= 100) return error(400, "filter limit reached (100)");
+    if ((count?.n || 0) >= MAX_FILTERS) return error(400, `filter limit reached (${MAX_FILTERS})`);
+    const first = f.conditions[0];
     const id = uuid();
     await env.DB.prepare(
-      "INSERT INTO filters (id, user_id, field, match_value, action, action_value, position, created_at) VALUES (?,?,?,?,?,?,?,?)",
+      "INSERT INTO filters (id, user_id, field, match_value, action, action_value, position, created_at, name, match_mode, conditions_json, actions_json, enabled, stop) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
-      .bind(id, user.id, field, matchValue, action, actionValue, count?.n || 0, now())
+      .bind(
+        id,
+        user.id,
+        first.field,
+        first.value,
+        f.actions[0].type,
+        f.actions[0].value || null,
+        b.top ? -1 - (count?.n || 0) : count?.n || 0,
+        now(),
+        f.name || null,
+        f.match,
+        JSON.stringify(f.conditions),
+        JSON.stringify(f.actions),
+        f.enabled ? 1 : 0,
+        f.stop ? 1 : 0,
+      )
       .run();
-    return json({
-      id,
-      field,
-      match_value: matchValue,
-      action,
-      action_value: actionValue,
-      position: count?.n || 0,
-    });
+    return json({ id, ...f, hits: 0, lastHitAt: null });
+  }
+  if (path === "/api/filters/reorder" && method === "POST") {
+    const b = await readJson(request);
+    const ids = Array.isArray(b.ids)
+      ? b.ids.filter((x) => typeof x === "string").slice(0, MAX_FILTERS)
+      : [];
+    if (!ids.length) return error(400, "ids required");
+    await env.DB.batch(
+      ids.map((id, i) =>
+        env.DB.prepare("UPDATE filters SET position = ? WHERE id = ? AND user_id = ?").bind(
+          i,
+          id,
+          user.id,
+        ),
+      ),
+    );
+    return json({ ok: true });
+  }
+  if ((m = path.match(/^\/api\/filters\/([\w-]+)\/apply$/)) && method === "POST") {
+    const filter = (await loadFilters(env, user.id)).find((x) => x.id === m[1]);
+    if (!filter) return error(404, "not found");
+    const rows = await env.DB.prepare(
+      "SELECT id, thread_id, from_addr, from_name, to_json, cc_json, delivered_to, subject, substr(body_text, 1, 20000) AS body, has_attachments FROM messages WHERE user_id = ? AND folder NOT IN ('sent', 'drafts', 'trash') AND is_draft = 0 ORDER BY date DESC LIMIT 2000",
+    )
+      .bind(user.id)
+      .all();
+    const cache = new Map();
+    const ids = (rows.results || [])
+      .filter((r) => filterMatches(filter, messageFields(rowToFilterMsg(r)), cache))
+      .map((r) => r.id);
+    if (!ids.length) return json({ ok: true, updated: 0 });
+    const types = new Set(filter.actions.map((x) => x.type));
+    const result = {
+      read: types.has("read"),
+      star: types.has("star"),
+      folder: types.has("block") ? "trash" : null,
+      folderId: null,
+      labels: filter.actions.filter((x) => x.type === "label").map((x) => x.value),
+    };
+    for (const x of filter.actions) {
+      if (x.type === "archive" || x.type === "trash" || x.type === "spam") {
+        result.folder = x.type;
+        result.folderId = null;
+      } else if (x.type === "move") {
+        result.folder = null;
+        result.folderId = x.value;
+      }
+    }
+    const folder = result.folder;
+    const ts = now();
+    const stmts = [];
+    for (const batch of chunk(ids, 90)) {
+      const ph = batch.map(() => "?").join(",");
+      if (result.read)
+        stmts.push(
+          env.DB.prepare(
+            `UPDATE messages SET is_read = 1 WHERE user_id = ? AND id IN (${ph})`,
+          ).bind(user.id, ...batch),
+        );
+      if (result.star)
+        stmts.push(
+          env.DB.prepare(
+            `UPDATE messages SET is_starred = 1 WHERE user_id = ? AND id IN (${ph})`,
+          ).bind(user.id, ...batch),
+        );
+      if (folder)
+        stmts.push(
+          env.DB.prepare(
+            `UPDATE messages SET folder = ?, folder_id = NULL, trashed_at = ? WHERE user_id = ? AND id IN (${ph})`,
+          ).bind(folder, folder === "trash" ? ts : null, user.id, ...batch),
+        );
+      else if (result.folderId)
+        stmts.push(
+          env.DB.prepare(
+            `UPDATE messages SET folder = 'inbox', folder_id = ?, trashed_at = NULL WHERE user_id = ? AND id IN (${ph})`,
+          ).bind(result.folderId, user.id, ...batch),
+        );
+      for (const label of result.labels)
+        for (const id of batch)
+          stmts.push(
+            env.DB.prepare(
+              "INSERT OR IGNORE INTO message_labels (message_id, label_id) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM labels WHERE id = ? AND user_id = ?)",
+            ).bind(id, label, label, user.id),
+          );
+    }
+    for (const part of chunk(stmts, 50)) await env.DB.batch(part);
+    await recordChanges(env, user.id, ids, "upsert");
+    return json({ ok: true, updated: ids.length });
   }
   if ((m = path.match(/^\/api\/filters\/([\w-]+)$/)) && method === "DELETE") {
     await env.DB.prepare("DELETE FROM filters WHERE id = ? AND user_id = ?")
@@ -2885,4 +3025,24 @@ async function routeApi(request, env, ctx, auth) {
   }
 
   return error(404, "not found");
+}
+
+function rowToFilterMsg(r) {
+  const parse = (v) => {
+    try {
+      return JSON.parse(v || "[]");
+    } catch {
+      return [];
+    }
+  };
+  return {
+    fromAddr: r.from_addr,
+    fromName: r.from_name,
+    to: parse(r.to_json),
+    cc: parse(r.cc_json),
+    deliveredTo: r.delivered_to,
+    subject: r.subject,
+    body: r.body,
+    attachments: r.has_attachments ? [""] : [],
+  };
 }

@@ -165,7 +165,15 @@ CREATE TABLE IF NOT EXISTS filters (
   action TEXT NOT NULL DEFAULT 'archive',
   action_value TEXT,
   position INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  name TEXT,
+  match_mode TEXT NOT NULL DEFAULT 'all',
+  conditions_json TEXT,
+  actions_json TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  stop INTEGER NOT NULL DEFAULT 0,
+  hits INTEGER NOT NULL DEFAULT 0,
+  last_hit_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_filters_user ON filters(user_id, position);
 

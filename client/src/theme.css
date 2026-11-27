@@ -3180,54 +3180,184 @@ html[data-theme="nord"] {
   padding: var(--em-2) 0;
 }
 
+.em-filters-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--em-3);
+}
+
+.em-filter-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  padding: var(--em-3) 0;
+  font-size: 0.875rem;
+  color: var(--text-color-kumo-subtle);
+}
+
 .em-filter-list {
   display: flex;
   flex-direction: column;
   gap: var(--em-1);
-  margin-bottom: var(--em-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .em-filter-row {
   display: flex;
   align-items: center;
   gap: var(--em-2);
-  padding: var(--em-2) var(--em-3);
+  padding: var(--em-2) var(--em-3) var(--em-2) var(--em-1);
   border: 1px solid var(--color-kumo-hairline);
   border-radius: var(--em-radius);
+}
+
+.em-filter-row[data-off] .em-filter-rule {
+  opacity: 0.55;
+}
+
+.em-filter-order {
+  display: flex;
+  flex-direction: column;
 }
 
 .em-filter-rule {
   flex: 1;
   min-width: 0;
-  font-size: 0.84rem;
+  font-size: 0.875rem;
   color: var(--text-color-kumo-subtle);
+  overflow-wrap: break-word;
 }
 
-.em-filter-rule strong {
+.em-filter-rule strong,
+.em-filter-name {
   color: var(--text-color-kumo-base);
-  font-weight: 600;
+  font-weight: 500;
 }
 
-.em-filter-needle {
-  font-family: var(--em-mono, ui-monospace, monospace);
-  color: var(--text-color-kumo-brand);
+.em-filter-hits {
+  margin-top: 2px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
 }
 
-.em-filter-add {
+.em-filter-apply {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  margin-bottom: var(--em-3);
+  padding: var(--em-2) var(--em-2) var(--em-2) var(--em-3);
+  border-radius: var(--em-radius);
+  background: var(--color-kumo-tint);
+  font-size: 0.875rem;
+}
+
+.em-filter-apply span {
+  flex: 1;
+}
+
+.em-filter-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-4);
+}
+
+.em-filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-2);
+}
+
+.em-filter-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.em-filter-line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--em-2);
 }
 
-.em-filter-add .kumo-input {
+.em-filter-line .kumo-input {
   flex: 1;
-  min-width: 120px;
+  min-width: 140px;
 }
 
-.em-filter-lead {
-  font-size: 0.84rem;
+.em-filter-line .em-filter-header {
+  flex: 0 1 120px;
+  min-width: 100px;
+}
+
+.em-filter-more {
+  align-self: flex-start;
+}
+
+.em-filter-note {
+  margin: 0;
+  font-size: 0.8rem;
   color: var(--text-color-kumo-subtle);
+  text-wrap: pretty;
+}
+
+.em-filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--em-2);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.em-filter-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--em-1);
+  padding: var(--em-2) var(--em-3);
+  border-radius: var(--em-radius);
+  background: var(--color-kumo-tint);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.em-filter-sample {
+  display: flex;
+  gap: var(--em-2);
+  min-width: 0;
+  font-size: 0.8rem;
+  color: var(--text-color-kumo-subtle);
+}
+
+.em-filter-sample-from {
+  flex: 0 0 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-color-kumo-base);
+}
+
+.em-filter-sample-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.em-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--em-2);
+}
+
+.em-filter-spacer {
+  flex: 1;
 }
 
 .em-keys-revoke {

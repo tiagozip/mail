@@ -6,9 +6,9 @@ import { sendPush } from "./push.js";
 import { consumeAll } from "./ratelimit.js";
 import { sanitizeEmailHtml } from "./sanitize.js";
 import { forwardInbound } from "./send.js";
+import { evaluateFilters, loadFilters } from "./filters.js";
 import { classifySpam } from "./spam.js";
 import {
-  applyFilters,
   attKey,
   bumpContact,
   htmlKey,
@@ -238,6 +238,46 @@ export async function storeInbound(
     ) ||
     String(parsed.text || "").includes("-----BEGIN PGP MESSAGE-----");
 
+  const fromAddr = normalizeAddr(parsed.from?.address || envelopeFrom);
+  const fromName = parsed.from?.name || "";
+  const toList = (parsed.to || []).map((a) => ({
+    name: a.name || "",
+    address: normalizeAddr(a.address),
+  }));
+  const ccList = (parsed.cc || []).map((a) => ({
+    name: a.name || "",
+    address: normalizeAddr(a.address),
+  }));
+  const auth = evaluateAuth(headerBlock);
+  const spoofed = auth.status === "fail";
+  const bodyText = readableBody(parsed);
+  const filterResult = evaluateFilters(await loadFilters(env, userId), {
+    fromAddr,
+    fromName,
+    to: toList,
+    cc: ccList,
+    deliveredTo: deliveredTo || matchedAddress || "",
+    subject: parsed.subject || "",
+    body: bodyText,
+    attachments: (parsed.attachments || [])
+      .filter((a) => a.disposition !== "inline" && !a.contentId)
+      .map((a) => a.filename || ""),
+    headerBlock,
+  });
+  if (filterResult.hits.length)
+    ctx.waitUntil(
+      env.DB.prepare(
+        `UPDATE filters SET hits = hits + 1, last_hit_at = ? WHERE user_id = ? AND id IN (${filterResult.hits.map(() => "?").join(",")})`,
+      )
+        .bind(now(), userId, ...filterResult.hits)
+        .run()
+        .catch(() => {}),
+    );
+  if (filterResult.block) {
+    console.log("filter blocked", userId, fromAddr);
+    return { blocked: true };
+  }
+
   const usePgp = !!(user?.pgp_enabled && user?.pgp_public_key);
   let pgpKey = null;
   if (usePgp) {
@@ -329,19 +369,11 @@ export async function storeInbound(
   const refs = refsToList(firstHeader(headerBlock, "references") || parsed.references);
   const threadId = (await resolveThread(env, userId, inReplyTo, refs)) || messageId;
 
-  const fromAddr = normalizeAddr(parsed.from?.address || envelopeFrom);
-  const fromName = parsed.from?.name || "";
   const date = parsed.date ? new Date(parsed.date).getTime() || now() : now();
 
-  const auth = evaluateAuth(headerBlock);
-  const spoofed = auth.status === "fail";
   let folder = spoofed ? "spam" : "inbox";
   console.log("inbound auth", fromAddr, "->", JSON.stringify(auth), spoofed ? "SPOOFED->spam" : "");
 
-  const toList = (parsed.to || []).map((a) => ({
-    name: a.name || "",
-    address: normalizeAddr(a.address),
-  }));
   let snippetEnc = null;
   if (pgpEncrypt) {
     const plainSnippet = snippetFrom(readableBody(parsed));
@@ -352,34 +384,32 @@ export async function storeInbound(
   let filterStar = 0;
   let forwards = [];
   let autoLabels = [];
+  let filterFolderId = null;
   if (!spoofed) {
-    const applied = await applyFilters(env, userId, {
-      fromAddr,
-      fromName,
-      to: toList,
-      deliveredTo: deliveredTo || matchedAddress || "",
-      subject: parsed.subject || "",
-    });
-    if (applied.folder) folder = applied.folder;
-    if (applied.read) filterRead = 1;
-    if (applied.star) filterStar = 1;
-    forwards = applied.forwards || [];
+    if (filterResult.folder) folder = filterResult.folder;
+    if (filterResult.folderId) filterFolderId = filterResult.folderId;
+    if (filterResult.read) filterRead = 1;
+    if (filterResult.star) filterStar = 1;
+    forwards = filterResult.forwards;
+    autoLabels = filterResult.labels.map((id) => ({ id }));
 
     const ruled = await env.DB.prepare(
       "SELECT id, rule_json FROM labels WHERE user_id = ? AND rule_json IS NOT NULL",
     )
       .bind(userId)
       .all();
-    const bodyText = readableBody(parsed);
-    autoLabels = labelsForMessage(ruled.results || [], {
-      fromAddr,
-      fromName,
-      to: toList.map((t) => `${t.name || ""} ${t.address || ""}`).join(" "),
-      subject: parsed.subject || "",
-      body: bodyText,
-    });
+    autoLabels = [
+      ...autoLabels,
+      ...labelsForMessage(ruled.results || [], {
+        fromAddr,
+        fromName,
+        to: toList.map((t) => `${t.name || ""} ${t.address || ""}`).join(" "),
+        subject: parsed.subject || "",
+        body: bodyText,
+      }),
+    ];
 
-    if (folder === "inbox" && aiSpamEnabled) {
+    if (folder === "inbox" && aiSpamEnabled && !filterResult.neverSpam) {
       let trusted = false;
       if (auth.status === "pass") {
         const internal = await env.DB.prepare("SELECT 1 FROM addresses WHERE address = ? LIMIT 1")
@@ -434,6 +464,8 @@ export async function storeInbound(
 
   if (
     folder === "inbox" &&
+    !filterResult.neverSpam &&
+    !filterFolderId &&
     newsletterFolder &&
     threadId === messageId &&
     firstHeader(headerBlock, "list-unsubscribe")
@@ -446,7 +478,13 @@ export async function storeInbound(
     if (!corresponded) folder = "newsletters";
   }
 
-  if (folder === "inbox" && screenSenders && threadId === messageId) {
+  if (
+    folder === "inbox" &&
+    !filterResult.neverSpam &&
+    !filterFolderId &&
+    screenSenders &&
+    threadId === messageId
+  ) {
     const known = await env.DB.prepare(
       "SELECT 1 FROM contacts WHERE user_id = ? AND address = ? LIMIT 1",
     )
@@ -463,6 +501,12 @@ export async function storeInbound(
       .bind(userId, matchedAddress)
       .first();
     if (fdr) folderId = fdr.id;
+  }
+  if (filterFolderId && folder === "inbox") {
+    const owned = await env.DB.prepare("SELECT 1 FROM folders WHERE id = ? AND user_id = ?")
+      .bind(filterFolderId, userId)
+      .first();
+    if (owned) folderId = filterFolderId;
   }
 
   await insertMessage(env, {
@@ -485,7 +529,7 @@ export async function storeInbound(
     from_addr: fromAddr,
     from_name: fromName,
     to: toList,
-    cc: (parsed.cc || []).map((a) => ({ name: a.name || "", address: normalizeAddr(a.address) })),
+    cc: ccList,
     reply_to: normalizeAddr(parsed.replyTo?.[0]?.address || ""),
     subject: parsed.subject || "(no subject)",
     snippet: pgpFlag ? "Encrypted message" : snippetFrom(readableBody(parsed)),
@@ -502,6 +546,11 @@ export async function storeInbound(
     html_key: hKey,
     pgp: pgpFlag,
   });
+
+  if (folder === "trash")
+    await env.DB.prepare("UPDATE messages SET trashed_at = ? WHERE id = ?")
+      .bind(now(), messageId)
+      .run();
 
   for (const a of attRows) {
     await env.DB.prepare(

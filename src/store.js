@@ -1,4 +1,4 @@
-import { normalizeAddr, now, snippetFrom, uuid } from "./util.js";
+import { now, snippetFrom, uuid } from "./util.js";
 
 export const FOLDERS = [
   "inbox",
@@ -10,9 +10,6 @@ export const FOLDERS = [
   "screener",
   "newsletters",
 ];
-export const FILTER_FIELDS = ["from", "to", "delivered_to", "subject"];
-export const FILTER_ACTIONS = ["read", "archive", "star", "spam", "forward"];
-export const MAX_FORWARD_TARGETS = 5;
 export const LABEL_RULE_FIELDS = ["from", "to", "subject", "body"];
 export const LABEL_RULE_OPS = ["contains", "is", "startsWith"];
 
@@ -70,44 +67,6 @@ export function labelsForMessage(labels, msg) {
     );
     const hit = match === "any" ? results.some(Boolean) : results.every(Boolean);
     if (hit) out.push(label);
-  }
-  return out;
-}
-
-export async function applyFilters(env, userId, ctx) {
-  const res = await env.DB.prepare(
-    "SELECT field, match_value, action, action_value FROM filters WHERE user_id = ? ORDER BY position, created_at",
-  )
-    .bind(userId)
-    .all();
-  const rules = res.results || [];
-  const fields = {
-    from: `${ctx.fromName || ""} ${ctx.fromAddr || ""}`.toLowerCase(),
-    to: (ctx.to || [])
-      .map((t) => `${t.name || ""} ${t.address || ""}`)
-      .join(" ")
-      .toLowerCase(),
-    delivered_to: String(ctx.deliveredTo || "").toLowerCase(),
-    subject: String(ctx.subject || "").toLowerCase(),
-  };
-  const out = { folder: null, read: false, star: false, forwards: [] };
-  for (const rule of rules) {
-    const needle = String(rule.match_value || "")
-      .trim()
-      .toLowerCase();
-    if (!needle) continue;
-    const hay = fields[rule.field];
-    if (hay === undefined || !hay.includes(needle)) continue;
-    if (rule.action === "read") out.read = true;
-    else if (rule.action === "star") out.star = true;
-    else if (rule.action === "archive") out.folder = "archive";
-    else if (rule.action === "spam") out.folder = "spam";
-    else if (rule.action === "forward") {
-      const target = normalizeAddr(rule.action_value || "");
-      if (target && !out.forwards.includes(target) && out.forwards.length < MAX_FORWARD_TARGETS) {
-        out.forwards.push(target);
-      }
-    }
   }
   return out;
 }

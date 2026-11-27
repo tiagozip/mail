@@ -138,6 +138,10 @@ export const api = {
 
   filters: () => req("GET", "/api/filters"),
   createFilter: (payload) => req("POST", "/api/filters", payload),
+  updateFilter: (id, payload) => req("PUT", `/api/filters/${id}`, payload),
+  previewFilter: (payload) => req("POST", "/api/filters/preview", payload),
+  applyFilter: (id) => req("POST", `/api/filters/${id}/apply`),
+  reorderFilters: (ids) => req("POST", "/api/filters/reorder", { ids }),
   deleteFilter: (id) => req("DELETE", `/api/filters/${id}`),
 
   saveSettings: (payload) => req("PUT", "/api/settings", payload),

@@ -29,6 +29,7 @@ import {
   Paperclip,
   PaperPlaneTilt,
   Printer,
+  Prohibit,
   ShieldCheck,
   Star,
   Trash,
@@ -1788,6 +1789,29 @@ export function ThreadView({ store, onReply, onForward, onBack, onSent, onStep, 
               Download .eml
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
+            {last?.from?.address && last.folder !== "sent" && (
+              <DropdownMenu.Item
+                icon={Prohibit}
+                onClick={async () => {
+                  const address = last.from.address;
+                  try {
+                    await api.createFilter({
+                      name: `Block ${address}`,
+                      match: "all",
+                      conditions: [{ field: "from_address", op: "is", value: address }],
+                      actions: [{ type: "block" }],
+                      top: true,
+                    });
+                    moveMessage(headerItem, "trash");
+                    notify("Sender blocked", `New mail from ${address} will be dropped.`, "success");
+                  } catch (e) {
+                    notifyError(e);
+                  }
+                }}
+              >
+                Block sender
+              </DropdownMenu.Item>
+            )}
             {headerItem.folder !== "spam" && (
               <DropdownMenu.Item icon={Warning} onClick={() => moveMessage(headerItem, "spam")}>
                 Move to spam
