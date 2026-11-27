@@ -2584,7 +2584,8 @@ async function routeApi(request, env, ctx, auth) {
   }
   if ((m = path.match(/^\/api\/domains\/([\w-]+)\/relay$/)) && method === "POST") {
     const b = await readJson(request);
-    const relayUrl = String(b.relayUrl || "").trim();
+    const rawRelay = String(b.relayUrl || "").trim();
+    const relayUrl = /^[a-z][a-z\d+.-]*:\/\//i.test(rawRelay) ? rawRelay : `https://${rawRelay}`;
     let ru;
     try {
       ru = new URL(relayUrl);
