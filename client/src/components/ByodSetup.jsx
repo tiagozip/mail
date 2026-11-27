@@ -71,7 +71,7 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
       setBusy(false);
       setVerifying(true);
       let ok = false;
-      for (let i = 0; i < 30 && !ok; i++) {
+      for (let i = 0; i < 80 && !ok; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         try {
           ok = (await api.relayStatus(created.id)).verified;
@@ -215,7 +215,7 @@ export function ByodSetup({ open, existing, onClose, onDone }) {
               }}
             />
             {verifying && (
-              <div className="em-byod-hint">Verifying… this can take up to a minute.</div>
+              <div className="em-byod-hint">Verifying. A new Worker or routing rule can take a few minutes to start receiving mail.</div>
             )}
             {error && <div className="em-form-error">{error}</div>}
             <div className="em-byod-actions">
